@@ -1,0 +1,20 @@
+import {Router} from 'express';
+import * as c from '../controllers/attendance.controller.js';
+import {requirePermission as p} from '../middleware/permission.middleware.js';
+import {validate} from '../middleware/validate.middleware.js';
+import * as v from '../validators/attendance.validator.js';
+import asyncHandler from '../utils/asyncHandler.js';
+
+const r = Router();
+r.post('/clock-in', p('attendance.clock'), asyncHandler(c.clockIn));
+r.post('/break/start', p('attendance.clock'), asyncHandler(c.startBreak));
+r.post('/break/end', p('attendance.clock'), asyncHandler(c.endBreak));
+r.post('/clock-out', p('attendance.clock'), asyncHandler(c.clockOut));
+r.get('/today', p('attendance.view_own'), asyncHandler(c.today));
+r.get('/history', p('attendance.view_own'), validate(v.historyQuerySchema, 'query'), asyncHandler(c.history));
+r.get('/live', p('attendance.view_all'), asyncHandler(c.live));
+r.get('/activity', p('attendance.view_all'), asyncHandler(c.activity));
+r.get('/reports/daily', p('attendance.reports'), validate(v.dailyReportQuerySchema, 'query'), asyncHandler(c.daily));
+r.get('/reports/monthly', p('attendance.reports'), validate(v.monthlyReportQuerySchema, 'query'), asyncHandler(c.monthly));
+r.get('/', p('attendance.view_all'), validate(v.listQuerySchema, 'query'), asyncHandler(c.list));
+export default r;

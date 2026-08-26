@@ -1,0 +1,2 @@
+const styles={WORKING:'bg-emerald-50 text-emerald-700',ON_BREAK:'bg-amber-50 text-amber-700',CLOCKED_OUT:'bg-indigo-50 text-indigo-700',NOT_CLOCKED_IN:'bg-slate-100 text-slate-600'};
+export default function AttendanceBadge({status='NOT_CLOCKED_IN'}){return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${styles[status]||styles.NOT_CLOCKED_IN}`}>{status.replaceAll('_',' ')}</span>}

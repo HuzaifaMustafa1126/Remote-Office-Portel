@@ -24,6 +24,7 @@ Edit `server/.env` with your MySQL credentials and a random JWT secret of at lea
 ```bash
 mysql -u root -p remote_office_portal < database/migrations/001_initial_schema.sql
 mysql -u root -p remote_office_portal < database/seed.sql
+npm run seed:admin -w server
 ```
 
 Start both applications:
