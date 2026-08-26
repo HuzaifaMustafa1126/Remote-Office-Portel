@@ -137,9 +137,15 @@ async function seedAdmin() {
 
     await connection.execute(
       `INSERT IGNORE INTO role_permissions (role_id, permission_id)
-       SELECT ?, id FROM permissions`,
+       SELECT ?, id FROM permissions WHERE name NOT IN ('attendance.clock', 'attendance.view_own')`,
       [roleId],
     );
+    await connection.execute(
+      `DELETE rp FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
+       WHERE rp.role_id = ? AND p.name IN ('attendance.clock', 'attendance.view_own')`,
+      [roleId],
+    );
+    await connection.execute('UPDATE employees SET track_attendance = FALSE WHERE id = ?', [employeeId]);
     console.log('CEO permissions assigned.');
 
     await connection.execute(

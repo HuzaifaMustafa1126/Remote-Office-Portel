@@ -12,6 +12,7 @@ INSERT INTO permissions(name,description) VALUES
  ('attendance.view_all','View attendance for all employees'),('attendance.edit','Correct attendance records'),
  ('attendance.reports','View attendance reports')
 ON DUPLICATE KEY UPDATE description=VALUES(description);
-INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r CROSS JOIN permissions p WHERE r.name='CEO';
+INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r CROSS JOIN permissions p WHERE r.name='CEO' AND p.name NOT IN ('attendance.clock','attendance.view_own');
+DELETE rp FROM role_permissions rp JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id WHERE r.name='CEO' AND p.name IN ('attendance.clock','attendance.view_own');
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('dashboard.view','employees.view_own') WHERE r.name='Employee';
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('attendance.clock','attendance.view_own') WHERE r.name='Employee';

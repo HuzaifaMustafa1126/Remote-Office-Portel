@@ -21,10 +21,11 @@ async function audit(conn, {userId, employeeId, action, entityId, description}) 
 
 async function employeeName(conn, employeeId) {
   const [[employee]] = await conn.execute(
-    `SELECT CONCAT(first_name, ' ', last_name) AS name FROM employees WHERE id = ?`,
+    `SELECT CONCAT(first_name, ' ', last_name) AS name, track_attendance AS trackAttendance FROM employees WHERE id = ?`,
     [employeeId],
   );
   if (!employee) throw new ApiError(404, 'Employee profile not found');
+  if (!employee.trackAttendance) throw new ApiError(403, 'This account is not configured for attendance tracking');
   return employee.name;
 }
 
@@ -55,8 +56,8 @@ async function transaction(action) {
 
 export async function clockIn(user) {
   return transaction(async conn => {
-    if (await currentRecord(conn, user.employee_id, true)) throw new ApiError(409, 'You are already clocked in');
     const name = await employeeName(conn, user.employee_id);
+    if (await currentRecord(conn, user.employee_id, true)) throw new ApiError(409, 'You are already clocked in');
     const [result] = await conn.execute(
       `INSERT INTO attendance_records (employee_id, attendance_date, clock_in_at, status, day_status)
        VALUES (?, CURRENT_DATE, CURRENT_TIMESTAMP, 'WORKING', 'PRESENT')`,
@@ -70,6 +71,7 @@ export async function clockIn(user) {
 
 export async function startBreak(user) {
   return transaction(async conn => {
+    const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record) throw new ApiError(409, 'You must clock in before starting a break');
     if (record.status === 'CLOCKED_OUT') throw new ApiError(409, 'Your workday has already been completed');
@@ -78,7 +80,6 @@ export async function startBreak(user) {
     if (active) throw new ApiError(409, 'You already have an active break');
     const [result] = await conn.execute(`INSERT INTO attendance_breaks (attendance_id, break_start_at, status) VALUES (?, CURRENT_TIMESTAMP, 'ACTIVE')`, [record.id]);
     await conn.execute(`UPDATE attendance_records SET status = 'ON_BREAK' WHERE id = ?`, [record.id]);
-    const name = await employeeName(conn, user.employee_id);
     const [[entry]] = await conn.execute('SELECT break_start_at FROM attendance_breaks WHERE id = ?', [result.insertId]);
     await audit(conn, {userId: user.id, employeeId: user.employee_id, action: 'BREAK_STARTED', entityId: record.id, description: `${name} started a break at ${formatAuditTime(entry.break_start_at)}.`});
     return getToday(user, conn);
@@ -87,6 +88,7 @@ export async function startBreak(user) {
 
 export async function endBreak(user) {
   return transaction(async conn => {
+    const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record) throw new ApiError(409, 'You must clock in before ending a break');
     if (record.status === 'CLOCKED_OUT') throw new ApiError(409, 'Your workday has already been completed');
@@ -107,7 +109,6 @@ export async function endBreak(user) {
        ) WHERE id = ?`,
       [record.id, record.id],
     );
-    const name = await employeeName(conn, user.employee_id);
     const [[entry]] = await conn.execute('SELECT break_end_at FROM attendance_breaks WHERE id = ?', [active.id]);
     await audit(conn, {userId: user.id, employeeId: user.employee_id, action: 'BREAK_ENDED', entityId: record.id, description: `${name} ended a break at ${formatAuditTime(entry.break_end_at)}.`});
     return getToday(user, conn);
@@ -116,6 +117,7 @@ export async function endBreak(user) {
 
 export async function clockOut(user) {
   return transaction(async conn => {
+    const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record) throw new ApiError(409, 'You must clock in before clocking out');
     if (record.status === 'CLOCKED_OUT') throw new ApiError(409, 'Your workday has already been completed');
@@ -132,7 +134,6 @@ export async function clockOut(user) {
        WHERE id = ?`,
       [record.id, record.id, record.id],
     );
-    const name = await employeeName(conn, user.employee_id);
     const [[entry]] = await conn.execute('SELECT clock_out_at FROM attendance_records WHERE id = ?', [record.id]);
     await audit(conn, {userId: user.id, employeeId: user.employee_id, action: 'ATTENDANCE_CLOCK_OUT', entityId: record.id, description: `${name} clocked out at ${formatAuditTime(entry.clock_out_at)}.`});
     return getToday(user, conn);
@@ -185,7 +186,7 @@ export async function getHistory(user, filters) {
   const employeeId = filters.employeeId || user.employee_id;
   if (Number(employeeId) !== Number(user.employee_id) && !(await canViewAll(user))) throw new ApiError(403, 'You cannot view another employee’s attendance');
   const [rows] = await pool.execute(
-    `${attendanceSelect} WHERE ar.employee_id = ?
+    `${attendanceSelect} WHERE ar.employee_id = ? AND e.track_attendance = TRUE
       AND (? IS NULL OR ar.attendance_date >= ?)
       AND (? IS NULL OR ar.attendance_date <= ?)
      ORDER BY ar.attendance_date DESC`,
@@ -197,13 +198,13 @@ export async function getHistory(user, filters) {
 export async function getLiveOffice() {
   const [employees] = await pool.execute(
     `SELECT e.id AS employeeId, CONCAT(e.first_name, ' ', e.last_name) AS employeeName,
-      e.employee_code AS employeeCode, e.department,
+      e.employee_code AS employeeCode, e.department, e.job_title AS jobTitle,
       COALESCE(ar.status, 'NOT_CLOCKED_IN') AS status, ar.clock_in_at AS clockInAt,
       GREATEST(0, COALESCE(TIMESTAMPDIFF(SECOND, ar.clock_in_at, COALESCE(ar.clock_out_at, CURRENT_TIMESTAMP)), 0) -
         COALESCE((SELECT SUM(TIMESTAMPDIFF(SECOND, b.break_start_at, COALESCE(b.break_end_at, CURRENT_TIMESTAMP))) FROM attendance_breaks b WHERE b.attendance_id = ar.id), 0)) AS workSeconds,
       COALESCE((SELECT TIMESTAMPDIFF(SECOND, b.break_start_at, CURRENT_TIMESTAMP) FROM attendance_breaks b WHERE b.attendance_id = ar.id AND b.status = 'ACTIVE' LIMIT 1), 0) AS currentBreakSeconds
      FROM employees e LEFT JOIN attendance_records ar ON ar.employee_id = e.id AND ar.attendance_date = CURRENT_DATE
-     WHERE e.status = 'ACTIVE' ORDER BY FIELD(COALESCE(ar.status, 'NOT_CLOCKED_IN'), 'ON_BREAK','WORKING','CLOCKED_OUT','NOT_CLOCKED_IN'), e.first_name, e.last_name`,
+     WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE ORDER BY FIELD(COALESCE(ar.status, 'NOT_CLOCKED_IN'), 'ON_BREAK','WORKING','CLOCKED_OUT','NOT_CLOCKED_IN'), e.first_name, e.last_name`,
   );
   const stats = {totalEmployees: employees.length, presentToday: 0, workingNow: 0, onBreak: 0, clockedOut: 0, notClockedIn: 0};
   for (const e of employees) {
@@ -220,14 +221,14 @@ export async function getActivity() {
   const [rows] = await pool.execute(
     `SELECT id, action, description, created_at AS createdAt
      FROM audit_logs WHERE action IN ('ATTENDANCE_CLOCK_IN','BREAK_STARTED','BREAK_ENDED','ATTENDANCE_CLOCK_OUT','ATTENDANCE_UPDATED')
-     ORDER BY created_at DESC LIMIT 15`,
+     ORDER BY created_at DESC LIMIT 8`,
   );
   return rows;
 }
 
 export async function getAttendance(filters) {
   const [rows] = await pool.execute(
-    `${attendanceSelect} WHERE (? IS NULL OR ar.employee_id = ?)
+    `${attendanceSelect} WHERE e.track_attendance = TRUE AND (? IS NULL OR ar.employee_id = ?)
       AND (? IS NULL OR e.department = ?)
       AND (? IS NULL OR ar.attendance_date >= ?)
       AND (? IS NULL OR ar.attendance_date <= ?)
@@ -250,7 +251,7 @@ export async function getDailyReport(date) {
       COALESCE(ar.total_work_minutes, 0) AS totalWorkMinutes,
       COALESCE(ar.status, 'NOT_CLOCKED_IN') AS status
      FROM employees e LEFT JOIN attendance_records ar ON ar.employee_id = e.id AND ar.attendance_date = ?
-     WHERE e.status = 'ACTIVE' ORDER BY e.first_name, e.last_name`,
+     WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE ORDER BY e.first_name, e.last_name`,
     [reportDate],
   );
   const totals = {totalEmployees: rows.length, present: 0, notClockedIn: 0, working: 0, onBreak: 0, clockedOut: 0, totalWorkedMinutes: 0, totalBreakMinutes: 0};
@@ -281,7 +282,7 @@ export async function getMonthlyReport(month) {
       ROUND(COALESCE(SUM(ar.total_work_minutes), 0) / NULLIF(COUNT(ar.id), 0), 1) AS averageDailyWorkMinutes
      FROM employees e LEFT JOIN attendance_records ar ON ar.employee_id = e.id
        AND ar.attendance_date BETWEEN ? AND ?
-     WHERE e.status = 'ACTIVE' GROUP BY e.id ORDER BY e.first_name, e.last_name`,
+     WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE GROUP BY e.id ORDER BY e.first_name, e.last_name`,
     [workingDays, workingDays, start, effectiveEnd],
   );
   return {month: clock.reportMonth, workingDays, rows};

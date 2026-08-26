@@ -43,7 +43,7 @@ ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 INSERT IGNORE INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
-WHERE r.name = 'CEO' AND p.name LIKE 'attendance.%';
+WHERE r.name = 'CEO' AND p.name IN ('attendance.view_all', 'attendance.edit', 'attendance.reports');
 
 INSERT IGNORE INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r JOIN permissions p

@@ -1,0 +1,2 @@
+import {RefreshCw} from 'lucide-react';
+export default function RefreshButton({onClick,refreshing=false,label='Refresh'}){return <button disabled={refreshing} onClick={onClick} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700 disabled:opacity-60"><RefreshCw size={16} className={refreshing?'animate-spin':''}/>{refreshing?'Refreshing…':label}</button>}
