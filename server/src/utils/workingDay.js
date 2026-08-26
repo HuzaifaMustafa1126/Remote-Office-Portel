@@ -1,0 +1,4 @@
+import pool from '../config/database.js';
+export async function getCompanyDayStatus(date,executor=pool){const [[row]]=await executor.execute(`SELECT day_type AS dayType,title,description FROM company_calendar_days WHERE calendar_date=? AND status='ACTIVE' LIMIT 1`,[date]);if(row)return{date,...row,isWorkingDay:row.dayType==='WORKING_DAY'};const sunday=new Date(`${date}T00:00:00Z`).getUTCDay()===0;return{date,dayType:sunday?'WEEKLY_OFF':'WORKING_DAY',title:sunday?'Weekly Off':'Working Day',description:null,isWorkingDay:!sunday}}
+export async function getWorkingDays(start,end,executor=pool){const days=[],cursor=new Date(`${start}T00:00:00Z`),last=new Date(`${end}T00:00:00Z`);while(cursor<=last){const date=cursor.toISOString().slice(0,10);if((await getCompanyDayStatus(date,executor)).isWorkingDay)days.push(date);cursor.setUTCDate(cursor.getUTCDate()+1)}return days}
+export const monthKey=date=>String(date).slice(0,7);

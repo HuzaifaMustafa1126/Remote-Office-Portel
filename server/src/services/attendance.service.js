@@ -1,6 +1,7 @@
 import pool from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
-import {countWeekdays, formatAuditTime} from '../utils/attendanceTime.js';
+import {formatAuditTime} from '../utils/attendanceTime.js';
+import {getCompanyDayStatus} from '../utils/workingDay.js';
 
 const attendanceSelect = `
   SELECT ar.id, ar.employee_id AS employeeId, ar.attendance_date AS attendanceDate,
@@ -57,6 +58,9 @@ async function transaction(action) {
 export async function clockIn(user) {
   return transaction(async conn => {
     const name = await employeeName(conn, user.employee_id);
+    const [[clock]] = await conn.execute('SELECT CURRENT_DATE AS today');
+    const companyDay = await getCompanyDayStatus(clock.today, conn);
+    if (!companyDay.isWorkingDay) throw new ApiError(409, `Attendance is not required today: ${companyDay.title}`);
     if (await currentRecord(conn, user.employee_id, true)) throw new ApiError(409, 'You are already clocked in');
     const [result] = await conn.execute(
       `INSERT INTO attendance_records (employee_id, attendance_date, clock_in_at, status, day_status)
@@ -141,11 +145,13 @@ export async function clockOut(user) {
 }
 
 export async function getToday(user, executor = pool) {
+  const [[clock]] = await executor.execute('SELECT CURRENT_DATE AS today');
+  const companyDay = await getCompanyDayStatus(clock.today, executor);
   const [records] = await executor.execute(
     `${attendanceSelect} WHERE ar.employee_id = ? AND ar.attendance_date = CURRENT_DATE LIMIT 1`,
     [user.employee_id],
   );
-  if (!records[0]) return {status: 'NOT_CLOCKED_IN', record: null, breaks: [], timeline: [], serverTime: new Date().toISOString()};
+  if (!records[0]) return {status: companyDay.isWorkingDay ? 'NOT_CLOCKED_IN' : companyDay.dayType, companyDay, record: null, breaks: [], timeline: [], serverTime: new Date().toISOString()};
   const record = records[0];
   const [[timer]] = await executor.execute(
     `SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, clock_in_at, COALESCE(clock_out_at, CURRENT_TIMESTAMP)) -
@@ -169,7 +175,7 @@ export async function getToday(user, executor = pool) {
   }
   if (record.clockOutAt) timeline.push({type: 'CLOCK_OUT', at: record.clockOutAt, label: 'Clocked Out'});
   timeline.sort((a, b) => new Date(a.at) - new Date(b.at));
-  return {status: record.status, record, breaks, timeline, serverTime: new Date().toISOString()};
+  return {status: record.status, companyDay, record, breaks, timeline, serverTime: new Date().toISOString()};
 }
 
 async function canViewAll(user) {
@@ -254,9 +260,12 @@ export async function getDailyReport(date) {
      WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE ORDER BY e.first_name, e.last_name`,
     [reportDate],
   );
-  const totals = {totalEmployees: rows.length, present: 0, notClockedIn: 0, working: 0, onBreak: 0, clockedOut: 0, totalWorkedMinutes: 0, totalBreakMinutes: 0};
+  const totals = {totalEmployees: rows.length, present: 0, leave: 0, absent: 0, notClockedIn: 0, working: 0, onBreak: 0, clockedOut: 0, totalWorkedMinutes: 0, totalBreakMinutes: 0};
   for (const row of rows) {
-    if (row.status === 'NOT_CLOCKED_IN') totals.notClockedIn += 1; else totals.present += 1;
+    if (row.status === 'NOT_CLOCKED_IN') totals.notClockedIn += 1;
+    else if (row.status === 'LEAVE') totals.leave += 1;
+    else if (row.status === 'ABSENT') totals.absent += 1;
+    else totals.present += 1;
     if (row.status === 'WORKING') totals.working += 1;
     if (row.status === 'ON_BREAK') totals.onBreak += 1;
     if (row.status === 'CLOCKED_OUT') totals.clockedOut += 1;
@@ -271,19 +280,23 @@ export async function getMonthlyReport(month) {
   const start = `${clock.reportMonth}-01`;
   const [[dates]] = await pool.execute('SELECT LAST_DAY(?) AS monthEnd', [start]);
   const effectiveEnd = clock.today < dates.monthEnd ? clock.today : dates.monthEnd;
-  const workingDays = countWeekdays(start, effectiveEnd);
+  const calendar={calendarDays:Number(dates.monthEnd.slice(-2)),workingDays:0,weeklyOffDays:0,officialHolidays:0};
+  const cursor=new Date(`${start}T00:00:00Z`),last=new Date(`${effectiveEnd}T00:00:00Z`);
+  while(cursor<=last){const day=await getCompanyDayStatus(cursor.toISOString().slice(0,10));if(day.isWorkingDay)calendar.workingDays+=1;else if(day.dayType==='WEEKLY_OFF')calendar.weeklyOffDays+=1;else calendar.officialHolidays+=1;cursor.setUTCDate(cursor.getUTCDate()+1)}
+  const workingDays=calendar.workingDays;
   const [rows] = await pool.execute(
     `SELECT e.id AS employeeId, CONCAT(e.first_name, ' ', e.last_name) AS employeeName,
       e.employee_code AS employeeCode, e.department,
-      ? AS totalWorkingDays, COUNT(ar.id) AS presentDays,
-      GREATEST(0, ? - COUNT(ar.id)) AS absentDays,
+      ? AS totalWorkingDays, COALESCE(SUM(ar.day_status='PRESENT'),0) AS presentDays,
+      COALESCE(SUM(ar.day_status='LEAVE'),0) AS leaveDays,
+      GREATEST(0, ? - COALESCE(SUM(ar.day_status IN ('PRESENT','LEAVE')),0)) AS absentDays,
       COALESCE(SUM(ar.total_work_minutes), 0) AS totalWorkedMinutes,
       COALESCE(SUM(ar.total_break_minutes), 0) AS totalBreakMinutes,
-      ROUND(COALESCE(SUM(ar.total_work_minutes), 0) / NULLIF(COUNT(ar.id), 0), 1) AS averageDailyWorkMinutes
+      ROUND(COALESCE(SUM(ar.total_work_minutes), 0) / NULLIF(SUM(ar.day_status='PRESENT'), 0), 1) AS averageDailyWorkMinutes
      FROM employees e LEFT JOIN attendance_records ar ON ar.employee_id = e.id
        AND ar.attendance_date BETWEEN ? AND ?
      WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE GROUP BY e.id ORDER BY e.first_name, e.last_name`,
     [workingDays, workingDays, start, effectiveEnd],
   );
-  return {month: clock.reportMonth, workingDays, rows};
+  return {month: clock.reportMonth, workingDays, calendar, rows};
 }

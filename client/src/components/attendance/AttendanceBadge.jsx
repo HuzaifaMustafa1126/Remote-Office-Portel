@@ -1,3 +1,3 @@
-const styles={WORKING:'bg-emerald-50 text-emerald-700',ON_BREAK:'bg-amber-50 text-amber-700',CLOCKED_OUT:'bg-indigo-50 text-indigo-700',NOT_CLOCKED_IN:'bg-slate-100 text-slate-600'};
-const labels={WORKING:'Working',ON_BREAK:'On Break',CLOCKED_OUT:'Clocked Out',NOT_CLOCKED_IN:'Not Clocked In'};
+const styles={WORKING:'bg-emerald-50 text-emerald-700',ON_BREAK:'bg-amber-50 text-amber-700',CLOCKED_OUT:'bg-indigo-50 text-indigo-700',NOT_CLOCKED_IN:'bg-slate-100 text-slate-600',LEAVE:'bg-purple-50 text-purple-700',ABSENT:'bg-red-50 text-red-700',OFF_DAY:'bg-slate-100 text-slate-600',WORKED_HOLIDAY:'bg-indigo-50 text-indigo-700'};
+const labels={WORKING:'Working',ON_BREAK:'On Break',CLOCKED_OUT:'Clocked Out',NOT_CLOCKED_IN:'Not Clocked In',LEAVE:'Leave',ABSENT:'Unauthorized Absence',OFF_DAY:'Official Off Day',WORKED_HOLIDAY:'Worked on Holiday'};
 export default function AttendanceBadge({status='NOT_CLOCKED_IN'}){return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${styles[status]||styles.NOT_CLOCKED_IN}`}>{labels[status]||status}</span>}
