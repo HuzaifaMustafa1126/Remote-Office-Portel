@@ -1,0 +1,1 @@
+import {Router} from 'express';import {list} from '../controllers/audit.controller.js';import {requirePermission} from '../middleware/permission.middleware.js';import asyncHandler from '../utils/asyncHandler.js';const r=Router();r.get('/',requirePermission('audit.view'),asyncHandler(list));export default r;

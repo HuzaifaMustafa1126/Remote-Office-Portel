@@ -1,0 +1,1 @@
+export const formatDate=(v)=>v?new Intl.DateTimeFormat('en-PK',{dateStyle:'medium'}).format(new Date(v)):'—'; export const initials=(name='')=>name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(); export const errorMessage=(e)=>e.response?.data?.message||(e.request?'Unable to reach the server':'Something went wrong');

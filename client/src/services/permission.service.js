@@ -1,0 +1,1 @@
+import api from './api'; export const listPermissions=()=>api.get('/permissions').then(r=>r.data.data); export const updateRolePermissions=(roleId,permissionIds)=>api.put(`/permissions/roles/${roleId}`,{permissionIds}).then(r=>r.data);
