@@ -19,7 +19,8 @@ export function initializeNotifications(server) {
         "SELECT id,status FROM users WHERE id=? LIMIT 1",
         [decoded.sub],
       );
-      if (!user || user.status !== "ACTIVE") return next(new Error("Account unavailable"));
+      if (!user || user.status !== "ACTIVE")
+        return next(new Error("Account unavailable"));
       const [roles] = await pool.execute(
         "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id=r.id WHERE ur.user_id=?",
         [user.id],

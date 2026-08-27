@@ -19,6 +19,15 @@ const time = (value) =>
         minute: "2-digit",
       }).format(new Date(value))
     : "—";
+const duration = (value) =>
+  `${Math.floor(Number(value || 0) / 60)}h ${Number(value || 0) % 60}m`;
+const scheduleTime = (value) =>
+  value
+    ? new Date(`2000-01-01T${value}`).toLocaleTimeString("en-PK", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
 export default function AttendanceStatusCard({ data, busy, actions }) {
   const [leave, setLeave] = useState({ summary: {}, requests: [] });
@@ -104,6 +113,74 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
 
   return (
     <div className="space-y-5">
+      {data?.schedule && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+            Today's Schedule
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-slate-400">Shift</p>
+              <p className="font-semibold">
+                {scheduleTime(data.schedule.clockInTime)} →{" "}
+                {scheduleTime(data.schedule.clockOutTime)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Grace</p>
+              <p className="font-semibold">{data.schedule.graceMinutes} min</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Required</p>
+              <p className="font-semibold">
+                {duration(data.schedule.requiredWorkMinutes)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Break</p>
+              <p className="font-semibold">
+                {duration(data.schedule.breakAllowanceMinutes)}
+              </p>
+            </div>
+          </div>
+          {record && (
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-xs">
+              <span className="rounded-full bg-indigo-50 px-3 py-1 font-semibold text-indigo-700">
+                Work date:{" "}
+                {new Date(`${record.workDate}T00:00:00`).toLocaleDateString(
+                  "en-PK",
+                  { day: "numeric", month: "short", year: "numeric" },
+                )}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 font-bold ${record.arrivalStatus === "LATE" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
+              >
+                {record.arrivalStatus === "LATE"
+                  ? `${record.lateMinutes}m late`
+                  : "On time"}
+              </span>
+              {record.reconciliationStatus === "OPEN_SHIFT" && (
+                <span className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-700">
+                  Open shift · review required
+                </span>
+              )}
+              {status === "CLOCKED_OUT" && (
+                <>
+                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                    Short: {record.shortMinutes}m
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                    Extra: {record.extraMinutes}m
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                    Break exceeded: {record.breakExceededMinutes}m
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       {statusCard}
       <EmployeeLeavePanel summary={leave.summary} requests={leave.requests} />
     </div>

@@ -10,6 +10,12 @@ r.post("/clock-in", p("attendance.clock"), asyncHandler(c.clockIn));
 r.post("/break/start", p("attendance.clock"), asyncHandler(c.startBreak));
 r.post("/break/end", p("attendance.clock"), asyncHandler(c.endBreak));
 r.post("/clock-out", p("attendance.clock"), asyncHandler(c.clockOut));
+r.patch(
+  "/:id/reconcile",
+  p("attendance.edit"),
+  validate(v.correctionSchema),
+  asyncHandler(c.reconcile),
+);
 r.get("/today", p("attendance.view_own"), asyncHandler(c.today));
 r.get(
   "/history",

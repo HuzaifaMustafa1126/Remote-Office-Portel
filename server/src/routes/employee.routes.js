@@ -4,9 +4,18 @@ import { requirePermission as p } from "../middleware/permission.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import * as v from "../validators/employee.validator.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { saveSchema as workSettingsSchema } from "../validators/workSettings.validator.js";
 const r = Router();
 r.get("/", p("employees.view_all"), asyncHandler(c.list));
 r.get("/:id", p("employees.view_all"), asyncHandler(c.get));
+r.get("/:id/work-settings", p("shift.view"), asyncHandler(c.workSettings));
+r.put(
+  "/:id/work-settings",
+  p("shift.assign"),
+  p("salary.manage"),
+  validate(workSettingsSchema),
+  asyncHandler(c.saveWorkSettings),
+);
 r.post(
   "/",
   p("employees.create"),

@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import PageHeader from "../components/common/PageHeader";
 import Loader from "../components/common/Loader";
 import StatusBadge from "../components/common/StatusBadge";
 import { getEmployee } from "../services/employee.service";
 import { formatDate } from "../utils/helpers";
+import WorkSettingsCard from "../components/employees/WorkSettingsCard";
+import usePermission from "../hooks/usePermission";
+import { PERMISSIONS as P } from "../utils/permissions";
 export default function EmployeeDetailPage() {
+  const canViewSettings = usePermission(P.SHIFT_VIEW),
+    canAssignShift = usePermission(P.SHIFT_ASSIGN),
+    canManageSalary = usePermission(P.SALARY_MANAGE),
+    canEditSettings = canAssignShift && canManageSalary;
   const { id } = useParams(),
     [e, setE] = useState(null);
+  const [searchParams] = useSearchParams();
   useEffect(() => {
     getEmployee(id).then(setE);
   }, [id]);
@@ -41,6 +50,13 @@ export default function EmployeeDetailPage() {
           <StatusBadge status={e.status} />
         </div>
       </div>
+      {canViewSettings && (
+        <WorkSettingsCard
+          employeeId={id}
+          canEdit={canEditSettings}
+          initialOpen={searchParams.get("setup") === "1"}
+        />
+      )}
     </>
   );
 }

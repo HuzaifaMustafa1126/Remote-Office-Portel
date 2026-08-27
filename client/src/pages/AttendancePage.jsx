@@ -31,17 +31,36 @@ export default function AttendancePage() {
       attendance
         .getAttendance(filters)
         .then(setRows)
-        .catch((e) => setError(errorMessage(e)));
+        .catch((e) => {
+          setError(errorMessage(e));
+          setRows([]);
+        });
     if (tab === "daily")
       attendance
         .getDailyReport({ date: filters.from })
         .then(setDaily)
-        .catch((e) => setError(errorMessage(e)));
+        .catch((e) => {
+          setError(errorMessage(e));
+          setDaily({
+            date: filters.from,
+            totals: {
+              totalEmployees: 0,
+              present: 0,
+              onBreak: 0,
+              totalWorkedMinutes: 0,
+              totalBreakMinutes: 0,
+            },
+            rows: [],
+          });
+        });
     if (tab === "monthly")
       attendance
         .getMonthlyReport({ month })
         .then(setMonthly)
-        .catch((e) => setError(errorMessage(e)));
+        .catch((e) => {
+          setError(errorMessage(e));
+          setMonthly({ rows: [] });
+        });
   }, [tab, filters, month]);
   return (
     <>
@@ -53,7 +72,7 @@ export default function AttendancePage() {
         {[
           ["records", "Attendance Records"],
           ["daily", "Daily Report"],
-          ["monthly", "Monthly Report"],
+          ["monthly", "Payroll Period Report"],
         ].map(([id, label]) => (
           <button
             key={id}

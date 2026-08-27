@@ -10,6 +10,8 @@ import {
   CalendarPlus,
   ClipboardCheck,
   CalendarDays,
+  Clock4,
+  WalletCards,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
@@ -27,9 +29,18 @@ const groups = [
     ],
   },
   {
+    label: "PAYROLL",
+    items: [
+      ["Salary Management", "/salary", WalletCards, P.SALARY_VIEW_ALL],
+      ["Payroll", "/payroll", WalletCards, P.PAYROLL_VIEW_ALL],
+      ["My Salary", "/my-salary", WalletCards, P.SALARY_VIEW_OWN],
+    ],
+  },
+  {
     label: "MANAGEMENT",
     items: [
       ["Company Calendar", "/company-calendar", CalendarDays, P.CALENDAR_VIEW],
+      ["Shift Templates", "/shifts", Clock4, P.SHIFT_VIEW],
       ["Roles", "/roles", Shield, P.ROLES_VIEW],
       ["Permissions", "/permissions", KeyRound, P.PERMISSIONS_VIEW],
     ],
@@ -93,7 +104,7 @@ export default function Sidebar({ open, onClose }) {
           })}
         </nav>
         <div className="border-t border-white/10 p-4 text-xs text-slate-400">
-          Secure workspace • Phase 1.2
+          Secure Workspace
         </div>
       </aside>
     </>

@@ -17,6 +17,10 @@ import PermissionsPage from "../pages/PermissionsPage";
 import RolesPage from "../pages/RolesPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import NotificationSettingsPage from "../pages/NotificationSettingsPage";
+import ShiftManagementPage from "../pages/ShiftManagementPage";
+import PayrollPage from "../pages/PayrollPage";
+import SalaryPage from "../pages/SalaryPage";
+import MySalaryPage from "../pages/MySalaryPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -46,7 +50,42 @@ export default function AppRoutes() {
           }
         />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="notification-settings" element={<NotificationSettingsPage />} />
+        <Route
+          path="notification-settings"
+          element={<NotificationSettingsPage />}
+        />
+        <Route
+          path="shifts"
+          element={
+            <Gate permission={P.SHIFT_VIEW}>
+              <ShiftManagementPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="payroll"
+          element={
+            <Gate permission={P.PAYROLL_VIEW_ALL}>
+              <PayrollPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="salary"
+          element={
+            <Gate permission={P.SALARY_VIEW_ALL}>
+              <SalaryPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="my-salary"
+          element={
+            <Gate permission={P.SALARY_VIEW_OWN}>
+              <MySalaryPage />
+            </Gate>
+          }
+        />
         <Route
           path="attendance"
           element={

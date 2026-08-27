@@ -4,10 +4,12 @@ import { errorMessage } from "../utils/helpers";
 
 export default function useAttendance() {
   const [data, setData] = useState(null),
+    [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const latest = await attendance.getToday();
       setData(latest);
@@ -16,6 +18,8 @@ export default function useAttendance() {
     } catch (e) {
       setError(errorMessage(e));
       throw e;
+    } finally {
+      setLoading(false);
     }
   }, []);
   const act = async (fn) => {
@@ -34,6 +38,7 @@ export default function useAttendance() {
   };
   return {
     data,
+    loading,
     busy,
     notice,
     error,

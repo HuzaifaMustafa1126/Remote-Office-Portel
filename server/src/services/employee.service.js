@@ -3,13 +3,29 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { logAudit } from "./audit.service.js";
 const select = `SELECT e.id,e.employee_code AS employeeCode,e.first_name AS firstName,e.last_name AS lastName,e.email,e.phone,e.job_title AS jobTitle,e.department,e.joining_date AS joiningDate,e.status,e.created_at AS createdAt,e.updated_at AS updatedAt FROM employees e`;
-export async function listEmployees({ search = "" }) {
+export async function listEmployees({ search = "" }, actor) {
   const q = `%${search}%`;
   const [rows] = await pool.execute(
-    `${select} WHERE (?='' OR e.first_name LIKE ? OR e.last_name LIKE ? OR e.email LIKE ? OR e.employee_code LIKE ?) ORDER BY e.created_at DESC`,
+    `${select.replace(" FROM employees e", "")},(SELECT esa.shift_id FROM employee_shift_assignments esa WHERE esa.employee_id=e.id AND esa.status='ACTIVE' AND esa.effective_from<=CURRENT_DATE AND(esa.effective_to IS NULL OR esa.effective_to>=CURRENT_DATE)ORDER BY esa.effective_from DESC LIMIT 1) shiftId,
+    (SELECT ws.name FROM employee_shift_assignments esa JOIN work_shifts ws ON ws.id=esa.shift_id WHERE esa.employee_id=e.id AND esa.status='ACTIVE' AND esa.effective_from<=CURRENT_DATE AND(esa.effective_to IS NULL OR esa.effective_to>=CURRENT_DATE)ORDER BY esa.effective_from DESC LIMIT 1) shiftName,
+    (SELECT CONCAT(TIME_FORMAT(ws.start_time,'%H:%i'),' → ',TIME_FORMAT(ws.end_time,'%H:%i')) FROM employee_shift_assignments esa JOIN work_shifts ws ON ws.id=esa.shift_id WHERE esa.employee_id=e.id AND esa.status='ACTIVE' AND esa.effective_from<=CURRENT_DATE AND(esa.effective_to IS NULL OR esa.effective_to>=CURRENT_DATE)ORDER BY esa.effective_from DESC LIMIT 1) schedule,
+    (SELECT esp.monthly_salary FROM employee_salary_profiles esp WHERE esp.employee_id=e.id AND esp.effective_from<=CURRENT_DATE AND(esp.effective_until IS NULL OR esp.effective_until>=CURRENT_DATE)ORDER BY esp.effective_from DESC LIMIT 1) monthlySalary
+    FROM employees e WHERE (?='' OR e.first_name LIKE ? OR e.last_name LIKE ? OR e.email LIKE ? OR e.employee_code LIKE ?) ORDER BY e.created_at DESC`,
     [search, q, q, q, q],
   );
-  return rows;
+  const [allowed] = await pool.execute(
+    "SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=? AND p.name='salary.view_all' LIMIT 1",
+    [actor.id],
+  );
+  return rows.map((row) => ({
+    ...row,
+    monthlySalary: allowed.length ? row.monthlySalary : undefined,
+    configurationReady: Boolean(row.shiftId && row.monthlySalary),
+    missingConfiguration: [
+      !row.shiftId && "Shift",
+      !row.monthlySalary && "Salary",
+    ].filter(Boolean),
+  }));
 }
 export async function getEmployee(id) {
   const [rows] = await pool.execute(`${select} WHERE e.id=?`, [id]);

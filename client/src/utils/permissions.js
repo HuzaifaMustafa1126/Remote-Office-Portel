@@ -24,4 +24,13 @@ export const PERMISSIONS = {
   LEAVE_REPORTS: "leave.reports",
   CALENDAR_VIEW: "calendar.view",
   CALENDAR_MANAGE: "calendar.manage",
+  SHIFT_VIEW: "shift.view",
+  SHIFT_MANAGE: "shift.manage",
+  SHIFT_ASSIGN: "shift.assign",
+  SALARY_VIEW_ALL: "salary.view_all",
+  SALARY_MANAGE: "salary.manage",
+  SALARY_VIEW_OWN: "salary.view_own",
+  PAYROLL_VIEW_OWN: "payroll.view_own",
+  PAYROLL_VIEW_ALL: "payroll.view_all",
+  PAYROLL_GENERATE: "payroll.generate",
 };

@@ -1,6 +1,11 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
-import { getWorkingDays, monthKey } from "../utils/workingDay.js";
+import { getWorkingDays } from "../utils/workingDay.js";
+import {
+  getPayrollSettings,
+  periodForDate,
+  payrollPeriodForDate,
+} from "../utils/payrollPeriod.js";
 import { notifyRoles, notifyUser } from "./notification.service.js";
 const base = `SELECT lr.id,lr.employee_id AS employeeId,lr.leave_type AS leaveType,lr.start_date AS startDate,lr.end_date AS endDate,lr.total_days AS totalDays,lr.reason,lr.status,lr.reviewed_by AS reviewedBy,lr.reviewed_at AS reviewedAt,lr.review_comment AS reviewComment,lr.created_at AS createdAt,CONCAT(e.first_name,' ',e.last_name) AS employeeName,e.employee_code AS employeeCode,e.department FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id`;
 async function tx(fn) {
@@ -33,14 +38,19 @@ async function log(c, { userId, employeeId, action, entityId, description }) {
     [userId, employeeId, action, entityId, description],
   );
 }
-export async function recalculateMonthlyLeaveDeductions(c, employeeId, month) {
+export async function recalculatePayrollPeriodLeaveDeductions(
+  c,
+  employeeId,
+  periodStart,
+  periodEndExclusive,
+) {
   await c.execute(
-    `UPDATE leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id SET ld.deduction_status='PENDING' WHERE ld.employee_id=? AND DATE_FORMAT(ld.leave_date,'%Y-%m')=? AND lr.status='APPROVED'`,
-    [employeeId, month],
+    `UPDATE leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id SET ld.deduction_status='PENDING' WHERE ld.employee_id=? AND ld.leave_date>=? AND ld.leave_date<? AND lr.status='APPROVED'`,
+    [employeeId, periodStart, periodEndExclusive],
   );
   const [days] = await c.execute(
-    `SELECT ld.id FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id LEFT JOIN company_calendar_days cd ON cd.calendar_date=ld.leave_date AND cd.status='ACTIVE' WHERE ld.employee_id=? AND DATE_FORMAT(ld.leave_date,'%Y-%m')=? AND lr.status='APPROVED' AND COALESCE(cd.day_type,IF(DAYOFWEEK(ld.leave_date)=1,'WEEKLY_OFF','WORKING_DAY'))='WORKING_DAY' ORDER BY ld.leave_date,ld.id FOR UPDATE`,
-    [employeeId, month],
+    `SELECT ld.id FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id LEFT JOIN company_calendar_days cd ON cd.calendar_date=ld.leave_date AND cd.status='ACTIVE' WHERE ld.employee_id=? AND ld.leave_date>=? AND ld.leave_date<? AND lr.status='APPROVED' AND COALESCE(cd.day_type,IF(DAYOFWEEK(ld.leave_date)=1,'WEEKLY_OFF','WORKING_DAY'))='WORKING_DAY' ORDER BY ld.leave_date,ld.id FOR UPDATE`,
+    [employeeId, periodStart, periodEndExclusive],
   );
   for (let i = 0; i < days.length; i++)
     await c.execute(
@@ -49,9 +59,20 @@ export async function recalculateMonthlyLeaveDeductions(c, employeeId, month) {
     );
   return days.length;
 }
-async function recalcMonths(c, employeeId, dates) {
-  for (const month of new Set(dates.map(monthKey)))
-    await recalculateMonthlyLeaveDeductions(c, employeeId, month);
+export async function recalculatePayrollPeriodsForDates(c, employeeId, dates) {
+  const settings = await getPayrollSettings(c),
+    periods = new Map();
+  for (const date of dates) {
+    const p = periodForDate(date, Number(settings.cycleStartDay));
+    periods.set(p.start, p);
+  }
+  for (const p of periods.values())
+    await recalculatePayrollPeriodLeaveDeductions(
+      c,
+      employeeId,
+      p.start,
+      p.endExclusive,
+    );
 }
 export async function createLeave(user, data) {
   if (data.endDate < data.startDate)
@@ -96,9 +117,12 @@ export async function createLeave(user, data) {
     return { id: r.insertId, totalDays: days.length, employeeName: e.name };
   });
   await notifyRoles(["CEO", "ADMIN"], {
-    type: "LEAVE_REQUESTED", title: "New Leave Request",
+    type: "LEAVE_REQUESTED",
+    title: "New Leave Request",
     message: `${result.employeeName} requested ${data.leaveType.replaceAll("_", " ")} from ${data.startDate} to ${data.endDate}.`,
-    referenceType: "LEAVE", referenceId: result.id, actionUrl: `/leave-requests?open=${result.id}`,
+    referenceType: "LEAVE",
+    referenceId: result.id,
+    actionUrl: `/leave-requests?open=${result.id}`,
   });
   return { id: result.id, totalDays: result.totalDays };
 }
@@ -110,13 +134,16 @@ export async function getMyLeaves(user) {
   return rows;
 }
 export async function getSummary(user) {
+  const period = await payrollPeriodForDate(
+    new Date().toISOString().slice(0, 10),
+  );
   const [[row]] = await pool.execute(
-    `SELECT SUM(status='PENDING') pendingRequests,SUM(status='REJECTED') rejectedRequests FROM leave_requests WHERE employee_id=? AND DATE_FORMAT(start_date,'%Y-%m')=DATE_FORMAT(CURRENT_DATE,'%Y-%m')`,
-    [user.employee_id],
+    `SELECT SUM(status='PENDING') pendingRequests,SUM(status='REJECTED') rejectedRequests FROM leave_requests WHERE employee_id=? AND start_date>=? AND start_date<?`,
+    [user.employee_id, period.start, period.endExclusive],
   );
   const [[days]] = await pool.execute(
-    `SELECT SUM(deduction_status IN ('FREE','DEDUCTIBLE')) approvedDays,SUM(deduction_status='FREE') freeDays,SUM(deduction_status='DEDUCTIBLE') deductibleDays FROM leave_days WHERE employee_id=? AND DATE_FORMAT(leave_date,'%Y-%m')=DATE_FORMAT(CURRENT_DATE,'%Y-%m')`,
-    [user.employee_id],
+    `SELECT SUM(deduction_status IN ('FREE','DEDUCTIBLE')) approvedDays,SUM(deduction_status='FREE') freeDays,SUM(deduction_status='DEDUCTIBLE') deductibleDays FROM leave_days WHERE employee_id=? AND leave_date>=? AND leave_date<?`,
+    [user.employee_id, period.start, period.endExclusive],
   );
   return {
     pendingRequests: Number(row.pendingRequests || 0),
@@ -241,14 +268,14 @@ export async function reviewLeave(id, status, comment, reviewer) {
       [status, id],
     );
     if (status === "APPROVED") {
-      await recalcMonths(
+      await recalculatePayrollPeriodsForDates(
         c,
         r.employee_id,
         days.map((x) => x.leave_date),
       );
       for (const d of days) {
         const [[a]] = await c.execute(
-          `SELECT id,clock_in_at FROM attendance_records WHERE employee_id=? AND attendance_date=?`,
+          `SELECT id,clock_in_at FROM attendance_records WHERE employee_id=? AND work_date=?`,
           [r.employee_id, d.leave_date],
         );
         if (a?.clock_in_at)
@@ -258,8 +285,8 @@ export async function reviewLeave(id, status, comment, reviewer) {
           );
         else if (d.leave_date < new Date().toISOString().slice(0, 10)) {
           const [ar] = await c.execute(
-            `INSERT INTO attendance_records(employee_id,attendance_date,clock_in_at,status,day_status) VALUES(?,?,NULL,'LEAVE','LEAVE') ON DUPLICATE KEY UPDATE day_status='LEAVE'`,
-            [r.employee_id, d.leave_date],
+            `INSERT INTO attendance_records(employee_id,attendance_date,work_date,clock_in_at,status,day_status) VALUES(?,?,?,NULL,'LEAVE','LEAVE') ON DUPLICATE KEY UPDATE day_status='LEAVE'`,
+            [r.employee_id, d.leave_date, d.leave_date],
           );
           const attendanceId = ar.insertId || a?.id;
           await c.execute(
@@ -269,7 +296,7 @@ export async function reviewLeave(id, status, comment, reviewer) {
         }
       }
     } else
-      await recalcMonths(
+      await recalculatePayrollPeriodsForDates(
         c,
         r.employee_id,
         days.map((x) => x.leave_date),
@@ -282,17 +309,34 @@ export async function reviewLeave(id, status, comment, reviewer) {
       entityId: id,
       description: `Leave request for ${r.name} was ${status.toLowerCase()} by management.`,
     });
-    const [[owner]] = await c.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1", [r.employee_id]);
-    return { id, status, ownerUserId: owner?.id, startDate: r.start_date, endDate: r.end_date };
+    for (const d of days)
+      await c.execute(
+        "UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",
+        [d.leave_date, d.leave_date],
+      );
+    const [[owner]] = await c.execute(
+      "SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",
+      [r.employee_id],
+    );
+    return {
+      id,
+      status,
+      ownerUserId: owner?.id,
+      startDate: r.start_date,
+      endDate: r.end_date,
+    };
   });
   if (result.ownerUserId) {
-    const rejectedReason = status === "REJECTED" && comment ? ` Reason: ${comment}` : "";
+    const rejectedReason =
+      status === "REJECTED" && comment ? ` Reason: ${comment}` : "";
     await notifyUser({
       userId: result.ownerUserId,
       type: status === "APPROVED" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
       title: status === "APPROVED" ? "Leave Approved" : "Leave Rejected",
       message: `Your leave request from ${result.startDate} to ${result.endDate} has been ${status.toLowerCase()}.${rejectedReason}`,
-      referenceType: "LEAVE", referenceId: Number(id), actionUrl: "/leave",
+      referenceType: "LEAVE",
+      referenceId: Number(id),
+      actionUrl: "/leave",
     });
   }
   return { id: result.id, status: result.status };
@@ -302,14 +346,25 @@ export async function getMonthlyReport({ month, employeeId }) {
     `SELECT COALESCE(?,DATE_FORMAT(CURRENT_DATE,'%Y-%m')) month`,
     [month || null],
   );
+  const settings = await getPayrollSettings(),
+    labelDate = `${m.month}-04`,
+    period = periodForDate(labelDate, Number(settings.cycleStartDay));
   const where = employeeId ? "AND e.id=?" : "",
-    params = employeeId ? [m.month, employeeId] : [m.month];
+    params = employeeId ? [employeeId] : [];
   const [rows] = await pool.execute(
-    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,e.employee_code employeeCode,e.department,COUNT(DISTINCT CASE WHEN ld.approval_status='APPROVED' THEN ld.id END) approvedLeaveDays,SUM(ld.deduction_status='FREE') freeLeaveDays,SUM(ld.deduction_status='DEDUCTIBLE') deductibleLeaveDays,(SELECT COUNT(*) FROM attendance_records ar WHERE ar.employee_id=e.id AND DATE_FORMAT(ar.attendance_date,'%Y-%m')=? AND ar.day_status='ABSENT') unauthorizedAbsenceDays FROM employees e LEFT JOIN leave_days ld ON ld.employee_id=e.id AND DATE_FORMAT(ld.leave_date,'%Y-%m')=? WHERE e.track_attendance=TRUE ${where} GROUP BY e.id ORDER BY e.first_name`,
-    [m.month, ...params],
+    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,e.employee_code employeeCode,e.department,COUNT(DISTINCT CASE WHEN ld.approval_status='APPROVED' THEN ld.id END) approvedLeaveDays,SUM(ld.deduction_status='FREE') freeLeaveDays,SUM(ld.deduction_status='DEDUCTIBLE') deductibleLeaveDays,(SELECT COUNT(*) FROM attendance_records ar WHERE ar.employee_id=e.id AND ar.work_date>=? AND ar.work_date<? AND ar.day_status='ABSENT') unauthorizedAbsenceDays FROM employees e LEFT JOIN leave_days ld ON ld.employee_id=e.id AND ld.leave_date>=? AND ld.leave_date<? WHERE e.track_attendance=TRUE ${where} GROUP BY e.id ORDER BY e.first_name`,
+    [
+      period.start,
+      period.endExclusive,
+      period.start,
+      period.endExclusive,
+      ...params,
+    ],
   );
   return {
     month: m.month,
+    periodStart: period.start,
+    periodEnd: period.endInclusive,
     rows: rows.map((r) => ({
       ...r,
       approvedLeaveDays: Number(r.approvedLeaveDays || 0),
@@ -323,6 +378,27 @@ export async function finalizeAttendanceDay(date, actor) {
   const today = new Date().toISOString().slice(0, 10);
   if (date >= today)
     throw new ApiError(400, "Only completed previous days can be finalized");
+  const [[pendingShift]] = await pool.execute(
+    `SELECT COUNT(*) pending FROM employee_shift_assignments esa JOIN work_shifts ws ON ws.id=esa.shift_id
+    WHERE esa.status='ACTIVE' AND esa.effective_from<=? AND (esa.effective_to IS NULL OR esa.effective_to>=?)
+    AND TIMESTAMP(DATE_ADD(?,INTERVAL ws.crosses_midnight DAY),ws.end_time)>CURRENT_TIMESTAMP`,
+    [date, date, date],
+  );
+  if (Number(pendingShift.pending))
+    throw new ApiError(
+      409,
+      "This work date cannot be finalized before all scheduled shifts have ended",
+    );
+  const [[defaultPending]] = await pool.execute(
+    `SELECT COUNT(*) pending FROM work_shifts WHERE is_default=TRUE AND status='ACTIVE'
+    AND TIMESTAMP(DATE_ADD(?,INTERVAL crosses_midnight DAY),end_time)>CURRENT_TIMESTAMP`,
+    [date],
+  );
+  if (Number(defaultPending.pending))
+    throw new ApiError(
+      409,
+      "This work date cannot be finalized before the default shift has ended",
+    );
   if (!(await getWorkingDays(date, date)).length) return { date, processed: 0 };
   return tx(async (c) => {
     const [employees] = await c.execute(
@@ -331,7 +407,7 @@ export async function finalizeAttendanceDay(date, actor) {
     let processed = 0;
     for (const e of employees) {
       const [[attendance]] = await c.execute(
-        `SELECT id,clock_in_at FROM attendance_records WHERE employee_id=? AND attendance_date=? FOR UPDATE`,
+        `SELECT id,clock_in_at FROM attendance_records WHERE employee_id=? AND work_date=? FOR UPDATE`,
         [e.id, date],
       );
       const [[leave]] = await c.execute(
@@ -355,12 +431,12 @@ export async function finalizeAttendanceDay(date, actor) {
         );
       else
         await c.execute(
-          `INSERT INTO attendance_records(employee_id,attendance_date,clock_in_at,status,day_status) VALUES(?,?,NULL,?,?)`,
-          [e.id, date, status, dayStatus],
+          `INSERT INTO attendance_records(employee_id,attendance_date,work_date,clock_in_at,status,day_status) VALUES(?,?,?,NULL,?,?)`,
+          [e.id, date, date, status, dayStatus],
         );
       if (leave) {
         const [[ar]] = await c.execute(
-          `SELECT id FROM attendance_records WHERE employee_id=? AND attendance_date=?`,
+          `SELECT id FROM attendance_records WHERE employee_id=? AND work_date=?`,
           [e.id, date],
         );
         await c.execute(`UPDATE leave_days SET attendance_id=? WHERE id=?`, [

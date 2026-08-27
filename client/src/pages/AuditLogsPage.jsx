@@ -37,6 +37,15 @@ const labels = {
   HOLIDAY_CANCELLED: "Holiday Cancelled",
   SPECIAL_OFF_DAY_CREATED: "Special Off Day Created",
   INITIAL_ADMIN_CREATED: "Administrator Created",
+  SHIFT_CREATED: "Shift Created",
+  SHIFT_UPDATED: "Shift Updated",
+  SHIFT_DEACTIVATED: "Shift Deactivated",
+  SHIFT_ASSIGNED: "Shift Assigned",
+  SALARY_UPDATED: "Salary Updated",
+  PAYROLL_GENERATED: "Payroll Generated",
+  PAYROLL_RECALCULATED: "Payroll Recalculated",
+  PAYROLL_APPROVED: "Payroll Approved",
+  PAYROLL_MARKED_PAID: "Payroll Marked Paid",
 };
 const moduleName = (a) =>
   a.startsWith("LOGIN")
@@ -53,9 +62,13 @@ const moduleName = (a) =>
               ? "Permissions"
               : a.startsWith("LEAVE")
                 ? "Leave"
-                : a.startsWith("HOLIDAY") || a.startsWith("SPECIAL_OFF")
-                  ? "Company Calendar"
-                  : "System";
+                : a.startsWith("SHIFT") || a.startsWith("SALARY")
+                  ? "Work & Salary"
+                  : a.startsWith("PAYROLL")
+                    ? "Payroll"
+                    : a.startsWith("HOLIDAY") || a.startsWith("SPECIAL_OFF")
+                      ? "Company Calendar"
+                      : "System";
 const iso = (d) => d.toISOString().slice(0, 10);
 function Summary({ icon: Icon, label, value }) {
   return (
@@ -167,6 +180,8 @@ export default function AuditLogsPage() {
             <option value="employees">Employees</option>
             <option value="roles">Roles</option>
             <option value="permissions">Permissions</option>
+            <option value="shifts">Shifts & Salary</option>
+            <option value="payroll">Payroll</option>
           </select>
           <select
             value={filters.userId}

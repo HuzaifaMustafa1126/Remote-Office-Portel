@@ -1,12 +1,10 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
-import { recalculateMonthlyLeaveDeductions } from "./leave.service.js";
+import { recalculatePayrollPeriodsForDates } from "./leave.service.js";
 async function reconcile(c, dates) {
-  const months = new Set(),
-    employees = new Set();
+  const employees = new Set();
   for (const date of dates) {
-    months.add(date.slice(0, 7));
     const [rows] = await c.execute(
       `SELECT DISTINCT employee_id FROM leave_days WHERE leave_date=?`,
       [date],
@@ -15,13 +13,13 @@ async function reconcile(c, dates) {
     const day = await getCompanyDayStatus(date, c);
     if (!day.isWorkingDay)
       await c.execute(
-        `UPDATE attendance_records SET status=IF(clock_in_at IS NULL,'OFF_DAY','WORKED_HOLIDAY'),day_status=IF(clock_in_at IS NULL,'OFF_DAY','WORKED_HOLIDAY') WHERE attendance_date=?`,
+        `UPDATE attendance_records SET status=IF(clock_in_at IS NULL,'OFF_DAY','WORKED_HOLIDAY'),day_status=IF(clock_in_at IS NULL,'OFF_DAY','WORKED_HOLIDAY') WHERE work_date=?`,
         [date],
       );
   }
   for (const employeeId of employees)
-    for (const month of months)
-      await recalculateMonthlyLeaveDeductions(c, employeeId, month);
+    await recalculatePayrollPeriodsForDates(c,employeeId,dates);
+  for(const date of dates) await c.execute("UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",[date,date]);
   const [requests] = await c.execute(
     `SELECT DISTINCT leave_request_id id FROM leave_days WHERE leave_date IN (${dates.map(() => "?").join(",")})`,
     dates,

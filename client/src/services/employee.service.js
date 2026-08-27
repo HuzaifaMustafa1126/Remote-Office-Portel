@@ -11,3 +11,7 @@ export const setEmployeeStatus = (id, status) =>
   api.patch(`/employees/${id}/status`, { status }).then((r) => r.data);
 export const assignRole = (id, roleId) =>
   api.put(`/employees/${id}/role`, { roleId }).then((r) => r.data);
+export const getWorkSettings = (id) =>
+  api.get(`/employees/${id}/work-settings`).then((r) => r.data.data);
+export const saveWorkSettings = (id, data) =>
+  api.put(`/employees/${id}/work-settings`, data).then((r) => r.data.data);

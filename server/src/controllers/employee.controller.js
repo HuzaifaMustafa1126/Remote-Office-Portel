@@ -1,6 +1,7 @@
 import * as s from "../services/employee.service.js";
+import * as work from "../services/workSettings.service.js";
 export async function list(req, res) {
-  res.json({ success: true, data: await s.listEmployees(req.query) });
+  res.json({ success: true, data: await s.listEmployees(req.query, req.user) });
 }
 export async function get(req, res) {
   res.json({ success: true, data: await s.getEmployee(req.params.id) });
@@ -31,5 +32,18 @@ export async function role(req, res) {
     success: true,
     message: "Role assigned successfully",
     data: await s.assignRole(req.params.id, req.body.roleId, req.user),
+  });
+}
+export async function workSettings(req, res) {
+  res.json({
+    success: true,
+    data: await work.getEmployeeSettings(req.params.id),
+  });
+}
+export async function saveWorkSettings(req, res) {
+  res.json({
+    success: true,
+    message: "Work and salary settings saved.",
+    data: await work.saveEmployeeSettings(req.params.id, req.body, req.user),
   });
 }

@@ -1,12 +1,10 @@
 import * as s from "../services/leave.service.js";
 export async function create(req, res) {
-  res
-    .status(201)
-    .json({
-      success: true,
-      message: "Leave request submitted successfully.",
-      data: await s.createLeave(req.user, req.body),
-    });
+  res.status(201).json({
+    success: true,
+    message: "Leave request submitted successfully.",
+    data: await s.createLeave(req.user, req.body),
+  });
 }
 export async function my(req, res) {
   res.json({ success: true, data: await s.getMyLeaves(req.user) });

@@ -44,6 +44,21 @@ const categories = {
     "HOLIDAY_CANCELLED",
     "SPECIAL_OFF_DAY_CREATED",
   ],
+  shifts: [
+    "SHIFT_CREATED",
+    "SHIFT_UPDATED",
+    "SHIFT_DEACTIVATED",
+    "SHIFT_ASSIGNED",
+    "SHIFT_ASSIGNMENT_CHANGED",
+  ],
+  payroll: [
+    "SALARY_CREATED",
+    "SALARY_UPDATED",
+    "PAYROLL_GENERATED",
+    "PAYROLL_RECALCULATED",
+    "PAYROLL_APPROVED",
+    "PAYROLL_MARKED_PAID",
+  ],
 };
 export async function searchAuditLogs(filters = {}) {
   const where = [],

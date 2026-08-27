@@ -50,3 +50,10 @@ export async function monthly(req, res) {
     data: await service.getMonthlyReport(req.validatedQuery.month),
   });
 }
+export async function reconcile(req, res) {
+  res.json({
+    success: true,
+    message: "Open shift corrected.",
+    data: await service.reconcileOpenShift(req.params.id, req.body, req.user),
+  });
+}

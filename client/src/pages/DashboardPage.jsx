@@ -173,7 +173,9 @@ export default function DashboardPage() {
           },
         ),
       );
-    await Promise.all(tasks);
+    const results = await Promise.allSettled(tasks);
+    if (results.length && results.every((r) => r.status === "rejected"))
+      throw results[0].reason;
   }, [canClock, canViewAll, own.refresh]);
   const auto = useAutoRefresh({
     interval,
@@ -184,7 +186,7 @@ export default function DashboardPage() {
     localStorage.setItem("remoteOffice.autoRefreshInterval", String(value));
     setIntervalPreference(value);
   };
-  if (canClock && !own.data) return <Loader />;
+  if (canClock && own.loading && !own.data) return <Loader />;
   const date = new Intl.DateTimeFormat("en-PK", {
     weekday: "long",
     day: "numeric",
@@ -218,7 +220,20 @@ export default function DashboardPage() {
           {own.error}
         </div>
       )}
-      {canClock && (
+      {canClock && !own.loading && !own.data && (
+        <div className="rounded-2xl border border-red-100 bg-white p-8 text-center">
+          <p className="font-semibold text-red-700">
+            Unable to load your workday.
+          </p>
+          <button
+            onClick={own.refresh}
+            className="mt-3 text-sm font-semibold text-indigo-600"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {canClock && own.data && (
         <div className="grid gap-5 xl:grid-cols-[1.4fr_.6fr]">
           <AttendanceStatusCard
             data={own.data}
