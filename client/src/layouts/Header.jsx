@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LogOut, Menu, CalendarDays, RefreshCw } from "lucide-react";
 import useAuth from "../hooks/useAuth";
 import { initials } from "../utils/helpers";
+import NotificationBell from "../components/notifications/NotificationBell";
 export default function Header({ onMenu, onRefresh }) {
   const { user, logout } = useAuth(),
     [refreshing, setRefreshing] = useState(false);
@@ -40,6 +41,7 @@ export default function Header({ onMenu, onRefresh }) {
         >
           <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
         </button>
+        <NotificationBell />
         <div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
           {initials(user.name)}
         </div>

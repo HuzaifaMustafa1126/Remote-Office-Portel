@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getWorkingDays, monthKey } from "../utils/workingDay.js";
+import { notifyRoles, notifyUser } from "./notification.service.js";
 const base = `SELECT lr.id,lr.employee_id AS employeeId,lr.leave_type AS leaveType,lr.start_date AS startDate,lr.end_date AS endDate,lr.total_days AS totalDays,lr.reason,lr.status,lr.reviewed_by AS reviewedBy,lr.reviewed_at AS reviewedAt,lr.review_comment AS reviewComment,lr.created_at AS createdAt,CONCAT(e.first_name,' ',e.last_name) AS employeeName,e.employee_code AS employeeCode,e.department FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
@@ -55,7 +56,7 @@ async function recalcMonths(c, employeeId, dates) {
 export async function createLeave(user, data) {
   if (data.endDate < data.startDate)
     throw new ApiError(400, "End date must be on or after start date");
-  return tx(async (c) => {
+  const result = await tx(async (c) => {
     const days = await getWorkingDays(data.startDate, data.endDate, c);
     if (!days.length)
       throw new ApiError(400, "The selected range contains no working days");
@@ -92,8 +93,14 @@ export async function createLeave(user, data) {
       entityId: r.insertId,
       description: `${e.name} requested leave from ${data.startDate} to ${data.endDate}.`,
     });
-    return { id: r.insertId, totalDays: days.length };
+    return { id: r.insertId, totalDays: days.length, employeeName: e.name };
   });
+  await notifyRoles(["CEO", "ADMIN"], {
+    type: "LEAVE_REQUESTED", title: "New Leave Request",
+    message: `${result.employeeName} requested ${data.leaveType.replaceAll("_", " ")} from ${data.startDate} to ${data.endDate}.`,
+    referenceType: "LEAVE", referenceId: result.id, actionUrl: `/leave-requests?open=${result.id}`,
+  });
+  return { id: result.id, totalDays: result.totalDays };
 }
 export async function getMyLeaves(user) {
   const [rows] = await pool.execute(
@@ -213,7 +220,7 @@ export async function cancelLeave(id, user) {
   });
 }
 export async function reviewLeave(id, status, comment, reviewer) {
-  return tx(async (c) => {
+  const result = await tx(async (c) => {
     const [[r]] = await c.execute(
       `SELECT lr.*,CONCAT(e.first_name,' ',e.last_name) name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=? AND e.track_attendance=TRUE FOR UPDATE`,
       [id],
@@ -275,8 +282,20 @@ export async function reviewLeave(id, status, comment, reviewer) {
       entityId: id,
       description: `Leave request for ${r.name} was ${status.toLowerCase()} by management.`,
     });
-    return { id, status };
+    const [[owner]] = await c.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1", [r.employee_id]);
+    return { id, status, ownerUserId: owner?.id, startDate: r.start_date, endDate: r.end_date };
   });
+  if (result.ownerUserId) {
+    const rejectedReason = status === "REJECTED" && comment ? ` Reason: ${comment}` : "";
+    await notifyUser({
+      userId: result.ownerUserId,
+      type: status === "APPROVED" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+      title: status === "APPROVED" ? "Leave Approved" : "Leave Rejected",
+      message: `Your leave request from ${result.startDate} to ${result.endDate} has been ${status.toLowerCase()}.${rejectedReason}`,
+      referenceType: "LEAVE", referenceId: Number(id), actionUrl: "/leave",
+    });
+  }
+  return { id: result.id, status: result.status };
 }
 export async function getMonthlyReport({ month, employeeId }) {
   const [[m]] = await pool.execute(

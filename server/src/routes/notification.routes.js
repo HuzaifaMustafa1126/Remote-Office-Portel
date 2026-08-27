@@ -1,0 +1,13 @@
+import { Router } from "express";
+import * as c from "../controllers/notification.controller.js";
+import * as v from "../validators/notification.validator.js";
+import { validate } from "../middleware/validate.middleware.js";
+import asyncHandler from "../utils/asyncHandler.js";
+const r = Router();
+r.get("/", validate(v.listSchema, "query"), asyncHandler(c.list));
+r.get("/unread-count", asyncHandler(c.unread));
+r.patch("/read-all", asyncHandler(c.readAll));
+r.patch("/:id/read", asyncHandler(c.read));
+r.get("/preferences", asyncHandler(c.preferences));
+r.patch("/preferences", validate(v.preferencesSchema), asyncHandler(c.updatePreferences));
+export default r;

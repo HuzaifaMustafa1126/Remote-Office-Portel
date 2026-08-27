@@ -15,6 +15,8 @@ import LoginPage from "../pages/LoginPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import PermissionsPage from "../pages/PermissionsPage";
 import RolesPage from "../pages/RolesPage";
+import NotificationsPage from "../pages/NotificationsPage";
+import NotificationSettingsPage from "../pages/NotificationSettingsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -43,6 +45,8 @@ export default function AppRoutes() {
             </Gate>
           }
         />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="notification-settings" element={<NotificationSettingsPage />} />
         <Route
           path="attendance"
           element={

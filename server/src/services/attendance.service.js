@@ -2,6 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { formatAuditTime } from "../utils/attendanceTime.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
+import { notifyRoles } from "./notification.service.js";
 
 const attendanceSelect = `
   SELECT ar.id, ar.employee_id AS employeeId, ar.attendance_date AS attendanceDate,
@@ -63,7 +64,7 @@ async function transaction(action) {
 }
 
 export async function clockIn(user) {
-  return transaction(async (conn) => {
+  const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
     const [[clock]] = await conn.execute("SELECT CURRENT_DATE AS today");
     const companyDay = await getCompanyDayStatus(clock.today, conn);
@@ -90,12 +91,16 @@ export async function clockIn(user) {
       entityId: result.insertId,
       description: `${name} clocked in at ${formatAuditTime(record.clock_in_at)}.`,
     });
-    return getToday(user, conn);
+    return { data: await getToday(user, conn), name, recordId: result.insertId, at: record.clock_in_at };
   });
+  await notifyRoles(["CEO", "ADMIN"], { type: "ATTENDANCE_CLOCK_IN", title: "Employee Clocked In",
+    message: `${outcome.name} clocked in at ${formatAuditTime(outcome.at)}.`, referenceType: "ATTENDANCE",
+    referenceId: outcome.recordId, actionUrl: "/attendance" });
+  return outcome.data;
 }
 
 export async function startBreak(user) {
-  return transaction(async (conn) => {
+  const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
@@ -128,12 +133,16 @@ export async function startBreak(user) {
       entityId: record.id,
       description: `${name} started a break at ${formatAuditTime(entry.break_start_at)}.`,
     });
-    return getToday(user, conn);
+    return { data: await getToday(user, conn), name, recordId: record.id, at: entry.break_start_at };
   });
+  await notifyRoles(["CEO", "ADMIN"], { type: "BREAK_STARTED", title: "Break Started",
+    message: `${outcome.name} started a break at ${formatAuditTime(outcome.at)}.`, referenceType: "ATTENDANCE",
+    referenceId: outcome.recordId, actionUrl: "/attendance" });
+  return outcome.data;
 }
 
 export async function endBreak(user) {
-  return transaction(async (conn) => {
+  const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
@@ -161,7 +170,7 @@ export async function endBreak(user) {
       [record.id, record.id],
     );
     const [[entry]] = await conn.execute(
-      "SELECT break_end_at FROM attendance_breaks WHERE id = ?",
+      "SELECT break_end_at,duration_minutes FROM attendance_breaks WHERE id = ?",
       [active.id],
     );
     await audit(conn, {
@@ -171,12 +180,16 @@ export async function endBreak(user) {
       entityId: record.id,
       description: `${name} ended a break at ${formatAuditTime(entry.break_end_at)}.`,
     });
-    return getToday(user, conn);
+    return { data: await getToday(user, conn), name, recordId: record.id, duration: Number(entry.duration_minutes || 0) };
   });
+  await notifyRoles(["CEO", "ADMIN"], { type: "BREAK_ENDED", title: "Break Ended",
+    message: `${outcome.name} returned from break. Duration: ${outcome.duration} minutes.`, referenceType: "ATTENDANCE",
+    referenceId: outcome.recordId, actionUrl: "/attendance" });
+  return outcome.data;
 }
 
 export async function clockOut(user) {
-  return transaction(async (conn) => {
+  const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
@@ -211,8 +224,12 @@ export async function clockOut(user) {
       entityId: record.id,
       description: `${name} clocked out at ${formatAuditTime(entry.clock_out_at)}.`,
     });
-    return getToday(user, conn);
+    return { data: await getToday(user, conn), name, recordId: record.id, at: entry.clock_out_at };
   });
+  await notifyRoles(["CEO", "ADMIN"], { type: "ATTENDANCE_CLOCK_OUT", title: "Employee Clocked Out",
+    message: `${outcome.name} clocked out at ${formatAuditTime(outcome.at)}.`, referenceType: "ATTENDANCE",
+    referenceId: outcome.recordId, actionUrl: "/attendance" });
+  return outcome.data;
 }
 
 export async function getToday(user, executor = pool) {
