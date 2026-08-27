@@ -1,1 +1,34 @@
-import {Router} from 'express';import * as c from '../controllers/employee.controller.js';import {requirePermission as p} from '../middleware/permission.middleware.js';import {validate} from '../middleware/validate.middleware.js';import * as v from '../validators/employee.validator.js';import asyncHandler from '../utils/asyncHandler.js';const r=Router();r.get('/',p('employees.view_all'),asyncHandler(c.list));r.get('/:id',p('employees.view_all'),asyncHandler(c.get));r.post('/',p('employees.create'),validate(v.createEmployeeSchema),asyncHandler(c.create));r.put('/:id',p('employees.update'),validate(v.updateEmployeeSchema),asyncHandler(c.update));r.patch('/:id/status',p('employees.deactivate'),validate(v.statusSchema),asyncHandler(c.status));r.put('/:id/role',p('roles.manage'),validate(v.assignRoleSchema),asyncHandler(c.role));export default r;
+import { Router } from "express";
+import * as c from "../controllers/employee.controller.js";
+import { requirePermission as p } from "../middleware/permission.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
+import * as v from "../validators/employee.validator.js";
+import asyncHandler from "../utils/asyncHandler.js";
+const r = Router();
+r.get("/", p("employees.view_all"), asyncHandler(c.list));
+r.get("/:id", p("employees.view_all"), asyncHandler(c.get));
+r.post(
+  "/",
+  p("employees.create"),
+  validate(v.createEmployeeSchema),
+  asyncHandler(c.create),
+);
+r.put(
+  "/:id",
+  p("employees.update"),
+  validate(v.updateEmployeeSchema),
+  asyncHandler(c.update),
+);
+r.patch(
+  "/:id/status",
+  p("employees.deactivate"),
+  validate(v.statusSchema),
+  asyncHandler(c.status),
+);
+r.put(
+  "/:id/role",
+  p("roles.manage"),
+  validate(v.assignRoleSchema),
+  asyncHandler(c.role),
+);
+export default r;

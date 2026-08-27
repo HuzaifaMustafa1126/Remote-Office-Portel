@@ -1,1 +1,10 @@
-import {Router} from 'express';import * as c from '../controllers/auth.controller.js';import asyncHandler from '../utils/asyncHandler.js';import {authenticate} from '../middleware/auth.middleware.js';import {validate} from '../middleware/validate.middleware.js';import {loginSchema} from '../validators/auth.validator.js';const r=Router();r.post('/login',validate(loginSchema),asyncHandler(c.login));r.get('/me',authenticate,asyncHandler(c.me));export default r;
+import { Router } from "express";
+import * as c from "../controllers/auth.controller.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { authenticate } from "../middleware/auth.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
+import { loginSchema } from "../validators/auth.validator.js";
+const r = Router();
+r.post("/login", validate(loginSchema), asyncHandler(c.login));
+r.get("/me", authenticate, asyncHandler(c.me));
+export default r;

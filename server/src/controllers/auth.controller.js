@@ -1,1 +1,12 @@
-import * as service from '../services/auth.service.js';export async function login(req,res){res.json({success:true,data:await service.loginUser(req.body.email,req.body.password,{ip:req.ip})})}export async function me(req,res){res.json({success:true,data:await service.getUserProfile(req.user.id)})}
+import * as service from "../services/auth.service.js";
+export async function login(req, res) {
+  res.json({
+    success: true,
+    data: await service.loginUser(req.body.email, req.body.password, {
+      ip: req.ip,
+    }),
+  });
+}
+export async function me(req, res) {
+  res.json({ success: true, data: await service.getUserProfile(req.user.id) });
+}

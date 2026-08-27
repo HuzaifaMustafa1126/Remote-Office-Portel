@@ -1,1 +1,16 @@
-import * as s from '../services/permission.service.js';export async function list(req,res){res.json({success:true,data:await s.getPermissions()})}export async function updateRole(req,res){await s.setRolePermissions(req.params.roleId,req.body.permissionIds,req.user);res.json({success:true,message:'Permissions updated successfully',data:{}})}
+import * as s from "../services/permission.service.js";
+export async function list(req, res) {
+  res.json({ success: true, data: await s.getPermissions() });
+}
+export async function updateRole(req, res) {
+  await s.setRolePermissions(
+    req.params.roleId,
+    req.body.permissionIds,
+    req.user,
+  );
+  res.json({
+    success: true,
+    message: "Permissions updated successfully",
+    data: {},
+  });
+}

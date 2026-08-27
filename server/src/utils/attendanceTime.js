@@ -3,7 +3,10 @@ export function minutesBetween(start, end) {
 }
 
 export function formatAuditTime(value) {
-  return new Intl.DateTimeFormat('en-PK', {hour: '2-digit', minute: '2-digit'}).format(new Date(value));
+  return new Intl.DateTimeFormat("en-PK", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export function countWeekdays(start, end) {

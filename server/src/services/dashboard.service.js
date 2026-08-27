@@ -1,1 +1,15 @@
-import pool from '../config/database.js';import {getAuditLogs} from './audit.service.js';export async function getDashboard(){const [[stats]]=await pool.execute(`SELECT COUNT(*) AS total,SUM(status='ACTIVE') AS active,SUM(status='INACTIVE') AS inactive FROM employees`);return {stats:{total:Number(stats.total),active:Number(stats.active||0),inactive:Number(stats.inactive||0)},recentActivity:await getAuditLogs(6)}}
+import pool from "../config/database.js";
+import { getAuditLogs } from "./audit.service.js";
+export async function getDashboard() {
+  const [[stats]] = await pool.execute(
+    `SELECT COUNT(*) AS total,SUM(status='ACTIVE') AS active,SUM(status='INACTIVE') AS inactive FROM employees`,
+  );
+  return {
+    stats: {
+      total: Number(stats.total),
+      active: Number(stats.active || 0),
+      inactive: Number(stats.inactive || 0),
+    },
+    recentActivity: await getAuditLogs(6),
+  };
+}

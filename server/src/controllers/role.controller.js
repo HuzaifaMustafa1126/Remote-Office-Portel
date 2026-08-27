@@ -1,1 +1,18 @@
-import * as s from '../services/role.service.js';export async function list(req,res){res.json({success:true,data:await s.getRoles()})}export async function create(req,res){res.status(201).json({success:true,message:'Role created successfully',data:await s.createRole(req.body.name,req.user)})}export async function update(req,res){res.json({success:true,message:'Role updated successfully',data:await s.updateRole(req.params.id,req.body.name,req.user)})}
+import * as s from "../services/role.service.js";
+export async function list(req, res) {
+  res.json({ success: true, data: await s.getRoles() });
+}
+export async function create(req, res) {
+  res.status(201).json({
+    success: true,
+    message: "Role created successfully",
+    data: await s.createRole(req.body.name, req.user),
+  });
+}
+export async function update(req, res) {
+  res.json({
+    success: true,
+    message: "Role updated successfully",
+    data: await s.updateRole(req.params.id, req.body.name, req.user),
+  });
+}

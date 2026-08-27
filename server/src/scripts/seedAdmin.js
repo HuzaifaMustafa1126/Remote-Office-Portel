@@ -1,21 +1,21 @@
-import bcrypt from 'bcrypt';
-import pool from '../config/database.js';
+import bcrypt from "bcrypt";
+import pool from "../config/database.js";
 
 const ADMIN = Object.freeze({
-  employeeCode: 'EMP-0001',
-  firstName: 'System',
-  lastName: 'Admin',
-  email: 'admin@remoteoffice.com',
-  password: 'Admin@123',
-  jobTitle: 'CEO',
-  department: 'Management',
-  status: 'ACTIVE',
-  role: 'CEO',
+  employeeCode: "EMP-0001",
+  firstName: "System",
+  lastName: "Admin",
+  email: "admin@remoteoffice.com",
+  password: "Admin@123",
+  jobTitle: "CEO",
+  department: "Management",
+  status: "ACTIVE",
+  role: "CEO",
 });
 
 const BCRYPT_ROUNDS = 12;
-const AUDIT_ACTION = 'INITIAL_ADMIN_CREATED';
-const AUDIT_DESCRIPTION = 'Initial CEO administrator account created.';
+const AUDIT_ACTION = "INITIAL_ADMIN_CREATED";
+const AUDIT_DESCRIPTION = "Initial CEO administrator account created.";
 
 async function seedAdmin() {
   let connection;
@@ -23,7 +23,7 @@ async function seedAdmin() {
   try {
     connection = await pool.getConnection();
     await connection.ping();
-    console.log('Database connected.');
+    console.log("Database connected.");
 
     await connection.beginTransaction();
 
@@ -78,7 +78,7 @@ async function seedAdmin() {
       );
       employeeId = employeeResult.insertId;
     }
-    console.log('CEO employee verified.');
+    console.log("CEO employee verified.");
 
     const [userMatches] = await connection.execute(
       `SELECT id, employee_id, email, password_hash
@@ -98,7 +98,10 @@ async function seedAdmin() {
     if (userMatches.length === 1) {
       const user = userMatches[0];
       userId = user.id;
-      const passwordMatches = await bcrypt.compare(ADMIN.password, user.password_hash);
+      const passwordMatches = await bcrypt.compare(
+        ADMIN.password,
+        user.password_hash,
+      );
       const passwordHash = passwordMatches
         ? user.password_hash
         : await bcrypt.hash(ADMIN.password, BCRYPT_ROUNDS);
@@ -118,22 +121,24 @@ async function seedAdmin() {
       );
       userId = userResult.insertId;
     }
-    console.log('Admin user verified.');
+    console.log("Admin user verified.");
 
     const [roles] = await connection.execute(
-      'SELECT id FROM roles WHERE name = ? LIMIT 1 FOR UPDATE',
+      "SELECT id FROM roles WHERE name = ? LIMIT 1 FOR UPDATE",
       [ADMIN.role],
     );
     if (!roles[0]) {
-      throw new Error('CEO role not found. Run database/seed.sql before seeding the admin.');
+      throw new Error(
+        "CEO role not found. Run database/seed.sql before seeding the admin.",
+      );
     }
     const roleId = roles[0].id;
 
     await connection.execute(
-      'INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)',
+      "INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)",
       [userId, roleId],
     );
-    console.log('CEO role assigned.');
+    console.log("CEO role assigned.");
 
     await connection.execute(
       `INSERT IGNORE INTO role_permissions (role_id, permission_id)
@@ -145,8 +150,11 @@ async function seedAdmin() {
        WHERE rp.role_id = ? AND p.name IN ('attendance.clock', 'attendance.view_own', 'leave.create', 'leave.view_own', 'leave.cancel_own')`,
       [roleId],
     );
-    await connection.execute('UPDATE employees SET track_attendance = FALSE WHERE id = ?', [employeeId]);
-    console.log('CEO permissions assigned.');
+    await connection.execute(
+      "UPDATE employees SET track_attendance = FALSE WHERE id = ?",
+      [employeeId],
+    );
+    console.log("CEO permissions assigned.");
 
     await connection.execute(
       `INSERT INTO audit_logs
@@ -168,7 +176,7 @@ async function seedAdmin() {
     );
 
     await connection.commit();
-    console.log('Admin seed completed successfully.');
+    console.log("Admin seed completed successfully.");
   } catch (error) {
     if (connection) {
       try {

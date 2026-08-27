@@ -1,1 +1,27 @@
-import {z} from 'zod';const fields={employeeCode:z.string().trim().min(2).max(30),firstName:z.string().trim().min(1).max(80),lastName:z.string().trim().min(1).max(80),email:z.string().email().transform(v=>v.toLowerCase()),phone:z.string().max(30).optional().nullable(),jobTitle:z.string().min(1).max(100),department:z.string().min(1).max(100),joiningDate:z.string().date(),status:z.enum(['ACTIVE','INACTIVE']).optional(),roleId:z.coerce.number().int().positive().optional().or(z.literal(''))};export const createEmployeeSchema=z.object({...fields,password:z.string().min(8).max(72)});export const updateEmployeeSchema=z.object(fields);export const statusSchema=z.object({status:z.enum(['ACTIVE','INACTIVE'])});export const assignRoleSchema=z.object({roleId:z.coerce.number().int().positive()});
+import { z } from "zod";
+const fields = {
+  employeeCode: z.string().trim().min(2).max(30),
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  email: z
+    .string()
+    .email()
+    .transform((v) => v.toLowerCase()),
+  phone: z.string().max(30).optional().nullable(),
+  jobTitle: z.string().min(1).max(100),
+  department: z.string().min(1).max(100),
+  joiningDate: z.string().date(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  roleId: z.coerce.number().int().positive().optional().or(z.literal("")),
+};
+export const createEmployeeSchema = z.object({
+  ...fields,
+  password: z.string().min(8).max(72),
+});
+export const updateEmployeeSchema = z.object(fields);
+export const statusSchema = z.object({
+  status: z.enum(["ACTIVE", "INACTIVE"]),
+});
+export const assignRoleSchema = z.object({
+  roleId: z.coerce.number().int().positive(),
+});
