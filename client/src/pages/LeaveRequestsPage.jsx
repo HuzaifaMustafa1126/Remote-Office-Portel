@@ -1,1 +1,221 @@
-import {useCallback,useEffect,useState} from 'react';import {CalendarCheck,CalendarClock,CircleDollarSign,XCircle} from 'lucide-react';import Button from '../components/common/Button';import EmptyState from '../components/common/EmptyState';import PageHeader from '../components/common/PageHeader';import LeaveReviewModal from '../components/leave/LeaveReviewModal';import LeaveStatusBadge from '../components/leave/LeaveStatusBadge';import * as leave from '../services/leave.service';import {errorMessage,formatDate} from '../utils/helpers';const cards=[['Pending','pending',CalendarClock],['Approved','approved',CalendarCheck],['Rejected','rejected',XCircle],['Approved Days','approvedDays',CalendarCheck],['Deductible Days','deductibleDays',CircleDollarSign]];export default function LeaveRequestsPage(){const [filters,setFilters]=useState({search:'',status:'',leaveType:'',department:'',from:'',to:''}),[data,setData]=useState({rows:[],summary:{}}),[selected,setSelected]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');const load=useCallback(()=>leave.getLeaves(filters).then(setData).catch(e=>setNotice(errorMessage(e))),[filters]);useEffect(()=>{const t=setTimeout(load,150);return()=>clearTimeout(t)},[load]);const detail=async r=>setSelected(await leave.getLeave(r.id));async function review(status,comment){setBusy(true);try{const r=status==='APPROVED'?await leave.approveLeave(selected.id,comment):await leave.rejectLeave(selected.id,comment);setNotice(r.message);setSelected(null);await load()}catch(e){setNotice(errorMessage(e))}finally{setBusy(false)}}const set=(k,v)=>setFilters({...filters,[k]:v});return <><PageHeader title="Leave Requests" description="Review employee leave and payroll deduction status."/>{notice&&<div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">{notice}</div>}<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label,key,Icon])=><div key={key} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"><div className="flex justify-between"><div><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-2xl font-black">{data.summary[key]||0}</p></div><div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon size={17}/></div></div></div>)}</div><section className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm"><div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 xl:grid-cols-6"><input value={filters.search} onChange={e=>set('search',e.target.value)} placeholder="Search employee or reason…" className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2"/><select value={filters.status} onChange={e=>set('status',e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">All Statuses</option><option>PENDING</option><option>APPROVED</option><option>REJECTED</option><option>CANCELLED</option></select><select value={filters.leaveType} onChange={e=>set('leaveType',e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">All Types</option><option value="CASUAL">Casual</option><option value="SICK">Sick</option><option value="EMERGENCY">Emergency</option><option value="PERSONAL">Personal</option><option value="OTHER">Other</option></select><input value={filters.department} onChange={e=>set('department',e.target.value)} placeholder="Department" className="rounded-xl border border-slate-200 px-3 py-2 text-sm"/><button onClick={()=>setFilters({search:'',status:'',leaveType:'',department:'',from:'',to:''})} className="text-sm font-semibold text-slate-500">Reset Filters</button><input type="date" value={filters.from} onChange={e=>set('from',e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"/><input type="date" value={filters.to} onChange={e=>set('to',e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"/></div>{data.rows.length?<div className="overflow-x-auto"><table className="w-full min-w-[1000px] text-left text-sm"><thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400"><tr><th className="p-4">Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Submitted</th><th className="pr-4">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{data.rows.map(r=><tr key={r.id} className="hover:bg-slate-50"><td className="p-4"><p className="font-semibold">{r.employeeName}</p><p className="text-xs text-slate-400">{r.employeeCode} • {r.department}</p></td><td>{r.leaveType}</td><td>{formatDate(r.startDate)}</td><td>{formatDate(r.endDate)}</td><td>{r.totalDays}</td><td className="max-w-48 truncate">{r.reason}</td><td><LeaveStatusBadge status={r.status}/></td><td>{formatDate(r.createdAt)}</td><td className="pr-4"><Button variant="secondary" onClick={()=>detail(r)}>{r.status==='PENDING'?'Review':'Details'}</Button></td></tr>)}</tbody></table></div>:<EmptyState title="No leave requests" description="No requests match the selected filters."/>}</section><LeaveReviewModal request={selected} busy={busy} onClose={()=>setSelected(null)} onApprove={c=>review('APPROVED',c)} onReject={c=>review('REJECTED',c)}/></>}
+import { useCallback, useEffect, useState } from "react";
+import {
+  CalendarCheck,
+  CalendarClock,
+  CircleDollarSign,
+  XCircle,
+} from "lucide-react";
+import Button from "../components/common/Button";
+import EmptyState from "../components/common/EmptyState";
+import PageHeader from "../components/common/PageHeader";
+import LeaveReviewModal from "../components/leave/LeaveReviewModal";
+import LeaveStatusBadge from "../components/leave/LeaveStatusBadge";
+import * as leave from "../services/leave.service";
+import { errorMessage, formatDate } from "../utils/helpers";
+const cards = [
+  ["Pending", "pending", CalendarClock],
+  ["Approved", "approved", CalendarCheck],
+  ["Rejected", "rejected", XCircle],
+  ["Approved Days", "approvedDays", CalendarCheck],
+  ["Deductible Days", "deductibleDays", CircleDollarSign],
+];
+export default function LeaveRequestsPage() {
+  const [filters, setFilters] = useState({
+      search: "",
+      status: "",
+      leaveType: "",
+      department: "",
+      from: "",
+      to: "",
+    }),
+    [data, setData] = useState({ rows: [], summary: {} }),
+    [selected, setSelected] = useState(null),
+    [busy, setBusy] = useState(false),
+    [notice, setNotice] = useState("");
+  const load = useCallback(
+    () =>
+      leave
+        .getLeaves(filters)
+        .then(setData)
+        .catch((e) => setNotice(errorMessage(e))),
+    [filters],
+  );
+  useEffect(() => {
+    const t = setTimeout(load, 150);
+    return () => clearTimeout(t);
+  }, [load]);
+  const detail = async (r) => setSelected(await leave.getLeave(r.id));
+  async function review(status, comment) {
+    setBusy(true);
+    try {
+      const r =
+        status === "APPROVED"
+          ? await leave.approveLeave(selected.id, comment)
+          : await leave.rejectLeave(selected.id, comment);
+      setNotice(r.message);
+      setSelected(null);
+      await load();
+    } catch (e) {
+      setNotice(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const set = (k, v) => setFilters({ ...filters, [k]: v });
+  return (
+    <>
+      <PageHeader
+        title="Leave Requests"
+        description="Review employee leave and payroll deduction status."
+      />
+      {notice && (
+        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">
+          {notice}
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {cards.map(([label, key, Icon]) => (
+          <div
+            key={key}
+            className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+          >
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="mt-2 text-2xl font-black">
+                  {data.summary[key] || 0}
+                </p>
+              </div>
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+                <Icon size={17} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <section className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 xl:grid-cols-6">
+          <input
+            value={filters.search}
+            onChange={(e) => set("search", e.target.value)}
+            placeholder="Search employee or reason…"
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2"
+          />
+          <select
+            value={filters.status}
+            onChange={(e) => set("status", e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">All Statuses</option>
+            <option>PENDING</option>
+            <option>APPROVED</option>
+            <option>REJECTED</option>
+            <option>CANCELLED</option>
+          </select>
+          <select
+            value={filters.leaveType}
+            onChange={(e) => set("leaveType", e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="CASUAL">Casual</option>
+            <option value="SICK">Sick</option>
+            <option value="EMERGENCY">Emergency</option>
+            <option value="PERSONAL">Personal</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input
+            value={filters.department}
+            onChange={(e) => set("department", e.target.value)}
+            placeholder="Department"
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() =>
+              setFilters({
+                search: "",
+                status: "",
+                leaveType: "",
+                department: "",
+                from: "",
+                to: "",
+              })
+            }
+            className="text-sm font-semibold text-slate-500"
+          >
+            Reset Filters
+          </button>
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => set("from", e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          />
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => set("to", e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        {data.rows.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px] text-left text-sm">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
+                <tr>
+                  <th className="p-4">Employee</th>
+                  <th>Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Days</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th className="pr-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50">
+                    <td className="p-4">
+                      <p className="font-semibold">{r.employeeName}</p>
+                      <p className="text-xs text-slate-400">
+                        {r.employeeCode} • {r.department}
+                      </p>
+                    </td>
+                    <td>{r.leaveType}</td>
+                    <td>{formatDate(r.startDate)}</td>
+                    <td>{formatDate(r.endDate)}</td>
+                    <td>{r.totalDays}</td>
+                    <td className="max-w-48 truncate">{r.reason}</td>
+                    <td>
+                      <LeaveStatusBadge status={r.status} />
+                    </td>
+                    <td>{formatDate(r.createdAt)}</td>
+                    <td className="pr-4">
+                      <Button variant="secondary" onClick={() => detail(r)}>
+                        {r.status === "PENDING" ? "Review" : "Details"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="No leave requests"
+            description="No requests match the selected filters."
+          />
+        )}
+      </section>
+      <LeaveReviewModal
+        request={selected}
+        busy={busy}
+        onClose={() => setSelected(null)}
+        onApprove={(c) => review("APPROVED", c)}
+        onReject={(c) => review("REJECTED", c)}
+      />
+    </>
+  );
+}

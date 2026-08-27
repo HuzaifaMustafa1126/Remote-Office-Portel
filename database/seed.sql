@@ -23,3 +23,4 @@ INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('attendance.clock','attendance.view_own') WHERE r.name='Employee';
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('leave.create','leave.view_own','leave.cancel_own') WHERE r.name='Employee';
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name='calendar.view' WHERE r.name='Employee';
+ 

@@ -1,1 +1,46 @@
-import {CalendarDays} from 'lucide-react';import {Link} from 'react-router-dom';import HolidayBadge from './HolidayBadge';import {formatDate} from '../../utils/helpers';export default function UpcomingHolidays({rows=[]}){return <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"><div className="flex justify-between"><div><h2 className="font-bold">Upcoming Holidays</h2><p className="text-xs text-slate-400">Official company off-days</p></div><Link to="/company-calendar" className="text-xs font-semibold text-indigo-600">View Calendar</Link></div><div className="mt-3 space-y-2">{rows.slice(0,4).map(r=><div key={r.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5"><div className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600"><CalendarDays size={16}/></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{r.title}</p><p className="text-xs text-slate-400">{formatDate(r.calendarDate)}</p></div><HolidayBadge type={r.dayType}/></div>)}{!rows.length&&<p className="py-4 text-center text-xs text-slate-400">No upcoming holidays.</p>}</div></section>}
+import { CalendarDays } from "lucide-react";
+import { Link } from "react-router-dom";
+import HolidayBadge from "./HolidayBadge";
+import { formatDate } from "../../utils/helpers";
+export default function UpcomingHolidays({ rows = [] }) {
+  return (
+    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex justify-between">
+        <div>
+          <h2 className="font-bold">Upcoming Holidays</h2>
+          <p className="text-xs text-slate-400">Official company off-days</p>
+        </div>
+        <Link
+          to="/company-calendar"
+          className="text-xs font-semibold text-indigo-600"
+        >
+          View Calendar
+        </Link>
+      </div>
+      <div className="mt-3 space-y-2">
+        {rows.slice(0, 4).map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5"
+          >
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600">
+              <CalendarDays size={16} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{r.title}</p>
+              <p className="text-xs text-slate-400">
+                {formatDate(r.calendarDate)}
+              </p>
+            </div>
+            <HolidayBadge type={r.dayType} />
+          </div>
+        ))}
+        {!rows.length && (
+          <p className="py-4 text-center text-xs text-slate-400">
+            No upcoming holidays.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}

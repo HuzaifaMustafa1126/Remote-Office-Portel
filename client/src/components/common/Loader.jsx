@@ -1,1 +1,9 @@
-export default function Loader({full=false}){return <div className={`${full?'min-h-screen':''} grid place-items-center p-10`}><div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-200 border-t-indigo-600"/></div>}
+export default function Loader({ full = false }) {
+  return (
+    <div
+      className={`${full ? "min-h-screen" : ""} grid place-items-center p-10`}
+    >
+      <div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-200 border-t-indigo-600" />
+    </div>
+  );
+}

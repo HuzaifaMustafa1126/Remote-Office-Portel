@@ -1,1 +1,46 @@
-import {useEffect,useState} from 'react';import {useParams} from 'react-router-dom';import PageHeader from '../components/common/PageHeader';import Loader from '../components/common/Loader';import StatusBadge from '../components/common/StatusBadge';import {getEmployee} from '../services/employee.service';import {formatDate} from '../utils/helpers';export default function EmployeeDetailPage(){const {id}=useParams(),[e,setE]=useState(null);useEffect(()=>{getEmployee(id).then(setE)},[id]);if(!e)return <Loader/>;return <><PageHeader title={`${e.firstName} ${e.lastName}`} description={e.employeeCode}/><div className="grid gap-5 rounded-2xl bg-white p-6 shadow-sm sm:grid-cols-2 lg:grid-cols-3">{[['Email',e.email],['Phone',e.phone],['Job title',e.jobTitle],['Department',e.department],['Joining date',formatDate(e.joiningDate)],['Roles',e.roles?.join(', ')||'None']].map(([k,v])=><div key={k}><p className="text-xs font-semibold uppercase text-slate-400">{k}</p><p className="mt-1 font-medium">{v||'—'}</p></div>)}<div><p className="mb-2 text-xs font-semibold uppercase text-slate-400">Status</p><StatusBadge status={e.status}/></div></div></>}
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import PageHeader from "../components/common/PageHeader";
+import Loader from "../components/common/Loader";
+import StatusBadge from "../components/common/StatusBadge";
+import { getEmployee } from "../services/employee.service";
+import { formatDate } from "../utils/helpers";
+export default function EmployeeDetailPage() {
+  const { id } = useParams(),
+    [e, setE] = useState(null);
+  useEffect(() => {
+    getEmployee(id).then(setE);
+  }, [id]);
+  if (!e) return <Loader />;
+  return (
+    <>
+      <PageHeader
+        title={`${e.firstName} ${e.lastName}`}
+        description={e.employeeCode}
+      />
+      <div className="grid gap-5 rounded-2xl bg-white p-6 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
+        {[
+          ["Email", e.email],
+          ["Phone", e.phone],
+          ["Job title", e.jobTitle],
+          ["Department", e.department],
+          ["Joining date", formatDate(e.joiningDate)],
+          ["Roles", e.roles?.join(", ") || "None"],
+        ].map(([k, v]) => (
+          <div key={k}>
+            <p className="text-xs font-semibold uppercase text-slate-400">
+              {k}
+            </p>
+            <p className="mt-1 font-medium">{v || "—"}</p>
+          </div>
+        ))}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-400">
+            Status
+          </p>
+          <StatusBadge status={e.status} />
+        </div>
+      </div>
+    </>
+  );
+}

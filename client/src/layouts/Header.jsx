@@ -1,1 +1,60 @@
-import {useState} from 'react';import {LogOut,Menu,CalendarDays,RefreshCw} from 'lucide-react';import useAuth from '../hooks/useAuth';import {initials} from '../utils/helpers';export default function Header({onMenu,onRefresh}){const {user,logout}=useAuth(),[refreshing,setRefreshing]=useState(false);const date=new Intl.DateTimeFormat('en-PK',{weekday:'short',day:'numeric',month:'short'}).format(new Date());const refresh=()=>{if(refreshing)return;setRefreshing(true);onRefresh();setTimeout(()=>setRefreshing(false),500)};return <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-7"><button className="rounded-lg p-2 lg:hidden" onClick={onMenu}><Menu/></button><div className="hidden sm:block"><p className="text-xs font-medium uppercase tracking-wider text-slate-400">Workspace</p><p className="font-semibold">Remote Office Portal</p></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 border-r border-slate-200 pr-4 text-sm text-slate-500 md:flex"><CalendarDays size={16}/>{date}</div><button title="Refresh current screen" disabled={refreshing} onClick={refresh} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"><RefreshCw size={18} className={refreshing?'animate-spin':''}/></button><div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">{initials(user.name)}</div><div className="hidden sm:block"><p className="text-sm font-semibold">{user.name}</p><p className="text-xs text-slate-500">{user.roles.join(', ')}</p></div><button title="Sign out" onClick={logout} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-red-600"><LogOut size={19}/></button></div></header>}
+import { useState } from "react";
+import { LogOut, Menu, CalendarDays, RefreshCw } from "lucide-react";
+import useAuth from "../hooks/useAuth";
+import { initials } from "../utils/helpers";
+export default function Header({ onMenu, onRefresh }) {
+  const { user, logout } = useAuth(),
+    [refreshing, setRefreshing] = useState(false);
+  const date = new Intl.DateTimeFormat("en-PK", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date());
+  const refresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 500);
+  };
+  return (
+    <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-7">
+      <button className="rounded-lg p-2 lg:hidden" onClick={onMenu}>
+        <Menu />
+      </button>
+      <div className="hidden sm:block">
+        <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+          Workspace
+        </p>
+        <p className="font-semibold">Remote Office Portal</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="hidden items-center gap-2 border-r border-slate-200 pr-4 text-sm text-slate-500 md:flex">
+          <CalendarDays size={16} />
+          {date}
+        </div>
+        <button
+          title="Refresh current screen"
+          disabled={refreshing}
+          onClick={refresh}
+          className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+        >
+          <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
+        </button>
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+          {initials(user.name)}
+        </div>
+        <div className="hidden sm:block">
+          <p className="text-sm font-semibold">{user.name}</p>
+          <p className="text-xs text-slate-500">{user.roles.join(", ")}</p>
+        </div>
+        <button
+          title="Sign out"
+          onClick={logout}
+          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-red-600"
+        >
+          <LogOut size={19} />
+        </button>
+      </div>
+    </header>
+  );
+}
