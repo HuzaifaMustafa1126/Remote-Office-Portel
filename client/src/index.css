@@ -39,3 +39,11 @@ button:disabled {
 }
 .notification-toast { animation: notification-in 180ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .notification-toast { animation: none; } }
+@media print {
+  aside, header, .report-controls { display: none !important; }
+  main { margin: 0 !important; padding: 0 !important; }
+  body { background: white; }
+  .report-print { color: black; }
+  .report-print section { overflow: visible; border: 0; }
+  .report-print table { min-width: 0; font-size: 9px; }
+}

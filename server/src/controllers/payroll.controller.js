@@ -29,5 +29,10 @@ export async function approve(req, res) {
   res.json({ success: true, data: await s.approve(req.params.id, req.user) });
 }
 export async function paid(req, res) {
-  res.json({ success: true, data: await s.markPaid(req.params.id, req.user) });
+  res.json({ success: true, data: await s.markPaid(req.params.id, req.body, req.user) });
 }
+export async function reopen(req,res){res.json({success:true,data:await s.reopen(req.params.id,req.body,req.user)})}
+export async function addAdjustment(req,res){res.status(201).json({success:true,data:await s.addAdjustment(req.params.id,req.body,req.user)})}
+export async function removeAdjustment(req,res){res.json({success:true,data:await s.removeAdjustment(req.params.id,req.params.adjustmentId,req.user)})}
+export async function updateAdjustment(req,res){res.json({success:true,data:await s.updateAdjustment(req.params.id,req.params.adjustmentId,req.body,req.user)})}
+export async function verify(req,res){res.json({success:true,data:await s.verifyPayrollCalculation(req.params.id)})}

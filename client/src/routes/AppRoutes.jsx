@@ -21,6 +21,7 @@ import ShiftManagementPage from "../pages/ShiftManagementPage";
 import PayrollPage from "../pages/PayrollPage";
 import SalaryPage from "../pages/SalaryPage";
 import MySalaryPage from "../pages/MySalaryPage";
+import ReportsPage from "../pages/ReportsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -83,6 +84,14 @@ export default function AppRoutes() {
           element={
             <Gate permission={P.SALARY_VIEW_OWN}>
               <MySalaryPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <Gate permission={P.REPORTS_VIEW}>
+              <ReportsPage />
             </Gate>
           }
         />

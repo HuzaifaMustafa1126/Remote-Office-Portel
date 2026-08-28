@@ -33,4 +33,11 @@ export const PERMISSIONS = {
   PAYROLL_VIEW_OWN: "payroll.view_own",
   PAYROLL_VIEW_ALL: "payroll.view_all",
   PAYROLL_GENERATE: "payroll.generate",
+  PAYROLL_RECALCULATE: "payroll.recalculate",
+  PAYROLL_APPROVE: "payroll.approve",
+  PAYROLL_REOPEN: "payroll.reopen",
+  PAYROLL_MARK_PAID: "payroll.mark_paid",
+  PAYROLL_ADJUST: "payroll.adjust",
+  REPORTS_VIEW: "reports.view",
+  REPORTS_EXPORT: "reports.export",
 };

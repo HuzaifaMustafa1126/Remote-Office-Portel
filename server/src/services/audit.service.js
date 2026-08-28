@@ -58,6 +58,10 @@ const categories = {
     "PAYROLL_RECALCULATED",
     "PAYROLL_APPROVED",
     "PAYROLL_MARKED_PAID",
+    "PAYROLL_REOPENED",
+    "PAYROLL_ADJUSTMENT_ADDED",
+    "PAYROLL_ADJUSTMENT_UPDATED",
+    "PAYROLL_ADJUSTMENT_REMOVED",
   ],
 };
 export async function searchAuditLogs(filters = {}) {

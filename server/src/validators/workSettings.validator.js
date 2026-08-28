@@ -4,4 +4,5 @@ export const saveSchema = z.object({
   monthlySalary: z.coerce.number().positive().max(9999999999),
   salaryDivisor: z.coerce.number().int().min(1).max(366),
   effectiveFrom: z.string().date(),
+  reason: z.string().trim().min(3).max(500),
 });

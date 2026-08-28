@@ -46,6 +46,14 @@ const labels = {
   PAYROLL_RECALCULATED: "Payroll Recalculated",
   PAYROLL_APPROVED: "Payroll Approved",
   PAYROLL_MARKED_PAID: "Payroll Marked Paid",
+  PAYROLL_REOPENED: "Payroll Reopened",
+  PAYROLL_ADJUSTMENT_ADDED: "Payroll Adjustment Added",
+  PAYROLL_ADJUSTMENT_UPDATED: "Payroll Adjustment Updated",
+  PAYROLL_ADJUSTMENT_REMOVED: "Payroll Adjustment Removed",
+  SALARY_CREATED: "Salary Created",
+  SALARY_PROFILE_CLOSED: "Salary Profile Closed",
+  SALARY_DIVISOR_CHANGED: "Salary Divisor Changed",
+  SALARY_EFFECTIVE_DATE_CHANGED: "Salary Effective Date Changed",
 };
 const moduleName = (a) =>
   a.startsWith("LOGIN")

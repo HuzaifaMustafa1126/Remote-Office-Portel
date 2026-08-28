@@ -22,6 +22,7 @@ const blank = {
   monthlySalary: "",
   salaryDivisor: 30,
   effectiveFrom: new Date().toISOString().slice(0, 10),
+  reason: "",
 };
 export default function WorkSettingsCard({
   employeeId,
@@ -44,6 +45,7 @@ export default function WorkSettingsCard({
           monthlySalary: s?.monthlySalary || "",
           salaryDivisor: s?.salaryDivisor || 30,
           effectiveFrom: new Date().toISOString().slice(0, 10),
+          reason: "",
         });
         setOpen(true);
       }
@@ -59,6 +61,7 @@ export default function WorkSettingsCard({
       monthlySalary: s?.monthlySalary || "",
       salaryDivisor: s?.salaryDivisor || 30,
       effectiveFrom: new Date().toISOString().slice(0, 10),
+      reason: "",
     });
     setOpen(true);
   };
@@ -72,6 +75,7 @@ export default function WorkSettingsCard({
         monthlySalary: Number(form.monthlySalary),
         salaryDivisor: Number(form.salaryDivisor),
         effectiveFrom: form.effectiveFrom,
+        reason: form.reason,
       });
       setData(saved);
       setOpen(false);
@@ -225,6 +229,10 @@ export default function WorkSettingsCard({
                 }
               />
             </div>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Change reason
+              <textarea required minLength={3} maxLength={500} value={form.reason} onChange={(e)=>setForm({...form,reason:e.target.value})} placeholder="Example: Annual salary revision" className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 font-normal" />
+            </label>
           </div>
           {error && (
             <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">

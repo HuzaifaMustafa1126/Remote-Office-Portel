@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Clock4,
   WalletCards,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
@@ -35,6 +36,10 @@ const groups = [
       ["Payroll", "/payroll", WalletCards, P.PAYROLL_VIEW_ALL],
       ["My Salary", "/my-salary", WalletCards, P.SALARY_VIEW_OWN],
     ],
+  },
+  {
+    label: "REPORTS",
+    items: [["Reports & Analytics", "/reports", ChartNoAxesCombined, P.REPORTS_VIEW]],
   },
   {
     label: "MANAGEMENT",
