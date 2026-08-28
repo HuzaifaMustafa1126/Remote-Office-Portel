@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BriefcaseBusiness,
   Coffee,
@@ -10,7 +10,8 @@ import {
 import { Link } from "react-router-dom";
 import AttendanceBadge from "../components/attendance/AttendanceBadge";
 import AttendanceStatusCard from "../components/attendance/AttendanceStatusCard";
-import AttendanceTimeline from "../components/attendance/AttendanceTimeline";
+import EmployeeDashboardSidebar from "../components/dashboard/EmployeeDashboardSidebar";
+import EmployeeSalaryOverview from "../components/dashboard/EmployeeSalaryOverview";
 import LiveActivityFeed from "../components/attendance/LiveActivityFeed";
 import LiveOfficeStatus from "../components/attendance/LiveOfficeStatus";
 import LiveWorkTimer from "../components/attendance/LiveWorkTimer";
@@ -21,6 +22,7 @@ import useAuth from "../hooks/useAuth";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import usePermission from "../hooks/usePermission";
 import * as attendance from "../services/attendance.service";
+import { myAccrual } from "../services/salary.service";
 import { PERMISSIONS as P } from "../utils/permissions";
 const clock = (v) =>
   v
@@ -151,19 +153,23 @@ function EmployeeAttendance({ employees }) {
 export default function DashboardPage() {
   const { user } = useAuth(),
     canClock = usePermission(P.ATTENDANCE_CLOCK),
-    canViewAll = usePermission(P.ATTENDANCE_ALL);
+    canViewAll = usePermission(P.ATTENDANCE_ALL),
+    canViewSalary = usePermission(P.SALARY_VIEW_OWN);
   const own = useAttendance(),
     [live, setLive] = useState(null),
     [activity, setActivity] = useState([]),
+    [salaryAccrual,setSalaryAccrual]=useState(null),
     [interval, setIntervalPreference] = useState(() => {
       const stored = Number(
         localStorage.getItem("remoteOffice.autoRefreshInterval"),
       );
       return allowedIntervals.includes(stored) ? stored : 30000;
     });
+  useEffect(()=>{if(canViewSalary)myAccrual().then(setSalaryAccrual).catch(()=>setSalaryAccrual(null))},[canViewSalary]);
   const refreshDashboard = useCallback(async () => {
     const tasks = [];
     if (canClock) tasks.push(own.refresh());
+    if (canViewSalary) tasks.push(myAccrual().then(setSalaryAccrual));
     if (canViewAll)
       tasks.push(
         Promise.all([attendance.getLive(), attendance.getActivity()]).then(
@@ -176,7 +182,7 @@ export default function DashboardPage() {
     const results = await Promise.allSettled(tasks);
     if (results.length && results.every((r) => r.status === "rejected"))
       throw results[0].reason;
-  }, [canClock, canViewAll, own.refresh]);
+  }, [canClock, canViewAll, canViewSalary, own.refresh]);
   const auto = useAutoRefresh({
     interval,
     enabled: canClock || canViewAll,
@@ -234,18 +240,23 @@ export default function DashboardPage() {
         </div>
       )}
       {canClock && own.data && (
-        <div className="grid gap-5 xl:grid-cols-[1.4fr_.6fr]">
-          <AttendanceStatusCard
-            data={own.data}
-            busy={own.busy}
-            actions={{
-              onClockIn: own.clockIn,
-              onStartBreak: own.startBreak,
-              onEndBreak: own.endBreak,
-              onClockOut: own.clockOut,
-            }}
-          />
-          <AttendanceTimeline items={own.data.timeline} />
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(250px,1fr)]">
+          <main className="space-y-5">
+            <AttendanceStatusCard
+              data={own.data}
+              busy={own.busy}
+              actions={{
+                onClockIn: own.clockIn,
+                onStartBreak: own.startBreak,
+                onEndBreak: own.endBreak,
+                onClockOut: own.clockOut,
+              }}
+            />
+            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
+          </main>
+          <aside>
+            <EmployeeDashboardSidebar items={own.data.timeline} />
+          </aside>
         </div>
       )}
       {canViewAll && live && (

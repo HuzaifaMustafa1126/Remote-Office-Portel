@@ -1,10 +1,7 @@
-import { useEffect, useState } from "react";
 import { Clock3, Coffee } from "lucide-react";
 import AttendanceActionButtons from "./AttendanceActionButtons";
 import BreakTimer from "./BreakTimer";
 import LiveWorkTimer from "./LiveWorkTimer";
-import EmployeeLeavePanel from "../leave/EmployeeLeavePanel";
-import { getMyLeaves, getSummary } from "../../services/leave.service";
 
 const colors = {
   NOT_CLOCKED_IN: "bg-slate-100 text-slate-600",
@@ -30,25 +27,9 @@ const scheduleTime = (value) =>
     : "—";
 
 export default function AttendanceStatusCard({ data, busy, actions }) {
-  const [leave, setLeave] = useState({ summary: {}, requests: [] });
   const status = data?.status || "NOT_CLOCKED_IN";
   const record = data?.record;
   const activeBreak = data?.breaks?.find((item) => item.status === "ACTIVE");
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([getSummary(), getMyLeaves()])
-      .then(([summary, requests]) => {
-        if (active)
-          setLeave({ summary: summary || {}, requests: requests || [] });
-      })
-      .catch(() => {
-        if (active) setLeave({ summary: {}, requests: [] });
-      });
-    return () => {
-      active = false;
-    };
-  }, [data]);
 
   const statusCard =
     data?.companyDay && !data.companyDay.isWorkingDay && !record ? (
@@ -182,7 +163,6 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
         </section>
       )}
       {statusCard}
-      <EmployeeLeavePanel summary={leave.summary} requests={leave.requests} />
     </div>
   );
 }

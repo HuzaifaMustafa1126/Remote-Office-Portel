@@ -18,8 +18,12 @@ async function reconcile(c, dates) {
       );
   }
   for (const employeeId of employees)
-    await recalculatePayrollPeriodsForDates(c,employeeId,dates);
-  for(const date of dates) await c.execute("UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",[date,date]);
+    await recalculatePayrollPeriodsForDates(c, employeeId, dates);
+  for (const date of dates)
+    await c.execute(
+      "UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",
+      [date, date],
+    );
   const [requests] = await c.execute(
     `SELECT DISTINCT leave_request_id id FROM leave_days WHERE leave_date IN (${dates.map(() => "?").join(",")})`,
     dates,

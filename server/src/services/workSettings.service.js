@@ -111,14 +111,57 @@ export async function saveEmployeeSettings(employeeId, data, actor) {
         oldSalary ? "SALARY_UPDATED" : "SALARY_CREATED",
         employeeId,
         `${employee.name}'s salary changed from PKR ${oldSalary?.monthlySalary || 0} to PKR ${data.monthlySalary} effective ${data.effectiveFrom}.`,
-        oldSalary ? JSON.stringify({monthlySalary:Number(oldSalary.monthlySalary),salaryDivisor:Number(oldSalary.salaryDivisor),effectiveFrom:oldSalary.effectiveFrom}) : null,
-        JSON.stringify({monthlySalary:data.monthlySalary,salaryDivisor:data.salaryDivisor,effectiveFrom:data.effectiveFrom}),
+        oldSalary
+          ? JSON.stringify({
+              monthlySalary: Number(oldSalary.monthlySalary),
+              salaryDivisor: Number(oldSalary.salaryDivisor),
+              effectiveFrom: oldSalary.effectiveFrom,
+            })
+          : null,
+        JSON.stringify({
+          monthlySalary: data.monthlySalary,
+          salaryDivisor: data.salaryDivisor,
+          effectiveFrom: data.effectiveFrom,
+        }),
         data.reason,
       ],
     );
-    if(oldSalary&&Number(oldSalary.salaryDivisor)!==Number(data.salaryDivisor))await c.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_DIVISOR_CHANGED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",[actor.id,actor.employee_id,employeeId,`${employee.name}'s salary divisor changed from ${oldSalary.salaryDivisor} to ${data.salaryDivisor}.`,JSON.stringify({salaryDivisor:Number(oldSalary.salaryDivisor)}),JSON.stringify({salaryDivisor:data.salaryDivisor}),data.reason]);
-    if(oldSalary&&oldSalary.effectiveFrom!==data.effectiveFrom)await c.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_PROFILE_CLOSED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",[actor.id,actor.employee_id,employeeId,`${employee.name}'s previous salary profile was closed before ${data.effectiveFrom}.`,JSON.stringify({effectiveFrom:oldSalary.effectiveFrom,effectiveUntil:oldSalary.effectiveUntil}),JSON.stringify({effectiveUntil:data.effectiveFrom}),data.reason]);
-    await c.execute(`UPDATE payroll_runs pr JOIN payroll_items pi ON pi.payroll_run_id=pr.id SET pr.review_required=TRUE WHERE pi.employee_id=? AND pr.status IN('APPROVED','PAID') AND pr.period_end>=?`,[employeeId,data.effectiveFrom]);
+    if (
+      oldSalary &&
+      Number(oldSalary.salaryDivisor) !== Number(data.salaryDivisor)
+    )
+      await c.execute(
+        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_DIVISOR_CHANGED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",
+        [
+          actor.id,
+          actor.employee_id,
+          employeeId,
+          `${employee.name}'s salary divisor changed from ${oldSalary.salaryDivisor} to ${data.salaryDivisor}.`,
+          JSON.stringify({ salaryDivisor: Number(oldSalary.salaryDivisor) }),
+          JSON.stringify({ salaryDivisor: data.salaryDivisor }),
+          data.reason,
+        ],
+      );
+    if (oldSalary && oldSalary.effectiveFrom !== data.effectiveFrom)
+      await c.execute(
+        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_PROFILE_CLOSED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",
+        [
+          actor.id,
+          actor.employee_id,
+          employeeId,
+          `${employee.name}'s previous salary profile was closed before ${data.effectiveFrom}.`,
+          JSON.stringify({
+            effectiveFrom: oldSalary.effectiveFrom,
+            effectiveUntil: oldSalary.effectiveUntil,
+          }),
+          JSON.stringify({ effectiveUntil: data.effectiveFrom }),
+          data.reason,
+        ],
+      );
+    await c.execute(
+      `UPDATE payroll_runs pr JOIN payroll_items pi ON pi.payroll_run_id=pr.id SET pr.review_required=TRUE WHERE pi.employee_id=? AND pr.status IN('APPROVED','PAID') AND pr.period_end>=?`,
+      [employeeId, data.effectiveFrom],
+    );
     await c.commit();
     return getEmployeeSettings(employeeId);
   } catch (e) {
