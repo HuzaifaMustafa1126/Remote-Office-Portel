@@ -12,6 +12,7 @@ const requiredTables = [
   "payroll_runs",
   "payroll_items",
   "notifications",
+  "auth_sessions",
 ];
 
 export async function validateSchema() {

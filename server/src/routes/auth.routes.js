@@ -7,4 +7,6 @@ import { loginSchema } from "../validators/auth.validator.js";
 const r = Router();
 r.post("/login", validate(loginSchema), asyncHandler(c.login));
 r.get("/me", authenticate, asyncHandler(c.me));
+r.post("/heartbeat",authenticate,asyncHandler(c.heartbeat));
+r.post("/logout",authenticate,asyncHandler(c.logout));
 export default r;

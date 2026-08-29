@@ -25,6 +25,7 @@ export function errorHandler(err, req, res, next) {
   res.status(status).json({
     success: false,
     message,
+    ...(err.code && !err.code.startsWith("ER_") ? { code: err.code } : {}),
     ...(env.NODE_ENV === "development" && status === 500
       ? { debug: err.message }
       : {}),

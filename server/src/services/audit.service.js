@@ -21,7 +21,7 @@ export async function getAuditLogs(limit = 100) {
 }
 
 const categories = {
-  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED"],
+  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "USER_LOGIN", "USER_LOGOUT", "SESSION_EXPIRED"],
   attendance: [
     "ATTENDANCE_CLOCK_IN",
     "ATTENDANCE_CLOCK_OUT",
@@ -103,7 +103,7 @@ export async function searchAuditLogs(filters = {}) {
     [...params, filters.limit, offset],
   );
   const [[summary]] = await pool.execute(
-    `SELECT SUM(created_at>=CURRENT_DATE) todayActivity,SUM(action IN ('LOGIN_SUCCESS','LOGIN_FAILED')) loginEvents,SUM(action IN ('ATTENDANCE_CLOCK_IN','ATTENDANCE_CLOCK_OUT','BREAK_STARTED','BREAK_ENDED','ATTENDANCE_UPDATED')) attendanceEvents,SUM(action IN ('EMPLOYEE_CREATED','EMPLOYEE_UPDATED','EMPLOYEE_DEACTIVATED','ROLE_UPDATED','ROLE_ASSIGNED','PERMISSION_UPDATED')) administrativeChanges FROM audit_logs`,
+    `SELECT SUM(created_at>=CURRENT_DATE) todayActivity,SUM(action IN ('LOGIN_SUCCESS','LOGIN_FAILED','USER_LOGIN','USER_LOGOUT','SESSION_EXPIRED')) loginEvents,SUM(action IN ('ATTENDANCE_CLOCK_IN','ATTENDANCE_CLOCK_OUT','BREAK_STARTED','BREAK_ENDED','ATTENDANCE_UPDATED')) attendanceEvents,SUM(action IN ('EMPLOYEE_CREATED','EMPLOYEE_UPDATED','EMPLOYEE_DEACTIVATED','ROLE_UPDATED','ROLE_ASSIGNED','PERMISSION_UPDATED')) administrativeChanges FROM audit_logs`,
   );
   const [users] = await pool.execute(
     `SELECT DISTINCT u.id,CONCAT(e.first_name,' ',e.last_name) name FROM audit_logs a JOIN users u ON u.id=a.user_id LEFT JOIN employees e ON e.id=u.employee_id ORDER BY name`,

@@ -16,6 +16,9 @@ import { errorMessage } from "../utils/helpers";
 const labels = {
   LOGIN_SUCCESS: "Login Success",
   LOGIN_FAILED: "Login Failed",
+  USER_LOGIN: "User Login",
+  USER_LOGOUT: "User Logout",
+  SESSION_EXPIRED: "Session Expired",
   ATTENDANCE_CLOCK_IN: "Clock In",
   ATTENDANCE_CLOCK_OUT: "Clock Out",
   BREAK_STARTED: "Break Started",

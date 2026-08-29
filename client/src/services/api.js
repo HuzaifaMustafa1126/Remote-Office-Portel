@@ -4,8 +4,7 @@ const api = axios.create({
   timeout: 10000,
 });
 api.interceptors.request.use((c) => {
-  const token =
-    localStorage.getItem("rop_token") || sessionStorage.getItem("rop_token");
+  const token = sessionStorage.getItem("rop_token");
   if (token) c.headers.Authorization = `Bearer ${token}`;
   return c;
 });
@@ -13,9 +12,8 @@ api.interceptors.response.use(
   (r) => r,
   (e) => {
     if (e.response?.status === 401 && !e.config?.url?.includes("/auth/login")) {
-      localStorage.removeItem("rop_token");
       sessionStorage.removeItem("rop_token");
-      window.dispatchEvent(new Event("auth:unauthorized"));
+      window.dispatchEvent(new CustomEvent("auth:unauthorized",{detail:{code:e.response?.data?.code,message:e.response?.data?.message}}));
     }
     return Promise.reject(e);
   },

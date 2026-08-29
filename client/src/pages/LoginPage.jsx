@@ -6,7 +6,7 @@ import Input from "../components/common/Input";
 import useAuth from "../hooks/useAuth";
 import { errorMessage } from "../utils/helpers";
 export default function LoginPage() {
-  const { user, signIn } = useAuth(),
+  const { user, signIn, sessionNotice, clearSessionNotice } = useAuth(),
     [form, setForm] = useState({ email: "", password: "" }),
     [show, setShow] = useState(false),
     [remember, setRemember] = useState(true),
@@ -66,6 +66,7 @@ export default function LoginPage() {
           <p className="mt-2 text-slate-500">
             Sign in to continue to your workspace.
           </p>
+          {sessionNotice&&<div role="status" className="notification-toast fixed right-5 top-5 z-50 max-w-sm rounded-2xl border border-indigo-100 bg-white p-4 text-sm text-slate-700 shadow-xl"><b className="block text-indigo-700">Session ended</b>{sessionNotice}<button onClick={clearSessionNotice} className="ml-2 font-bold text-indigo-600">Dismiss</button></div>}
           {error && (
             <div
               role="alert"
