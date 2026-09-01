@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../components/common/PageHeader";
 import Button from "../components/common/Button";
+import Input from "../components/common/Input";
+import Modal from "../components/common/Modal";
 import * as api from "../services/payroll.service";
+import { errorMessage } from "../utils/helpers";
 const month = new Date().toISOString().slice(0, 7),
+  emptyAdjustment = { title: "", type: "ALLOWANCE", amount: "", reason: "" },
   money = (n) =>
     `Rs. ${Number(n || 0).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
 export default function PayrollPage() {
   const [runs, setRuns] = useState([]),
     [selected, setSelected] = useState(null),
     [label, setLabel] = useState(month),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [adjustmentEmployee, setAdjustmentEmployee] = useState(null),
+    [adjustment, setAdjustment] = useState(emptyAdjustment),
+    [adjustmentError, setAdjustmentError] = useState(""),
+    [savingAdjustment, setSavingAdjustment] = useState(false);
   const load = () => api.list().then(setRuns);
   useEffect(() => {
     load();
@@ -26,7 +34,32 @@ export default function PayrollPage() {
   };
   const open = async (id) => setSelected(await api.get(id));
   const refresh=async()=>{await open(selected.id);await load()};
-  const addAdjustment=async(item)=>{const title=window.prompt("Adjustment title");if(!title)return;const type=window.prompt("Type: ALLOWANCE, DEDUCTION, POSITIVE_ADJUSTMENT, or NEGATIVE_ADJUSTMENT","ALLOWANCE");if(!["ALLOWANCE","DEDUCTION","POSITIVE_ADJUSTMENT","NEGATIVE_ADJUSTMENT"].includes(type))return;const amount=Number(window.prompt("Amount (PKR)"));if(!(amount>0))return;const reason=window.prompt("Reason (required)");if(!reason?.trim())return;await api.addAdjustment(selected.id,{employeeId:item.employee_id,title,type,amount,reason});await refresh()};
+  const showAdjustment = (item) => {
+    setAdjustmentEmployee(item);
+    setAdjustment(emptyAdjustment);
+    setAdjustmentError("");
+  };
+  const closeAdjustment = () => {
+    if (!savingAdjustment) setAdjustmentEmployee(null);
+  };
+  const addAdjustment = async (event) => {
+    event.preventDefault();
+    setAdjustmentError("");
+    setSavingAdjustment(true);
+    try {
+      await api.addAdjustment(selected.id, {
+        employeeId: adjustmentEmployee.employee_id,
+        ...adjustment,
+        amount: Number(adjustment.amount),
+      });
+      setAdjustmentEmployee(null);
+      await refresh();
+    } catch (error) {
+      setAdjustmentError(errorMessage(error));
+    } finally {
+      setSavingAdjustment(false);
+    }
+  };
   return (
     <>
       <PageHeader
@@ -121,7 +154,7 @@ export default function PayrollPage() {
                       <td>{money(x.leave_deduction)}</td>
                       <td>{money(x.absence_deduction)}</td>
                       <td className="font-bold">{money(x.net_salary)}</td>
-                      {selected.status==="DRAFT"&&<td><button className="text-indigo-600" onClick={()=>addAdjustment(x)}>Add adjustment</button></td>}
+                      {selected.status==="DRAFT"&&<td><button className="font-semibold text-indigo-600 hover:text-indigo-800" onClick={()=>showAdjustment(x)}>Add adjustment</button></td>}
                     </tr>
                   ))}
                 </tbody>
@@ -140,6 +173,71 @@ export default function PayrollPage() {
           )}
         </section>
       </div>
+      <Modal
+        open={Boolean(adjustmentEmployee)}
+        title="Add Payroll Adjustment"
+        onClose={closeAdjustment}
+      >
+        <form className="space-y-5" onSubmit={addAdjustment}>
+          <div className="rounded-xl bg-indigo-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Employee</p>
+            <p className="mt-1 font-bold text-slate-900">{adjustmentEmployee?.employeeName}</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Adjustment title"
+              placeholder="e.g. Performance bonus"
+              minLength="2"
+              maxLength="150"
+              required
+              autoFocus
+              value={adjustment.title}
+              onChange={(e) => setAdjustment({ ...adjustment, title: e.target.value })}
+            />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Adjustment type</span>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-3 focus:ring-indigo-100"
+                value={adjustment.type}
+                onChange={(e) => setAdjustment({ ...adjustment, type: e.target.value })}
+              >
+                <option value="ALLOWANCE">Allowance</option>
+                <option value="DEDUCTION">Deduction</option>
+                <option value="POSITIVE_ADJUSTMENT">Positive adjustment</option>
+                <option value="NEGATIVE_ADJUSTMENT">Negative adjustment</option>
+              </select>
+            </label>
+            <Input
+              label="Amount (PKR)"
+              type="number"
+              placeholder="0.00"
+              min="0.01"
+              max="100000000"
+              step="0.01"
+              required
+              value={adjustment.amount}
+              onChange={(e) => setAdjustment({ ...adjustment, amount: e.target.value })}
+            />
+            <label className="block sm:col-span-2">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Reason</span>
+              <textarea
+                className="min-h-28 w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-3 focus:ring-indigo-100"
+                placeholder="Explain why this adjustment is being added"
+                minLength="3"
+                maxLength="500"
+                required
+                value={adjustment.reason}
+                onChange={(e) => setAdjustment({ ...adjustment, reason: e.target.value })}
+              />
+            </label>
+          </div>
+          {adjustmentError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{adjustmentError}</p>}
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <Button type="button" variant="secondary" disabled={savingAdjustment} onClick={closeAdjustment}>Cancel</Button>
+            <Button type="submit" disabled={savingAdjustment}>{savingAdjustment ? "Adding…" : "Add Adjustment"}</Button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }
