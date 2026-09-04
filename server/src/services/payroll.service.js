@@ -17,7 +17,7 @@ async function audit(
   },
 ) {
   await c.execute(
-    `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason,payroll_period_start,payroll_period_end)VALUES(?,?,?,'PAYROLL',?,?,CAST(? AS JSON),CAST(? AS JSON),?,?,?)`,
+    `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason,payroll_period_start,payroll_period_end)VALUES(?,?,?,'PAYROLL',?,?,?,?,?,?,?)`,
     [
       actor.id,
       employeeId ?? actor.employee_id,

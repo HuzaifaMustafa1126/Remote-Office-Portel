@@ -104,7 +104,7 @@ export async function saveEmployeeSettings(employeeId, data, actor) {
       ],
     );
     await c.execute(
-      "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,?,'EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",
+      "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,?,'EMPLOYEE',?,?,?,?,?)",
       [
         actor.id,
         actor.employee_id,
@@ -131,7 +131,7 @@ export async function saveEmployeeSettings(employeeId, data, actor) {
       Number(oldSalary.salaryDivisor) !== Number(data.salaryDivisor)
     )
       await c.execute(
-        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_DIVISOR_CHANGED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",
+        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_DIVISOR_CHANGED','EMPLOYEE',?,?,?,?,?)",
         [
           actor.id,
           actor.employee_id,
@@ -144,7 +144,7 @@ export async function saveEmployeeSettings(employeeId, data, actor) {
       );
     if (oldSalary && oldSalary.effectiveFrom !== data.effectiveFrom)
       await c.execute(
-        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_PROFILE_CLOSED','EMPLOYEE',?,?,CAST(? AS JSON),CAST(? AS JSON),?)",
+        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)VALUES(?,?,'SALARY_PROFILE_CLOSED','EMPLOYEE',?,?,?,?,?)",
         [
           actor.id,
           actor.employee_id,

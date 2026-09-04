@@ -38,7 +38,9 @@ export function AuthProvider({ children }) {
         remaining,
       );
       heartbeatTimer.current = setInterval(
-        () => auth.heartbeat().catch(() => {}),
+        () => auth.heartbeat().then((data) => {
+          if (data?.user) setUser((current) => ({ ...data.user, expiresAt: current?.expiresAt || data.expiresAt }));
+        }).catch(() => {}),
         3 * 60 * 1000,
       );
     },

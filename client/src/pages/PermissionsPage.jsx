@@ -3,6 +3,7 @@ import { Check, Save } from "lucide-react";
 import Button from "../components/common/Button";
 import PageHeader from "../components/common/PageHeader";
 import usePermission from "../hooks/usePermission";
+import useAuth from "../hooks/useAuth";
 import {
   listPermissions,
   updateRolePermissions,
@@ -67,6 +68,24 @@ const friendly = {
     "Deactivate Employees",
     "Can activate or deactivate employees",
   ],
+  "employees.reset_password": ["Reset Employee Password", "Can reset another employee's password"],
+  "employees.delete": ["Delete Employees", "Can permanently delete employee accounts and related records"],
+  "shift.view": ["View Shifts", "Can view shift templates and assignments"],
+  "shift.manage": ["Manage Shifts", "Can create and update shift templates"],
+  "shift.assign": ["Assign Shifts", "Can assign shifts to employees"],
+  "salary.view_all": ["View All Salaries", "Can view employee salary profiles"],
+  "salary.manage": ["Manage Salaries", "Can update employee salary profiles"],
+  "salary.view_own": ["View Own Salary", "Can view personal salary information"],
+  "payroll.view_own": ["View Own Payroll", "Can view personal payroll records"],
+  "payroll.view_all": ["View All Payroll", "Can view company payroll records"],
+  "payroll.generate": ["Generate Payroll", "Can generate payroll runs"],
+  "payroll.recalculate": ["Recalculate Payroll", "Can recalculate draft payroll"],
+  "payroll.approve": ["Approve Payroll", "Can approve payroll runs"],
+  "payroll.reopen": ["Reopen Payroll", "Can reopen approved payroll"],
+  "payroll.mark_paid": ["Mark Payroll Paid", "Can mark payroll as paid"],
+  "payroll.adjust": ["Adjust Payroll", "Can manage payroll adjustments"],
+  "reports.view": ["View Reports", "Can view company reports and analytics"],
+  "reports.export": ["Export Reports", "Can export company reports"],
   "roles.view": ["View Roles", "Can view configured access roles"],
   "roles.manage": ["Manage Roles", "Can create and update roles"],
   "permissions.view": ["View Permissions", "Can view permission assignments"],
@@ -84,10 +103,17 @@ const groupFor = (name) =>
           ? "Company Calendar"
           : name.startsWith("employees.")
             ? "Employees"
+            : name.startsWith("shift.")
+              ? "Shifts"
+              : name.startsWith("salary.") || name.startsWith("payroll.")
+                ? "Salary & Payroll"
+                : name.startsWith("reports.")
+                  ? "Reports"
             : name.startsWith("roles.") || name.startsWith("permissions.")
               ? "Roles & Permissions"
               : "System";
 export default function PermissionsPage() {
+  const { refresh: refreshAuth } = useAuth();
   const [roles, setRoles] = useState([]),
     [perms, setPerms] = useState([]),
     [roleId, setRoleId] = useState(""),
@@ -135,6 +161,7 @@ export default function PermissionsPage() {
       await updateRolePermissions(roleId, selected);
       const updated = await listRoles();
       setRoles(updated);
+      await refreshAuth();
       setBaseline(selected);
       setNotice("Permissions updated successfully.");
     } catch (e) {

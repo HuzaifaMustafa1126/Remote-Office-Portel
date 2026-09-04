@@ -46,6 +46,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
           <option value="PUBLIC_HOLIDAY">Public Holiday</option>
           <option value="COMPANY_HOLIDAY">Company Holiday</option>
           <option value="SPECIAL_OFF_DAY">Special Off Day</option>
+          <option value="WEEKLY_OFF">Weekly Off</option>
           <option value="WORKING_DAY">Working Day Override</option>
         </select>
       </label>

@@ -2,6 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
 import { recalculatePayrollPeriodsForDates } from "./leave.service.js";
+const OFF_DAY_TYPES = ["WEEKLY_OFF", "PUBLIC_HOLIDAY", "COMPANY_HOLIDAY", "SPECIAL_OFF_DAY"];
 async function reconcile(c, dates) {
   const employees = new Set();
   for (const date of dates) {
@@ -64,7 +65,8 @@ export async function listDays(f = {}) {
 }
 export async function getUpcoming() {
   const [rows] = await pool.execute(
-    `SELECT id,calendar_date calendarDate,day_type dayType,title,description FROM company_calendar_days WHERE status='ACTIVE' AND day_type<>'WORKING_DAY' AND calendar_date>=CURRENT_DATE ORDER BY calendar_date LIMIT 6`,
+    `SELECT id,calendar_date calendarDate,day_type dayType,title,description FROM company_calendar_days WHERE status='ACTIVE' AND calendar_date>=CURRENT_DATE AND day_type IN (${OFF_DAY_TYPES.map(() => "?").join(",")}) ORDER BY calendar_date ASC LIMIT 5`,
+    OFF_DAY_TYPES,
   );
   return rows;
 }

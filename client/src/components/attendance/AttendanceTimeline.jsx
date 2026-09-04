@@ -22,15 +22,17 @@ const time = (value) =>
   }).format(new Date(value));
 
 export default function AttendanceTimeline({ items = [] }) {
-  const [holidays, setHolidays] = useState([]);
+  const [holidays, setHolidays] = useState([]), [holidaysLoading, setHolidaysLoading] = useState(true), [holidaysError, setHolidaysError] = useState("");
   useEffect(() => {
     let active = true;
+    setHolidaysLoading(true);
+    setHolidaysError("");
     getUpcoming()
       .then((rows) => {
-        if (active) setHolidays(rows || []);
+        if (active) { setHolidays(rows || []); setHolidaysLoading(false); }
       })
       .catch(() => {
-        if (active) setHolidays([]);
+        if (active) { setHolidaysError("Unable to load upcoming holidays."); setHolidaysLoading(false); }
       });
     return () => {
       active = false;
@@ -71,7 +73,7 @@ export default function AttendanceTimeline({ items = [] }) {
           )}
         </div>
       </section>
-      <UpcomingHolidays rows={holidays} />
+      <UpcomingHolidays rows={holidays} loading={holidaysLoading} error={holidaysError} />
     </div>
   );
 }

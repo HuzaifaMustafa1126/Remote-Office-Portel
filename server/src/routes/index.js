@@ -30,6 +30,8 @@ r.get(
         database: "connected",
         status: schema.valid ? "healthy" : "schema_outdated",
         missingTables: schema.missing,
+        missingColumns: schema.missingColumns,
+        missingMigrations: schema.missingMigrations,
       });
   }),
 );

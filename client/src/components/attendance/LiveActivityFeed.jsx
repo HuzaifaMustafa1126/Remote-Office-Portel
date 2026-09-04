@@ -12,18 +12,18 @@ const icons = {
 };
 export default function LiveActivityFeed({ items = [] }) {
   const [leaves, setLeaves] = useState(null),
-    [holidays, setHolidays] = useState([]);
+    [holidays, setHolidays] = useState([]),
+    [holidaysLoading, setHolidaysLoading] = useState(true),
+    [holidaysError, setHolidaysError] = useState("");
   useEffect(() => {
-    Promise.all([getLeaves({ status: "PENDING" }), getUpcoming()])
-      .then(([l, h]) => {
-        setLeaves(l);
-        setHolidays(h);
-      })
-      .catch(() => {});
+    setHolidaysLoading(true);
+    setHolidaysError("");
+    getUpcoming().then(setHolidays).catch(() => setHolidaysError("Unable to load upcoming holidays.")).finally(() => setHolidaysLoading(false));
+    getLeaves({ status: "PENDING" }).then(setLeaves).catch(() => setLeaves(null));
   }, [items]);
   return (
     <div className="space-y-4">
-      <UpcomingHolidays rows={holidays} />
+      <UpcomingHolidays rows={holidays} loading={holidaysLoading} error={holidaysError} />
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between">
           <div>

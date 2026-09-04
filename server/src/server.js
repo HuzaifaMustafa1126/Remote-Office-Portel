@@ -24,13 +24,15 @@ async function start() {
     const schema = await validateSchema();
     console.log("Remote Office Portal API");
     console.log("Database connected.");
-    if (!schema.valid)
-      throw new Error(
-        `Database schema is outdated. Missing tables: ${schema.missing.join(", ")}. Run npm run migrate.`,
+    if (!schema.valid) {
+      console.warn(
+        `Database schema is outdated. Missing tables: ${schema.missing.join(", ") || "none"}; missing columns: ${schema.missingColumns.join(", ") || "none"}; missing migrations: ${schema.missingMigrations.join(", ") || "none"}. Run npm run migrate.`,
       );
-    console.log(
-      `Schema validation passed (${schema.migrations.length} migrations recorded).`,
-    );
+    } else {
+      console.log(
+        `Schema validation passed (${schema.migrations.length} migrations recorded).`,
+      );
+    }
     const server = createServer(app);
     initializeNotifications(server);
     server.listen(PORT, "0.0.0.0", () =>
