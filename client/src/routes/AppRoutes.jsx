@@ -22,6 +22,7 @@ import PayrollPage from "../pages/PayrollPage";
 import SalaryPage from "../pages/SalaryPage";
 import MySalaryPage from "../pages/MySalaryPage";
 import ReportsPage from "../pages/ReportsPage";
+import AccountSettingsPage from "../pages/AccountSettingsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -42,6 +43,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
+        <Route path="account-settings" element={<AccountSettingsPage />} />
         <Route
           index
           element={

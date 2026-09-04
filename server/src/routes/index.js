@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../middleware/auth.middleware.js";
+import { authenticate, requirePasswordChanged } from "../middleware/auth.middleware.js";
 import auth from "./auth.routes.js";
 import employees from "./employee.routes.js";
 import roles from "./role.routes.js";
@@ -35,6 +35,7 @@ r.get(
 );
 r.use("/auth", auth);
 r.use(authenticate);
+r.use(requirePasswordChanged);
 r.use("/dashboard", dashboard);
 r.use("/attendance", attendance);
 r.use("/leaves", leaves);

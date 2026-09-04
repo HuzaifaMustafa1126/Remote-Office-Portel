@@ -25,3 +25,12 @@ export const statusSchema = z.object({
 export const assignRoleSchema = z.object({
   roleId: z.coerce.number().int().positive(),
 });
+export const resetPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, "Password must contain at least 8 characters.").max(72),
+    confirmPassword: z.string().min(1),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  });

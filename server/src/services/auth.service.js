@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 export const MAX_SESSION_HOURS = 8;
 export async function getUserProfile(userId) {
   const [users] = await pool.execute(
-    `SELECT u.id,u.employee_id AS employeeId,u.email,CONCAT(e.first_name,' ',e.last_name) AS name FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE'`,
+    `SELECT u.id,u.employee_id AS employeeId,u.email,u.must_change_password AS mustChangePassword,CONCAT(e.first_name,' ',e.last_name) AS name FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (e.id IS NULL OR e.deleted_at IS NULL)`,
     [userId],
   );
   if (!users[0]) throw new ApiError(401, "Account is unavailable");
@@ -27,13 +27,13 @@ export async function getUserProfile(userId) {
 }
 export async function loginUser(email, password, meta = {}) {
   const [rows] = await pool.execute(
-    "SELECT id,employee_id,email,password_hash,status FROM users WHERE email=? LIMIT 1",
+    "SELECT u.id,u.employee_id,u.email,u.password_hash,u.status,e.deleted_at FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.email=? LIMIT 1",
     [email],
   );
   const user = rows[0];
   if (
     !user ||
-    user.status !== "ACTIVE" ||
+    user.status !== "ACTIVE" || user.deleted_at ||
     !(await bcrypt.compare(password, user.password_hash))
   ) {
     await logAudit({
@@ -57,6 +57,36 @@ export async function loginUser(email, password, meta = {}) {
     await c.commit();
     return{token:signToken({sub:user.id,sid:sessionId}),user:profile,expiresAt:session.expiresAt};
   }catch(e){await c.rollback();throw e}finally{c.release()}
+}
+
+export async function changePassword(userId, data) {
+  const [[user]] = await pool.execute(
+    "SELECT id,employee_id,password_hash,must_change_password FROM users WHERE id=? AND status='ACTIVE' LIMIT 1",
+    [userId],
+  );
+  if (!user) throw new ApiError(401, "Account is unavailable");
+  if (!user.must_change_password) {
+    if (!data.currentPassword || !(await bcrypt.compare(data.currentPassword, user.password_hash))) {
+      throw new ApiError(400, "Current password is incorrect.");
+    }
+  }
+  if (await bcrypt.compare(data.newPassword, user.password_hash)) {
+    throw new ApiError(400, "New password cannot be identical to current password.");
+  }
+  const hash = await bcrypt.hash(data.newPassword, 12);
+  await pool.execute(
+    "UPDATE users SET password_hash=?,password_changed_at=CURRENT_TIMESTAMP,must_change_password=FALSE WHERE id=?",
+    [hash, userId],
+  );
+  await logAudit({
+    userId,
+    employeeId: user.employee_id,
+    action: "PASSWORD_CHANGED",
+    entityType: "USER",
+    entityId: userId,
+    description: "Employee changed their own password.",
+  });
+  return getUserProfile(userId);
 }
 export async function heartbeat(sessionId){const[r]=await pool.execute("UPDATE auth_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id=? AND status='ACTIVE' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP",[sessionId]);if(!r.affectedRows)throw new ApiError(401,"Your session has expired. Please log in again.","SESSION_EXPIRED");const[[row]]=await pool.execute("SELECT expires_at expiresAt FROM auth_sessions WHERE id=?",[sessionId]);return row}
 export async function logoutSession(sessionId,user){const c=await pool.getConnection();try{await c.beginTransaction();const[r]=await c.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=? AND status='ACTIVE'",[sessionId,user.id]);if(r.affectedRows)await c.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)VALUES(?,?,'USER_LOGOUT','AUTH_SESSION',?,?)",[user.id,user.employee_id,user.id,`${user.email} signed out and revoked the active session.`]);await c.commit();return{revoked:true}}catch(e){await c.rollback();throw e}finally{c.release()}}

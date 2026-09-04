@@ -47,3 +47,17 @@ export async function saveWorkSettings(req, res) {
     data: await work.saveEmployeeSettings(req.params.id, req.body, req.user),
   });
 }
+export async function resetPassword(req, res) {
+  await s.resetEmployeePassword(req.params.id, req.body, req.user);
+  res.json({ success: true, message: "Employee password reset successfully." });
+}
+export async function remove(req, res) {
+  await s.archiveEmployee(req.params.id, req.user);
+  res.json({ success: true, message: "Employee deleted successfully." });
+}
+export async function archived(req, res) {
+  res.json({ success: true, data: await s.listArchivedEmployees() });
+}
+export async function restore(req, res) {
+  res.json({ success: true, message: "Employee restored successfully.", data: await s.restoreEmployee(req.params.id, req.user) });
+}
