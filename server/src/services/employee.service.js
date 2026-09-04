@@ -125,7 +125,7 @@ export async function listEmployees({ search = "" }, actor) {
     [rows] = await pool.execute(
       `
         ${employeeSelect}
-        WHERE e.deleted_at IS NULL AND (
+        WHERE (
           e.first_name LIKE ?
           OR e.last_name LIKE ?
           OR e.email LIKE ?
@@ -138,7 +138,7 @@ export async function listEmployees({ search = "" }, actor) {
   } else {
     [rows] = await pool.execute(
       `
-        ${employeeSelect} WHERE e.deleted_at IS NULL
+        ${employeeSelect}
         ORDER BY e.created_at DESC
       `,
     );
@@ -174,7 +174,7 @@ export async function listEmployees({ search = "" }, actor) {
 }
 
 export async function getEmployee(id) {
-  const [rows] = await pool.execute(`${select} WHERE e.id = ? AND e.deleted_at IS NULL`, [id]);
+  const [rows] = await pool.execute(`${select} WHERE e.id = ?`, [id]);
 
   if (!rows[0]) {
     throw new ApiError(404, "Employee not found");
@@ -431,37 +431,27 @@ export async function resetEmployeePassword(id, data, actor) {
   await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_PASSWORD_RESET", entityType: "EMPLOYEE", entityId: id, description: `Password was reset for ${employee.firstName} ${employee.lastName}; a password change is required at next login.` });
 }
 
-export async function archiveEmployee(id, actor) {
+export async function deleteEmployee(id, actor) {
   const employee = await getEmployee(id);
   if (Number(actor.employee_id) === Number(id)) throw new ApiError(400, "You cannot delete your own account.");
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [[user]] = await conn.execute("SELECT id FROM users WHERE employee_id=? LIMIT 1", [id]);
-    await conn.execute("UPDATE employees SET status='INACTIVE',deleted_at=CURRENT_TIMESTAMP,deleted_by=? WHERE id=? AND deleted_at IS NULL", [actor.id, id]);
-    await conn.execute("UPDATE users SET status='INACTIVE' WHERE employee_id=?", [id]);
     if (user) await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND status='ACTIVE'", [user.id]);
+    await conn.execute("DELETE FROM payroll_adjustments WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM payroll_items WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM leave_requests WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM attendance_records WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM employee_shift_assignments WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM employee_work_settings WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM employee_salary_profiles WHERE employee_id=?", [id]);
+    await conn.execute("DELETE FROM audit_logs WHERE employee_id=? OR (entity_type='EMPLOYEE' AND entity_id=?)", [id, id]);
+    if (user) await conn.execute("DELETE FROM users WHERE id=?", [user.id]);
+    await conn.execute("DELETE FROM employees WHERE id=?", [id]);
     await conn.commit();
   } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
-  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_DELETED", entityType: "EMPLOYEE", entityId: id, description: `Employee ${employee.firstName} ${employee.lastName} was archived and login access was disabled.` });
-}
-
-export async function listArchivedEmployees() {
-  const [rows] = await pool.execute(`
-    SELECT e.id,e.employee_code AS employeeCode,e.first_name AS firstName,e.last_name AS lastName,
-      e.email,e.phone,e.job_title AS jobTitle,e.department,e.joining_date AS joiningDate,
-      e.status,e.deleted_at AS deletedAt,e.created_at AS createdAt,e.updated_at AS updatedAt
-    FROM employees e WHERE e.deleted_at IS NOT NULL ORDER BY e.deleted_at DESC
-  `);
-  return rows;
-}
-
-export async function restoreEmployee(id, actor) {
-  const [[employee]] = await pool.execute("SELECT id,first_name AS firstName,last_name AS lastName FROM employees WHERE id=? AND deleted_at IS NOT NULL", [id]);
-  if (!employee) throw new ApiError(404, "Archived employee not found");
-  await pool.execute("UPDATE employees e JOIN users u ON u.employee_id=e.id SET e.status='ACTIVE',e.deleted_at=NULL,e.deleted_by=NULL,u.status='ACTIVE' WHERE e.id=?", [id]);
-  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_RESTORED", entityType: "EMPLOYEE", entityId: id, description: `Employee ${employee.firstName} ${employee.lastName} was restored.` });
-  return getEmployee(id);
+  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_DELETED", entityType: "EMPLOYEE", entityId: id, description: `Employee ${employee.firstName} ${employee.lastName} and all associated records were permanently deleted.` });
 }
 
 export async function assignRole(id, roleId, actor) {

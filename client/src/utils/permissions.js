@@ -7,7 +7,6 @@ export const PERMISSIONS = {
   EMPLOYEES_DEACTIVATE: "employees.deactivate",
   EMPLOYEES_RESET_PASSWORD: "employees.reset_password",
   EMPLOYEES_DELETE: "employees.delete",
-  EMPLOYEES_RESTORE: "employees.restore",
   ROLES_VIEW: "roles.view",
   ROLES_MANAGE: "roles.manage",
   PERMISSIONS_VIEW: "permissions.view",

@@ -52,12 +52,6 @@ export async function resetPassword(req, res) {
   res.json({ success: true, message: "Employee password reset successfully." });
 }
 export async function remove(req, res) {
-  await s.archiveEmployee(req.params.id, req.user);
+  await s.deleteEmployee(req.params.id, req.user);
   res.json({ success: true, message: "Employee deleted successfully." });
-}
-export async function archived(req, res) {
-  res.json({ success: true, data: await s.listArchivedEmployees() });
-}
-export async function restore(req, res) {
-  res.json({ success: true, message: "Employee restored successfully.", data: await s.restoreEmployee(req.params.id, req.user) });
 }

@@ -24,22 +24,19 @@ export default function EmployeesPage() {
     [resetting, setResetting] = useState(null),
     [deleting, setDeleting] = useState(null),
     [password, setPassword] = useState({ newPassword: "", confirmPassword: "" }),
-    [archived, setArchived] = useState(false),
     [params] = useSearchParams();
   const { user } = useAuth();
   const canCreate = usePermission(P.EMPLOYEES_CREATE),
     canEdit = usePermission(P.EMPLOYEES_UPDATE),
     canDeactivate = usePermission(P.EMPLOYEES_DEACTIVATE),
     canResetPassword = usePermission(P.EMPLOYEES_RESET_PASSWORD),
-    canDelete = usePermission(P.EMPLOYEES_DELETE),
-    canRestore = usePermission(P.EMPLOYEES_RESTORE);
+    canDelete = usePermission(P.EMPLOYEES_DELETE);
   async function load() {
-    if (archived) setRows(await emp.listArchivedEmployees());
-    else { const r = await emp.listEmployees({ search: query }); setRows(r.data); }
+    const r = await emp.listEmployees({ search: query }); setRows(r.data);
   }
   useEffect(() => {
     load();
-  }, [query, archived]);
+  }, [query]);
   useEffect(() => {
     listRoles()
       .then(setRoles)
@@ -92,11 +89,6 @@ export default function EmployeesPage() {
     try { const r = await emp.deleteEmployee(deleting.id); setNotice(r.message); setDeleting(null); await load(); }
     catch (x) { setNotice(errorMessage(x)); } finally { setBusy(false); }
   }
-  async function restoreEmployee(e) {
-    setBusy(true); setNotice("");
-    try { const r = await emp.restoreEmployee(e.id); setNotice(r.message); await load(); }
-    catch (x) { setNotice(errorMessage(x)); } finally { setBusy(false); }
-  }
   return (
     <>
       <PageHeader
@@ -124,9 +116,9 @@ export default function EmployeesPage() {
         </div>
       )}
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex items-center gap-3 p-4">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-7 top-7 text-slate-400" size={18} />
+        <div className="p-4">
+        <div className="relative max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -134,7 +126,6 @@ export default function EmployeesPage() {
             className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 outline-none focus:border-indigo-500"
           />
         </div>
-        {canRestore && <button className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setArchived(!archived)}>{archived ? "Employees" : "Archived Employees"}</button>}
         </div>
         <EmployeeTable
           employees={rows}
@@ -142,7 +133,6 @@ export default function EmployeesPage() {
           canDeactivate={canDeactivate}
           canResetPassword={canResetPassword}
           canDelete={canDelete}
-          archived={archived}
           onEdit={(e) => {
             setEditing(e);
             setOpen(true);
@@ -150,7 +140,6 @@ export default function EmployeesPage() {
           onStatus={status}
           onResetPassword={setResetting}
           onDelete={(e) => { if (Number(user.employeeId) === Number(e.id)) setNotice("You cannot delete your own account."); else setDeleting(e); }}
-          onRestore={restoreEmployee}
         />
       </div>
       <Modal
@@ -173,8 +162,8 @@ export default function EmployeesPage() {
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => setResetting(null)}>Cancel</Button><Button disabled={busy}>{busy ? "Resetting…" : "Reset Password"}</Button></div>
         </form>}
       </Modal>
-      <Modal open={Boolean(deleting)} title="Delete Employee?" onClose={() => !busy && setDeleting(null)}>
-        {deleting && <div><p className="text-slate-700">You are about to remove <b>{deleting.firstName} {deleting.lastName}</b>.</p><p className="mt-3 text-sm text-slate-500">Their login access will be disabled, but historical attendance, salary, leave, task, payroll and audit records will remain available.</p><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={removeEmployee}>{busy ? "Deleting…" : "Delete Employee"}</Button></div></div>}
+      <Modal open={Boolean(deleting)} title="Permanently Delete Employee?" onClose={() => !busy && setDeleting(null)}>
+        {deleting && <div><p className="text-slate-700">You are about to permanently delete <b>{deleting.firstName} {deleting.lastName}</b>.</p><p className="mt-3 text-sm font-medium text-red-600">Their account and all attendance, salary, leave, shift, payroll, and related records will be permanently removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={removeEmployee}>{busy ? "Deleting…" : "Delete Permanently"}</Button></div></div>}
       </Modal>
     </>
   );

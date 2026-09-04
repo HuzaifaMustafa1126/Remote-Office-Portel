@@ -17,5 +17,3 @@ export const saveWorkSettings = (id, data) =>
   api.put(`/employees/${id}/work-settings`, data).then((r) => r.data.data);
 export const resetPassword = (id, data) => api.patch(`/employees/${id}/reset-password`, data).then((r) => r.data);
 export const deleteEmployee = (id) => api.delete(`/employees/${id}`).then((r) => r.data);
-export const listArchivedEmployees = () => api.get("/employees/archived").then((r) => r.data.data);
-export const restoreEmployee = (id) => api.patch(`/employees/${id}/restore`).then((r) => r.data);

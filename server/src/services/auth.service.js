@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 export const MAX_SESSION_HOURS = 8;
 export async function getUserProfile(userId) {
   const [users] = await pool.execute(
-    `SELECT u.id,u.employee_id AS employeeId,u.email,u.must_change_password AS mustChangePassword,CONCAT(e.first_name,' ',e.last_name) AS name FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (e.id IS NULL OR e.deleted_at IS NULL)`,
+    `SELECT u.id,u.employee_id AS employeeId,u.email,u.must_change_password AS mustChangePassword,CONCAT(e.first_name,' ',e.last_name) AS name FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE'`,
     [userId],
   );
   if (!users[0]) throw new ApiError(401, "Account is unavailable");
@@ -27,13 +27,13 @@ export async function getUserProfile(userId) {
 }
 export async function loginUser(email, password, meta = {}) {
   const [rows] = await pool.execute(
-    "SELECT u.id,u.employee_id,u.email,u.password_hash,u.status,e.deleted_at FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.email=? LIMIT 1",
+    "SELECT u.id,u.employee_id,u.email,u.password_hash,u.status FROM users u WHERE u.email=? LIMIT 1",
     [email],
   );
   const user = rows[0];
   if (
     !user ||
-    user.status !== "ACTIVE" || user.deleted_at ||
+    user.status !== "ACTIVE" ||
     !(await bcrypt.compare(password, user.password_hash))
   ) {
     await logAudit({
