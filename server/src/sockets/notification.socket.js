@@ -7,7 +7,7 @@ let io;
 
 export function initializeNotifications(server) {
   io = new Server(server, {
-    cors: { origin: env.CORS_ORIGIN, credentials: true },
+    cors: { origin: env.CORS_ORIGINS, credentials: true },
     transports: ["websocket", "polling"],
   });
   io.use(async (socket, next) => {

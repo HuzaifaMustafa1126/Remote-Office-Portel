@@ -1,12 +1,21 @@
 import bcrypt from "bcrypt";
 import pool from "../config/database.js";
 
+const seedEmail = process.env.SEED_ADMIN_EMAIL;
+const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+if (!seedEmail || !seedPassword || seedPassword.length < 12) {
+  console.error(
+    "Admin seed requires SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (at least 12 characters).",
+  );
+  process.exit(1);
+}
+
 const ADMIN = Object.freeze({
   employeeCode: "EMP-0001",
   firstName: "System",
   lastName: "Admin",
-  email: "admin@remoteoffice.com",
-  password: "Admin@123",
+  email: seedEmail,
+  password: seedPassword,
   jobTitle: "CEO",
   department: "Management",
   status: "ACTIVE",
@@ -44,22 +53,7 @@ async function seedAdmin() {
     let employeeId;
     if (employeeMatches.length === 1) {
       employeeId = employeeMatches[0].id;
-      await connection.execute(
-        `UPDATE employees
-         SET employee_code = ?, first_name = ?, last_name = ?, email = ?,
-             job_title = ?, department = ?, status = ?
-         WHERE id = ?`,
-        [
-          ADMIN.employeeCode,
-          ADMIN.firstName,
-          ADMIN.lastName,
-          ADMIN.email,
-          ADMIN.jobTitle,
-          ADMIN.department,
-          ADMIN.status,
-          employeeId,
-        ],
-      );
+      console.log("Existing CEO employee found; profile left unchanged.");
     } else {
       const [employeeResult] = await connection.execute(
         `INSERT INTO employees
@@ -96,22 +90,11 @@ async function seedAdmin() {
 
     let userId;
     if (userMatches.length === 1) {
-      const user = userMatches[0];
-      userId = user.id;
-      const passwordMatches = await bcrypt.compare(
-        ADMIN.password,
-        user.password_hash,
+      console.log(
+        "Existing admin user found; account, roles, permissions, and credentials left unchanged.",
       );
-      const passwordHash = passwordMatches
-        ? user.password_hash
-        : await bcrypt.hash(ADMIN.password, BCRYPT_ROUNDS);
-
-      await connection.execute(
-        `UPDATE users
-         SET employee_id = ?, email = ?, password_hash = ?, status = ?
-         WHERE id = ?`,
-        [employeeId, ADMIN.email, passwordHash, ADMIN.status, userId],
-      );
+      await connection.commit();
+      return;
     } else {
       const passwordHash = await bcrypt.hash(ADMIN.password, BCRYPT_ROUNDS);
       const [userResult] = await connection.execute(

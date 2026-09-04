@@ -9,11 +9,17 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  charset: "utf8mb4",
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   dateStrings: true,
 });
 export const verifyDatabase = async () => {
   const c = await pool.getConnection();
-  await c.ping();
-  c.release();
+  try {
+    await c.ping();
+  } finally {
+    c.release();
+  }
 };
 export default pool;
