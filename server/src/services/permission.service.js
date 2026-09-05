@@ -21,6 +21,16 @@ export async function setRolePermissions(roleId, ids, actor) {
       );
       if (valid.length !== uniqueIds.length) throw new ApiError(400, "One or more permissions are invalid");
     }
+    const [[mobile]] = await conn.execute("SELECT id FROM permissions WHERE name='portal.access_mobile'");
+    if (mobile) {
+      const [current] = await conn.execute("SELECT 1 FROM role_permissions WHERE role_id=? AND permission_id=?", [roleId, mobile.id]);
+      if (Boolean(current.length) !== uniqueIds.includes(mobile.id)) {
+        const [privileged] = await conn.execute(
+          "SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name) IN ('CEO','SUPER_ADMIN') LIMIT 1", [actor.id],
+        );
+        if (!privileged.length) throw new ApiError(403, "Only the CEO or Super Admin can change mobile portal access.");
+      }
+    }
     await conn.execute("DELETE FROM role_permissions WHERE role_id=?", [
       roleId,
     ]);

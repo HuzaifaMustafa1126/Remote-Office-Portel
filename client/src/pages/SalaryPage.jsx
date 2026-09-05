@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useEffect, useState } from "react";
 import PageHeader from "../components/common/PageHeader";
 import EmptyState from "../components/common/EmptyState";
@@ -27,7 +28,7 @@ export default function SalaryPage() {
       )}
       <section className="overflow-x-auto rounded-2xl border bg-surface">
         {rows?.length ? (
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <ResponsiveTable className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-surface-secondary text-xs uppercase text-muted-foreground">
               <tr>
                 {[
@@ -63,7 +64,7 @@ export default function SalaryPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResponsiveTable>
         ) : rows ? (
           <EmptyState
             title="No salary profiles"

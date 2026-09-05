@@ -33,7 +33,7 @@ export default function LoginPage() {
       <section className="hidden bg-sidebar p-16 text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground text-xl font-black">
-            R
+            A
           </div>
           <b className="text-xl">Abdali Marketing Portel</b>
         </div>

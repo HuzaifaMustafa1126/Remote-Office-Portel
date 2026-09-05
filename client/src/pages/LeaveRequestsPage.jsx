@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useCallback, useEffect, useState } from "react";
 import {
   CalendarCheck,
@@ -160,7 +161,7 @@ export default function LeaveRequestsPage() {
         </div>
         {data.rows.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-left text-sm">
+            <ResponsiveTable className="w-full min-w-[1000px] text-left text-sm">
               <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4">Employee</th>
@@ -200,7 +201,7 @@ export default function LeaveRequestsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         ) : (
           <EmptyState

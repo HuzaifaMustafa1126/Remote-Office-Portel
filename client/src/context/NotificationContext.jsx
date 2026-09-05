@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { useDeviceAccess } from "./DeviceAccessContext";
 import useAuth from "../hooks/useAuth";
 import * as api from "../services/notification.service";
 import {
@@ -18,6 +19,7 @@ const categoryFor = (type = "") =>
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
+  const { blocked } = useDeviceAccess();
   const [items, setItems] = useState([]),
     [unread, setUnread] = useState(0),
     [toasts, setToasts] = useState([]);
@@ -64,7 +66,7 @@ export function NotificationProvider({ children }) {
     }
   }, []);
   useEffect(() => {
-    if (!user) return;
+    if (!user || blocked) return;
     const unlock = () => {
       try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -82,11 +84,12 @@ export function NotificationProvider({ children }) {
       removeEventListener("pointerdown", unlock);
       removeEventListener("keydown", unlock);
     };
-  }, [user]);
+  }, [user, blocked]);
   useEffect(() => {
-    if (!user) {
+    if (!user || blocked) {
       disconnectNotifications();
       setItems([]);
+      setToasts([]);
       setUnread(0);
       return;
     }
@@ -129,7 +132,7 @@ export function NotificationProvider({ children }) {
       active = false;
       disconnectNotifications();
     };
-  }, [user, reconcile, play]);
+  }, [user, blocked, reconcile, play]);
   const markRead = async (id) => {
     const found = items.find((x) => x.id === id);
     await api.markRead(id);

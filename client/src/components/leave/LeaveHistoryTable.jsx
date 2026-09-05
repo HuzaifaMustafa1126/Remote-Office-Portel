@@ -1,3 +1,4 @@
+import ResponsiveTable from "../common/ResponsiveTable";
 import Button from "../common/Button";
 import EmptyState from "../common/EmptyState";
 import LeaveStatusBadge from "./LeaveStatusBadge";
@@ -13,7 +14,7 @@ export default function LeaveHistoryTable({ rows, onCancel, busy }) {
     );
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[800px] text-left text-sm">
+      <ResponsiveTable className="w-full min-w-[800px] text-left text-sm">
         <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="p-4">Leave Type</th>
@@ -54,7 +55,7 @@ export default function LeaveHistoryTable({ rows, onCancel, busy }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResponsiveTable>
     </div>
   );
 }

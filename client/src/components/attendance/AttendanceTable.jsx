@@ -1,3 +1,4 @@
+import ResponsiveTable from "../common/ResponsiveTable";
 import EmptyState from "../common/EmptyState";
 import AttendanceBadge from "./AttendanceBadge";
 import { formatDate } from "../../utils/helpers";
@@ -29,7 +30,7 @@ export default function AttendanceTable({ rows = [], showEmployee = false }) {
     );
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[700px] text-left text-sm">
+      <ResponsiveTable className="w-full min-w-[700px] text-left text-sm">
         <thead className="bg-surface-secondary/70 text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             {showEmployee && <th className="px-5 py-3">Employee</th>}
@@ -74,7 +75,7 @@ export default function AttendanceTable({ rows = [], showEmployee = false }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResponsiveTable>
     </div>
   );
 }

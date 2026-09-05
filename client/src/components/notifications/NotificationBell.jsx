@@ -22,6 +22,8 @@ export default function NotificationBell() {
     <div className="relative" ref={box}>
       <button
         title="Notifications"
+        aria-label="Notifications"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
         className="relative rounded-lg p-2 text-muted-foreground hover:bg-primary-soft hover:text-primary-text"
       >
@@ -48,7 +50,7 @@ export default function NotificationBell() {
               }}
               className="rounded-lg p-2 text-muted-foreground hover:bg-surface-secondary"
             >
-              <Settings size={17} />
+              <Settings aria-label="Notification settings" size={17} />
             </button>
           </div>
           <div className="max-h-[55vh] divide-y divide-border overflow-y-auto">

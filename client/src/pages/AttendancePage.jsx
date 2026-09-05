@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useEffect, useState } from "react";
 import AttendanceFilters from "../components/attendance/AttendanceFilters";
 import AttendanceTable from "../components/attendance/AttendanceTable";
@@ -168,7 +169,7 @@ export default function AttendancePage() {
           />
           {monthly ? (
             <section className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-              <table className="w-full text-left text-sm">
+              <ResponsiveTable className="w-full text-left text-sm">
                 <thead className="border-b bg-surface-secondary text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="p-4">Employee</th>
@@ -200,7 +201,7 @@ export default function AttendancePage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </section>
           ) : (
             <Loader />

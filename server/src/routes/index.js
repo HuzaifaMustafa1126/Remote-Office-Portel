@@ -1,3 +1,4 @@
+import { requireDeviceAccess } from "../middleware/deviceAccess.middleware.js";
 import { Router } from "express";
 import { authenticate, requirePasswordChanged } from "../middleware/auth.middleware.js";
 import auth from "./auth.routes.js";
@@ -37,6 +38,7 @@ r.get(
 );
 r.use("/auth", auth);
 r.use(authenticate);
+r.use(requireDeviceAccess);
 r.use(requirePasswordChanged);
 r.use("/dashboard", dashboard);
 r.use("/attendance", attendance);

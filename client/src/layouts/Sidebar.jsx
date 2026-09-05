@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import {
+  LogOut,
   LayoutDashboard,
   Palette,
   Users,
@@ -59,7 +61,34 @@ const groups = [
   },
 ];
 export default function Sidebar({ open, onClose }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const panel = useRef(null);
+  const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktop(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!open || desktop) return;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panel.current?.querySelector("button")?.focus();
+    const keydown = (event) => {
+      if (event.key === "Escape") close.current();
+      if (event.key !== "Tab") return;
+      const focusable = [...panel.current.querySelectorAll("a[href], button:not([disabled])")].filter(el => el.getClientRects().length);
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", keydown); previous?.focus(); };
+  }, [open, desktop]);
   return (
     <>
       <div
@@ -67,7 +96,12 @@ export default function Sidebar({ open, onClose }) {
         className={`fixed inset-0 z-30 bg-overlay/40 lg:hidden ${open ? "block" : "hidden"}`}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        ref={panel}
+        inert={!open && !desktop ? true : undefined}
+        role={!desktop ? "dialog" : undefined}
+        aria-modal={!desktop && open ? true : undefined}
+        aria-label="Main navigation"
+        className={`fixed inset-y-0 left-0 z-40 flex w-[85vw] max-w-80 lg:w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex h-20 items-center justify-between px-5">
           <div className="flex items-center gap-3">
@@ -79,7 +113,7 @@ export default function Sidebar({ open, onClose }) {
               <p className="text-xs text-sidebar-muted">Portel</p>
             </div>
           </div>
-          <button aria-label="Close navigation" className="lg:hidden" onClick={onClose}>
+          <button aria-label="Close navigation" className="shrink-0 rounded-lg p-2 lg:hidden" onClick={onClose}>
             <X />
           </button>
         </div>
@@ -112,7 +146,9 @@ export default function Sidebar({ open, onClose }) {
           })}
         </nav>
         <div className="border-t border-sidebar-foreground/10 p-4 text-xs text-sidebar-muted">
-          Secure Workspace
+          <p className="break-words font-semibold text-sidebar-foreground">{user.name}</p>
+          <p className="mt-1">{user.roles.join(", ")}</p>
+          <button onClick={logout} className="mt-3 flex w-full items-center gap-2 rounded-lg p-2 text-sidebar-foreground hover:bg-sidebar-foreground/10"><LogOut size={18} /> Sign Out</button>
         </div>
       </aside>
     </>

@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useCallback, useEffect, useState } from "react";
 import {
   BriefcaseBusiness,
@@ -107,7 +108,7 @@ function EmployeeAttendance({ employees }) {
         </Link>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[650px] text-left text-sm">
+        <ResponsiveTable className="w-full min-w-[650px] text-left text-sm">
           <thead className="bg-surface-secondary/70 text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3">Employee</th>
@@ -140,7 +141,7 @@ function EmployeeAttendance({ employees }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </ResponsiveTable>
         {!employees.length && (
           <p className="p-10 text-center text-sm text-muted-foreground">
             No attendance-tracked employees.

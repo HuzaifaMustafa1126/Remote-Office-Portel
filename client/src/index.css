@@ -129,3 +129,37 @@ button:disabled {
 @media print { body, .report-print { background: #fff; color: #000; } }
 
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+
+/* Shared responsive layout rules keep wide data inside its own scroll region. */
+.portal-content :where(.grid, .flex) > * { min-width: 0; }
+.portal-content :where(section, form, fieldset) { min-width: 0; max-width: 100%; }
+.portal-content :where(input, select, textarea) { min-width: 0; max-width: 100%; }
+.portal-content :where(p, h1, h2, h3, dd) { overflow-wrap: anywhere; }
+.mobile-cell-label { display: none; }
+.mobile-cell-value { display: contents; }
+@media (max-width: 767px) {
+  button, [role="button"], nav a { min-height: 44px; }
+  button:has(svg), a:has(> svg) { min-width: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { min-height: 44px; font-size: 16px; }
+  .portal-content form.grid { grid-template-columns: minmax(0, 1fr); }
+  .portal-content form.grid > * { grid-column: auto; }
+  .page-header { flex-direction: column; }
+  .page-header > * { max-width: 100%; }
+  .page-header > .flex { flex-wrap: wrap; }
+  dialog { max-width: calc(100vw - 24px); }
+  dialog form > .flex:last-child { flex-wrap: wrap; }
+  dialog form > .flex:last-child > button { flex: 1 1 120px; }
+  .responsive-table { display: block; width: 100%; min-width: 0; }
+  .responsive-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .responsive-table tbody { display: grid; gap: 12px; padding: 12px; }
+  .responsive-table tbody > tr { display: block; min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px; }
+  .responsive-table td { display: grid; grid-template-columns: minmax(80px, .8fr) minmax(0, 1.2fr); align-items: start; gap: 12px; width: auto; padding: 8px 0; white-space: normal; overflow: visible; max-width: none; border: 0; overflow-wrap: anywhere; }
+  .responsive-table td[colspan] { display: block; }
+  .responsive-table .mobile-cell-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+  .responsive-table .mobile-cell-value { display: block; min-width: 0; }
+  .responsive-table td:first-child { display: block; font-weight: 600; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .responsive-table td:first-child .mobile-cell-label { margin-bottom: 4px; }
+  .responsive-table td:has(button, a) { grid-template-columns: minmax(0, 1fr); }
+  .responsive-table td .flex { flex-wrap: wrap; }
+  .responsive-table .truncate { white-space: normal; overflow: visible; }
+}

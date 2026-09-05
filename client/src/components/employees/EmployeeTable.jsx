@@ -1,3 +1,4 @@
+import ResponsiveTable from "../common/ResponsiveTable";
 import { Eye, Pencil, Power, KeyRound, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import EmptyState from "../common/EmptyState";
@@ -16,7 +17,7 @@ export default function EmployeeTable({
   if (!employees.length) return <EmptyState title="No employees found" />;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1050px] text-left text-sm">
+      <ResponsiveTable className="w-full min-w-[1050px] text-left text-sm">
         <thead className="border-b bg-surface-secondary text-xs uppercase text-muted-foreground">
           <tr>
             {[
@@ -87,7 +88,7 @@ export default function EmployeeTable({
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResponsiveTable>
     </div>
   );
 }

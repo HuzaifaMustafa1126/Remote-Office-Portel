@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useEffect, useState } from "react";
 import PageHeader from "../components/common/PageHeader";
 import Modal from "../components/common/Modal";
@@ -5,11 +6,11 @@ import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import * as api from "../services/shift.service";
 import { errorMessage } from "../utils/helpers";
+import { requiredWorkMinutes } from "../utils/shift";
 const empty = {
   name: "",
   startTime: "18:00",
   endTime: "03:00",
-  requiredWorkMinutes: 480,
   breakAllowanceMinutes: 60,
   graceMinutes: 15,
 };
@@ -20,6 +21,11 @@ export default function ShiftManagementPage() {
     [open, setOpen] = useState(false),
     [editing, setEditing] = useState(null),
     [error, setError] = useState("");
+  const calculatedWorkMinutes = requiredWorkMinutes(
+    form.startTime,
+    form.endTime,
+    form.breakAllowanceMinutes,
+  );
   const load = () => api.listShifts().then(setRows);
   useEffect(() => {
     load();
@@ -30,7 +36,6 @@ export default function ShiftManagementPage() {
       name: x.name,
       startTime: x.startTime,
       endTime: x.endTime,
-      requiredWorkMinutes: x.requiredWorkMinutes,
       breakAllowanceMinutes: x.breakAllowanceMinutes,
       graceMinutes: x.graceMinutes,
     });
@@ -39,10 +44,15 @@ export default function ShiftManagementPage() {
   const save = async (e) => {
     e.preventDefault();
     setError("");
+    if (calculatedWorkMinutes === "" || calculatedWorkMinutes < 1) {
+      setError("Shift duration must exceed the break allowance.");
+      return;
+    }
     try {
+      const data = { ...form, requiredWorkMinutes: calculatedWorkMinutes };
       editing
-        ? await api.updateShift(editing.id, form)
-        : await api.createShift(form);
+        ? await api.updateShift(editing.id, data)
+        : await api.createShift(data);
       setOpen(false);
       await load();
     } catch (x) {
@@ -67,7 +77,7 @@ export default function ShiftManagementPage() {
         }
       />
       <section className="overflow-x-auto rounded-2xl border border-border bg-surface">
-        <table className="w-full min-w-[850px] text-left text-sm">
+        <ResponsiveTable className="w-full min-w-[850px] text-left text-sm">
           <thead className="bg-surface-secondary text-xs uppercase text-muted-foreground">
             <tr>
               {[
@@ -129,7 +139,7 @@ export default function ShiftManagementPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </ResponsiveTable>
       </section>
       <Modal
         open={open}
@@ -170,15 +180,15 @@ export default function ShiftManagementPage() {
           <Input
             label="Required Work Minutes"
             type="number"
-            required
-            value={form.requiredWorkMinutes}
-            onChange={(e) =>
-              setForm({ ...form, requiredWorkMinutes: Number(e.target.value) })
-            }
+            readOnly
+            value={calculatedWorkMinutes}
+            aria-describedby="required-work-help"
           />
           <Input
             label="Break Allowance Minutes"
             type="number"
+            min="0"
+            max="480"
             required
             value={form.breakAllowanceMinutes}
             onChange={(e) =>
@@ -188,6 +198,10 @@ export default function ShiftManagementPage() {
               })
             }
           />
+          <p id="required-work-help" className="text-xs text-muted-foreground sm:col-span-2">
+            Required work is calculated automatically from the start and end
+            times, minus the break allowance.
+          </p>
           {error && (
             <p className="text-sm text-danger sm:col-span-2">{error}</p>
           )}

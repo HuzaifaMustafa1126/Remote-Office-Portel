@@ -1,3 +1,4 @@
+import { getDeviceType } from "../utils/device";
 import { io } from "socket.io-client";
 let socket;
 const socketUrl =
@@ -9,9 +10,15 @@ const socketUrl =
 export function connectNotifications(token) {
   if (socket) socket.disconnect();
   socket = io(socketUrl, {
-    auth: { token },
+    auth: { token, deviceType: getDeviceType() },
     autoConnect: true,
     reconnection: true,
+  });
+  socket.on("connect_error", (error) => {
+    if (error.data?.code === "MOBILE_ACCESS_DENIED") {
+      socket.disconnect();
+      window.dispatchEvent(new CustomEvent("device:denied"));
+    }
   });
   return socket;
 }

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import DeviceAccessGuard from "../components/auth/DeviceAccessGuard";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 import PermissionGuard from "../components/roles/PermissionGuard";
 import AppLayout from "../layouts/AppLayout";
@@ -40,7 +41,7 @@ export default function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <AppLayout />
+            <DeviceAccessGuard><AppLayout /></DeviceAccessGuard>
           </ProtectedRoute>
         }
       >

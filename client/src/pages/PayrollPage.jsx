@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useEffect, useState } from "react";
 import PageHeader from "../components/common/PageHeader";
 import Button from "../components/common/Button";
@@ -101,14 +102,14 @@ export default function PayrollPage() {
         <section className="overflow-x-auto rounded-2xl border bg-surface">
           {selected ? (
             <>
-              <div className="flex items-center justify-between border-b p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
                 <div>
                   <b>{selected.periodLabel} Payroll</b>
                   <small className="block text-muted-foreground">
                     {selected.periodStart} → {selected.periodEnd}
                   </small>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {selected.status === "DRAFT" && (
                     <><Button variant="secondary" onClick={async()=>{await api.recalculate(selected.periodLabel);await refresh()}}>Recalculate</Button><Button onClick={async()=>{const total=selected.items.reduce((n,x)=>n+Number(x.net_salary),0);if(!window.confirm(`Approve ${selected.periodStart} → ${selected.periodEnd} payroll with net total ${money(total)}?`))return;await api.approve(selected.id);await refresh()}}>Approve Payroll</Button></>
                   )}
@@ -117,7 +118,7 @@ export default function PayrollPage() {
                   )}
                 </div>
               </div>
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <ResponsiveTable className="w-full min-w-[900px] text-left text-sm">
                 <thead className="bg-surface-secondary text-xs text-muted-foreground">
                   <tr>
                     {[
@@ -158,13 +159,13 @@ export default function PayrollPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
               {selected.reviewRequired?<p className="m-4 rounded-xl bg-warning-soft p-3 text-sm font-semibold text-warning">Requires Review — underlying salary or operational data changed after approval.</p>:null}
               <div className="grid gap-5 border-t p-4 lg:grid-cols-2">
                 <section><h3 className="mb-3 font-bold">Adjustments</h3>{selected.adjustments?.length?selected.adjustments.map(x=><div key={x.id} className="mb-2 rounded-xl bg-surface-secondary p-3 text-sm"><b>{x.title}</b> · {x.type} · {money(x.amount)}<p className="text-muted-foreground">{x.reason} · {x.createdBy||"System"}</p>{selected.status==="DRAFT"&&<button className="mt-1 text-danger" onClick={async()=>{if(confirm("Remove this adjustment?")){await api.removeAdjustment(selected.id,x.id);await refresh()}}}>Remove</button>}</div>):<p className="text-sm text-muted-foreground">No manual adjustments.</p>}</section>
                 <section><h3 className="mb-3 font-bold">Payroll Activity</h3>{selected.activity?.length?selected.activity.map(x=><div key={x.id} className="mb-3 border-l-2 border-primary-border pl-3 text-sm"><b>{x.description}</b><p className="text-muted-foreground">{x.performedBy||"System"} · {new Date(x.createdAt).toLocaleString()}</p>{x.reason&&<p>Reason: {x.reason}</p>}</div>):<p className="text-sm text-muted-foreground">No activity recorded.</p>}</section>
               </div>
-              <details className="border-t p-4"><summary className="cursor-pointer font-bold">Day Breakdown ({selected.days?.length||0})</summary><div className="mt-3 max-h-96 overflow-auto"><table className="w-full text-sm"><thead><tr><th>Employee</th><th>Work Date</th><th>Classification</th><th>Deduction</th><th>Source</th></tr></thead><tbody>{selected.days?.map(x=><tr className="border-t" key={x.id}><td>{selected.items.find(i=>i.employee_id===x.employeeId)?.employeeName}</td><td>{x.work_date}</td><td>{x.classification}</td><td>{money(x.deduction_amount)}</td><td>{x.attendance_id?`Attendance #${x.attendance_id}`:x.leave_day_id?`Leave #${x.leave_day_id}`:x.calendar_day_id?`Calendar #${x.calendar_day_id}`:"Policy"}</td></tr>)}</tbody></table></div></details>
+              <details className="border-t p-4"><summary className="cursor-pointer font-bold">Day Breakdown ({selected.days?.length||0})</summary><div className="mt-3 max-h-96 overflow-auto"><ResponsiveTable className="w-full text-sm"><thead><tr><th>Employee</th><th>Work Date</th><th>Classification</th><th>Deduction</th><th>Source</th></tr></thead><tbody>{selected.days?.map(x=><tr className="border-t" key={x.id}><td>{selected.items.find(i=>i.employee_id===x.employeeId)?.employeeName}</td><td>{x.work_date}</td><td>{x.classification}</td><td>{money(x.deduction_amount)}</td><td>{x.attendance_id?`Attendance #${x.attendance_id}`:x.leave_day_id?`Leave #${x.leave_day_id}`:x.calendar_day_id?`Calendar #${x.calendar_day_id}`:"Policy"}</td></tr>)}</tbody></ResponsiveTable></div></details>
             </>
           ) : (
             <p className="p-10 text-center text-muted-foreground">

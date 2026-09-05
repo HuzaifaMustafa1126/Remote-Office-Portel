@@ -1,3 +1,4 @@
+import ResponsiveTable from "../components/common/ResponsiveTable";
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import Button from "../components/common/Button";
@@ -88,7 +89,7 @@ export default function CompanyCalendarPage() {
       <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         {rows.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm">
+            <ResponsiveTable className="w-full min-w-[850px] text-left text-sm">
               <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4">Date</th>
@@ -140,7 +141,7 @@ export default function CompanyCalendarPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         ) : (
           <EmptyState

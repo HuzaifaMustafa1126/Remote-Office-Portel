@@ -12,6 +12,7 @@ import { listRoles } from "../services/role.service";
 import { errorMessage } from "../utils/helpers";
 import { PERMISSIONS as P } from "../utils/permissions";
 const friendly = {
+  "portal.access_mobile": ["Access Portal on Mobile", "Allows this role to access the Remote Office Portal from mobile devices."],
   "dashboard.view": ["View Dashboard", "Can view the organization dashboard"],
   "attendance.clock": [
     "Clock Attendance",
@@ -93,7 +94,7 @@ const friendly = {
   "audit.view": ["View Audit Logs", "Can review system and user activity"],
 };
 const groupFor = (name) =>
-  name.startsWith("dashboard.")
+  name.startsWith("portal.") ? "Portal Access" : name.startsWith("dashboard.")
     ? "Dashboard"
     : name.startsWith("attendance.")
       ? "Attendance"
@@ -113,7 +114,8 @@ const groupFor = (name) =>
               ? "Roles & Permissions"
               : "System";
 export default function PermissionsPage() {
-  const { refresh: refreshAuth } = useAuth();
+  const { user, refresh: refreshAuth } = useAuth();
+  const manageMobile = user.roles.some(role => ["CEO", "SUPER_ADMIN"].includes(role.toUpperCase()));
   const [roles, setRoles] = useState([]),
     [perms, setPerms] = useState([]),
     [roleId, setRoleId] = useState(""),
@@ -227,10 +229,10 @@ export default function PermissionsPage() {
                         className="sr-only"
                         type="checkbox"
                         checked={selected.includes(p.id)}
-                        disabled={!manage}
+                        disabled={!manage || (p.name === "portal.access_mobile" && !manageMobile)}
                         onChange={() => toggle(p.id)}
                       />
-                      <span>
+                      <span className="min-w-0 break-words">
                         <b className="block text-sm">{label}</b>
                         <span className="block text-xs text-muted-foreground">
                           {description}
@@ -247,7 +249,7 @@ export default function PermissionsPage() {
           ))}
         </div>
         {manage && (
-          <div className="mt-6 flex items-center gap-3 border-t border-border pt-5">
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-5">
             <Button disabled={!dirty || saving} onClick={save}>
               <span className="flex items-center gap-2">
                 <Save size={16} />

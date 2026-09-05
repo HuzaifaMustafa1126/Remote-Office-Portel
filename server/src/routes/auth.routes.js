@@ -1,3 +1,4 @@
+import { requireDeviceAccess } from "../middleware/deviceAccess.middleware.js";
 import { Router } from "express";
 import * as c from "../controllers/auth.controller.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -9,5 +10,5 @@ r.post("/login", validate(loginSchema), asyncHandler(c.login));
 r.get("/me", authenticate, asyncHandler(c.me));
 r.post("/heartbeat",authenticate,asyncHandler(c.heartbeat));
 r.post("/logout",authenticate,asyncHandler(c.logout));
-r.patch("/change-password", authenticate, validate(changePasswordSchema), asyncHandler(c.changePassword));
+r.patch("/change-password", authenticate, requireDeviceAccess, validate(changePasswordSchema), asyncHandler(c.changePassword));
 export default r;

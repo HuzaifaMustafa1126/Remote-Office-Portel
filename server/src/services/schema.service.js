@@ -20,6 +20,7 @@ const requiredColumns = {
   employee_salary_profiles: ["change_reason"],
 };
 const requiredMigrations = [
+  "018_mobile_portal_access.sql",
   "014_employee_password_archive.sql",
   "015_remove_employee_archiving.sql",
   "016_fix_saturday_off_calendar_type.sql",

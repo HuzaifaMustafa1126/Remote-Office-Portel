@@ -1,3 +1,5 @@
+import { hasMobileAccess } from "../middleware/deviceAccess.middleware.js";
+import { isMobileRequest } from "../utils/deviceAccess.js";
 import { Server } from "socket.io";
 import pool from "../config/database.js";
 import env from "../config/env.js";
@@ -25,6 +27,11 @@ export function initializeNotifications(server) {
         "SELECT r.name FROM roles r JOIN user_roles ur ON ur.role_id=r.id WHERE ur.user_id=?",
         [user.id],
       );
+      if (isMobileRequest(socket.handshake.headers, socket.handshake.auth?.deviceType) && !(await hasMobileAccess(user.id))) {
+        const error = new Error("Mobile access denied");
+        error.data = { code: "MOBILE_ACCESS_DENIED" };
+        return next(error);
+      }
       socket.data.userId = user.id;
       socket.data.roles = roles.map((row) => row.name);
       next();

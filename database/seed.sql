@@ -23,4 +23,6 @@ INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('attendance.clock','attendance.view_own') WHERE r.name='Employee';
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name IN ('leave.create','leave.view_own','leave.cancel_own') WHERE r.name='Employee';
 INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name='calendar.view' WHERE r.name='Employee';
- 
+
+INSERT IGNORE INTO permissions(name,description) VALUES ('portal.access_mobile','Allows this role to access the Remote Office Portal from mobile devices.');
+INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON p.name='portal.access_mobile' WHERE UPPER(r.name) IN ('CEO','ADMIN','SUPER_ADMIN');

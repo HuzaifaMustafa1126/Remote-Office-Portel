@@ -1,0 +1,39 @@
+{
+  "widths": [
+    320,
+    375,
+    390,
+    414,
+    430,
+    768,
+    1024,
+    1280,
+    1440
+  ],
+  "access": [
+    "CEO desktop passed",
+    "CEO tablet passed",
+    "CEO mobile passed",
+    "ADMIN desktop passed",
+    "ADMIN tablet passed",
+    "ADMIN mobile passed",
+    "Employee desktop passed",
+    "Employee tablet passed",
+    "Employee mobile passed",
+    "CEO phone login passed",
+    "Employee phone login passed",
+    "Employee desktop resize and recovery passed",
+    "backend denial screen passed"
+  ],
+  "themes": [
+    "LIGHT CEO passed",
+    "LIGHT Employee passed",
+    "DARK CEO passed",
+    "DARK Employee passed",
+    "BLACK_WHITE CEO passed",
+    "BLACK_WHITE Employee passed"
+  ],
+  "issues": [],
+  "consoleErrors": [],
+  "unknown": []
+}

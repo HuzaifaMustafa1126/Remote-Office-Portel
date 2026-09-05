@@ -1,4 +1,5 @@
 export const PERMISSIONS = {
+  MOBILE_ACCESS: "portal.access_mobile",
   DASHBOARD: "dashboard.view",
   EMPLOYEES_OWN: "employees.view_own",
   EMPLOYEES_ALL: "employees.view_all",

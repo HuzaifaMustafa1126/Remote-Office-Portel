@@ -4,6 +4,7 @@ import ApiError from "../utils/ApiError.js";
 import { signToken } from "../utils/jwt.js";
 import { logAudit } from "./audit.service.js";
 import { randomUUID } from "node:crypto";
+import { notifyRoles } from "./notification.service.js";
 export const MAX_SESSION_HOURS = 8;
 export async function getUserProfile(userId) {
   const [users] = await pool.execute(
@@ -55,6 +56,21 @@ export async function loginUser(email, password, meta = {}) {
     const profile=await getUserProfile(user.id);
     await c.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)VALUES(?,?,'USER_LOGIN','AUTH_SESSION',?,?)",[user.id,user.employee_id,user.id,`${profile.name} signed in. Session expires at ${session.expiresAt}.`]);
     await c.commit();
+    if (user.employee_id) {
+      try {
+        await notifyRoles(["CEO", "ADMIN"], {
+          type: "ATTENDANCE_PORTAL_LOGIN",
+          title: "Employee logged in",
+          message: `${profile.name || profile.email} logged in to the portal.`,
+          referenceType: "EMPLOYEE",
+          referenceId: user.employee_id,
+          actionUrl: `/employees/${user.employee_id}`,
+        });
+      } catch (error) {
+        // A notification outage must not reject an already committed login.
+        console.error("Failed to send employee login notification:", error);
+      }
+    }
     return{token:signToken({sub:user.id,sid:sessionId}),user:profile,expiresAt:session.expiresAt};
   }catch(e){await c.rollback();throw e}finally{c.release()}
 }
