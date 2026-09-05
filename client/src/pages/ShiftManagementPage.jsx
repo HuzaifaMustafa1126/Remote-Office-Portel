@@ -66,9 +66,9 @@ export default function ShiftManagementPage() {
           </Button>
         }
       />
-      <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <section className="overflow-x-auto rounded-2xl border border-border bg-surface">
         <table className="w-full min-w-[850px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+          <thead className="bg-surface-secondary text-xs uppercase text-muted-foreground">
             <tr>
               {[
                 "Shift",
@@ -101,7 +101,7 @@ export default function ShiftManagementPage() {
                 <td className="px-4 py-3">
                   <span
                     title={x.assignedEmployeeNames || "No active assignments"}
-                    className="font-semibold text-indigo-600"
+                    className="font-semibold text-primary-text"
                   >
                     {x.assignedEmployees}
                   </span>
@@ -109,14 +109,14 @@ export default function ShiftManagementPage() {
                 <td className="px-4 py-3">{x.status}</td>
                 <td className="px-4 py-3">
                   <button
-                    className="font-semibold text-indigo-600"
+                    className="font-semibold text-primary-text"
                     onClick={() => edit(x)}
                   >
                     Edit
                   </button>
                   {x.status === "ACTIVE" && (
                     <button
-                      className="ml-3 text-red-600"
+                      className="ml-3 text-danger"
                       onClick={async () => {
                         await api.deactivateShift(x.id);
                         load();
@@ -189,7 +189,7 @@ export default function ShiftManagementPage() {
             }
           />
           {error && (
-            <p className="text-sm text-red-600 sm:col-span-2">{error}</p>
+            <p className="text-sm text-danger sm:col-span-2">{error}</p>
           )}
           <div className="flex justify-end gap-2 sm:col-span-2">
             <Button

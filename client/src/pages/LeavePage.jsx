@@ -51,18 +51,18 @@ export default function LeavePage() {
         description="Request leave and review your monthly leave status."
       />
       {notice && (
-        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
           {notice}
         </div>
       )}
       <LeaveSummaryCards summary={summary} />
       <div className="mt-5 grid gap-5 xl:grid-cols-[.75fr_1.25fr]">
-        <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <h2 className="mb-4 font-bold">Request Leave</h2>
           <LeaveRequestForm onSubmit={submit} busy={busy} />
         </section>
-        <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-5">
+        <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+          <div className="border-b border-border p-5">
             <h2 className="font-bold">Leave History</h2>
           </div>
           <LeaveHistoryTable rows={rows} onCancel={cancel} busy={busy} />

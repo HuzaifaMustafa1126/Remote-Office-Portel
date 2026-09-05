@@ -60,7 +60,7 @@ export default function LeaveRequestForm({ onSubmit, busy }) {
         <select
           value={form.leaveType}
           onChange={(e) => set("leaveType", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         >
           {types.map(([v, l]) => (
             <option key={v} value={v}>
@@ -69,9 +69,9 @@ export default function LeaveRequestForm({ onSubmit, busy }) {
           ))}
         </select>
       </label>
-      <div className="rounded-xl bg-indigo-50 p-3 text-center">
-        <p className="text-xs text-indigo-500">Actual Working Days</p>
-        <p className="text-2xl font-black text-indigo-700">{days}</p>
+      <div className="rounded-xl bg-primary-soft p-3 text-center">
+        <p className="text-xs text-primary-text">Actual Working Days</p>
+        <p className="text-2xl font-black text-primary-text">{days}</p>
       </div>
       <label className="text-sm font-semibold">
         From
@@ -80,7 +80,7 @@ export default function LeaveRequestForm({ onSubmit, busy }) {
           type="date"
           value={form.startDate}
           onChange={(e) => set("startDate", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <label className="text-sm font-semibold">
@@ -91,7 +91,7 @@ export default function LeaveRequestForm({ onSubmit, busy }) {
           type="date"
           value={form.endDate}
           onChange={(e) => set("endDate", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <label className="text-sm font-semibold sm:col-span-2">
@@ -102,7 +102,7 @@ export default function LeaveRequestForm({ onSubmit, busy }) {
           rows={4}
           value={form.reason}
           onChange={(e) => set("reason", e.target.value)}
-          className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 p-3 font-normal"
+          className="mt-1.5 w-full resize-none rounded-xl border border-border p-3 font-normal"
           placeholder="Briefly explain your leave request"
         />
       </label>

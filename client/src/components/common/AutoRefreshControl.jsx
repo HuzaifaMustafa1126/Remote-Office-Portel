@@ -25,14 +25,14 @@ export default function AutoRefreshControl({
   onRefresh,
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 rounded-2xl border border-border bg-surface px-3 py-2 shadow-sm">
       <div className="text-right">
         <p
-          className={`text-xs font-medium ${error ? "text-red-600" : "text-slate-500"}`}
+          className={`text-xs font-medium ${error ? "text-danger" : "text-muted-foreground"}`}
         >
           {error || `Last updated: ${updated(lastUpdated)}`}
         </p>
-        <p className="text-[10px] text-slate-400">
+        <p className="text-[10px] text-muted-foreground">
           {interval
             ? `Next refresh in ${countdown}s`
             : "Automatic refresh is off"}
@@ -41,12 +41,12 @@ export default function AutoRefreshControl({
             : ""}
         </p>
       </div>
-      <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+      <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
         Auto Refresh
         <select
           value={interval}
           onChange={(e) => onIntervalChange(Number(e.target.value))}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-400"
+          className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary-border"
         >
           {options.map(([value, label]) => (
             <option key={value} value={value}>
@@ -58,7 +58,7 @@ export default function AutoRefreshControl({
       <button
         disabled={refreshing}
         onClick={onRefresh}
-        className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+        className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
       >
         <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
         {refreshing ? "Refreshing…" : "Refresh"}

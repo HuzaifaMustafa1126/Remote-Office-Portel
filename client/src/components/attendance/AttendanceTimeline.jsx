@@ -40,7 +40,7 @@ export default function AttendanceTimeline({ items = [] }) {
   }, [items]);
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <h2 className="font-bold">Today’s Timeline</h2>
         <div className="mt-4">
           {items.length ? (
@@ -52,22 +52,22 @@ export default function AttendanceTimeline({ items = [] }) {
                   className="relative flex gap-3 pb-5 last:pb-0"
                 >
                   {index < items.length - 1 && (
-                    <span className="absolute left-4 top-8 h-full w-px bg-slate-100" />
+                    <span className="absolute left-4 top-8 h-full w-px bg-surface-secondary" />
                   )}
-                  <span className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-indigo-600">
+                  <span className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text">
                     <Icon size={16} />
                   </span>
                   <div>
                     <p className="text-sm font-semibold">
                       {labels[item.type] || item.type}
                     </p>
-                    <p className="text-xs text-slate-400">{time(item.at)}</p>
+                    <p className="text-xs text-muted-foreground">{time(item.at)}</p>
                   </div>
                 </div>
               );
             })
           ) : (
-            <p className="py-5 text-center text-xs text-slate-400">
+            <p className="py-5 text-center text-xs text-muted-foreground">
               No attendance activity yet today.
             </p>
           )}

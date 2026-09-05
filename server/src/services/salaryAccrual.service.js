@@ -35,6 +35,7 @@ export async function getEmployeeSalaryAccrual(
     : [[]];
   const ledger = [];
   let presentDays = 0,
+    paidOffDays = 0,
     freeLeaveDays = 0,
     deductibleLeaveDays = 0,
     unauthorizedAbsenceDays = 0,
@@ -57,17 +58,20 @@ export async function getEmployeeSalaryAccrual(
     );
     const sunday = cursor.getUTCDay() === 0,
       off =
-        calendar && calendar.dayType !== "WORKING_DAY"
-          ? calendar.dayType
+        calendar
+          ? calendar.dayType === "WORKING_DAY" ? null : calendar.dayType
           : sunday
             ? "WEEKLY_OFF"
             : null;
     if (off) {
+      paidOffDays++;
+      validPaidDays++;
+      processedDays++;
       ledger.push({
         date,
         classification: off,
         label: calendar?.title || "Sunday / Weekly Off",
-        earned: 0,
+        earned: dailyRate,
         deduction: 0,
         isOffDay: true,
         source: { calendarId: calendar?.id || null },
@@ -188,6 +192,7 @@ export async function getEmployeeSalaryAccrual(
     validPaidDays,
     processedDays,
     presentDays,
+    paidOffDays,
     freeLeaveDays,
     deductibleLeaveDays,
     unauthorizedAbsenceDays,

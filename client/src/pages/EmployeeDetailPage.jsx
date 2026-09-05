@@ -27,7 +27,7 @@ export default function EmployeeDetailPage() {
         title={`${e.firstName} ${e.lastName}`}
         description={e.employeeCode}
       />
-      <div className="grid gap-5 rounded-2xl bg-white p-6 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-5 rounded-2xl bg-surface p-6 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
         {[
           ["Email", e.email],
           ["Phone", e.phone],
@@ -37,14 +37,14 @@ export default function EmployeeDetailPage() {
           ["Roles", e.roles?.join(", ") || "None"],
         ].map(([k, v]) => (
           <div key={k}>
-            <p className="text-xs font-semibold uppercase text-slate-400">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
               {k}
             </p>
             <p className="mt-1 font-medium">{v || "—"}</p>
           </div>
         ))}
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-slate-400">
+          <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
             Status
           </p>
           <StatusBadge status={e.status} />

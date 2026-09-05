@@ -23,22 +23,22 @@ export default function NotificationBell() {
       <button
         title="Notifications"
         onClick={() => setOpen(!open)}
-        className="relative rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+        className="relative rounded-lg p-2 text-muted-foreground hover:bg-primary-soft hover:text-primary-text"
       >
         <Bell size={20} />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1 text-center text-[10px] font-bold leading-5 text-white">
+          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[10px] font-bold leading-5 text-danger-foreground">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="fixed inset-x-3 top-16 z-50 max-h-[75vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-96">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div className="fixed inset-x-3 top-16 z-50 max-h-[75vh] overflow-hidden rounded-2xl border border-border bg-surface shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-96">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
               <h2 className="font-semibold">Notifications</h2>
               {!connected && (
-                <p className="text-xs text-amber-600">● Reconnecting…</p>
+                <p className="text-xs text-warning">● Reconnecting…</p>
               )}
             </div>
             <button
@@ -46,12 +46,12 @@ export default function NotificationBell() {
                 setOpen(false);
                 nav("/notification-settings");
               }}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              className="rounded-lg p-2 text-muted-foreground hover:bg-surface-secondary"
             >
               <Settings size={17} />
             </button>
           </div>
-          <div className="max-h-[55vh] divide-y divide-slate-100 overflow-y-auto">
+          <div className="max-h-[55vh] divide-y divide-border overflow-y-auto">
             {items.length ? (
               items.map((x) => (
                 <NotificationItem
@@ -62,16 +62,16 @@ export default function NotificationBell() {
                 />
               ))
             ) : (
-              <p className="p-8 text-center text-sm text-slate-500">
+              <p className="p-8 text-center text-sm text-muted-foreground">
                 No notifications yet.
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-sm">
             <button
               onClick={markAll}
               disabled={!unread}
-              className="font-medium text-indigo-600 disabled:text-slate-400"
+              className="font-medium text-primary-text disabled:text-muted-foreground"
             >
               Mark all as read
             </button>
@@ -80,7 +80,7 @@ export default function NotificationBell() {
                 setOpen(false);
                 nav("/notifications");
               }}
-              className="font-semibold text-slate-700"
+              className="font-semibold text-foreground"
             >
               View all
             </button>

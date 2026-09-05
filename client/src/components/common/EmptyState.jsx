@@ -5,9 +5,9 @@ export default function EmptyState({
 }) {
   return (
     <div className="grid place-items-center gap-2 p-12 text-center">
-      <Inbox className="text-slate-300" size={40} />
+      <Inbox className="text-muted-foreground" size={40} />
       <h3 className="font-semibold">{title}</h3>
-      <p className="text-sm text-slate-500">{description}</p>
+      <p className="text-sm text-muted-foreground">{description}</p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import Button from "../components/common/Button";
 import PasswordInput from "../components/common/PasswordInput";
 import useAuth from "../hooks/useAuth";
@@ -23,10 +23,11 @@ export default function AccountSettingsPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">Account Settings</h1>
-      <p className="mt-1 text-sm text-slate-500">{forced ? "You must create a new password before continuing." : "Manage your profile and account security."}</p>
-      <section className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+      <p className="mt-1 text-sm text-muted-foreground">{forced ? "You must create a new password before continuing." : "Manage your profile and account security."}</p>
+      {!forced && <Link to="/settings/appearance" className="mt-5 inline-flex rounded-xl border border-border bg-surface px-4 py-3 font-semibold text-primary-text">Appearance →</Link>}
+      <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-lg font-bold">Change Password</h2>
-        {notice && <div role="status" className={`mt-4 rounded-xl p-3 text-sm ${notice.includes("successfully") ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{notice}</div>}
+        {notice && <div role="status" className={`mt-4 rounded-xl p-3 text-sm ${notice.includes("successfully") ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>{notice}</div>}
         <form className="mt-5 space-y-4" onSubmit={submit}>
           {!forced && <PasswordInput required autoComplete="current-password" label="Current Password *" value={form.currentPassword} onChange={change("currentPassword")} />}
           <PasswordInput required minLength={8} maxLength={72} autoComplete="new-password" label="New Password *" value={form.newPassword} onChange={change("newPassword")} />

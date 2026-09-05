@@ -77,19 +77,19 @@ export default function AttendancePage() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${tab === id ? "bg-indigo-600 text-white" : "border border-slate-200 bg-white"}`}
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${tab === id ? "bg-primary text-primary-foreground" : "border border-border bg-surface"}`}
           >
             {label}
           </button>
         ))}
       </div>
       {error && (
-        <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </div>
       )}
       {tab === "records" && (
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface shadow-sm">
           <AttendanceFilters
             filters={filters}
             onChange={setFilters}
@@ -113,7 +113,7 @@ export default function AttendancePage() {
                     to: e.target.value,
                   })
                 }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2"
               />
             </div>
           }
@@ -142,7 +142,7 @@ export default function AttendancePage() {
                   icon={Clock3}
                 />
               </div>
-              <section className="mt-5 rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <section className="mt-5 rounded-2xl border border-border bg-surface shadow-sm">
                 <AttendanceTable
                   rows={daily.rows.map((x, i) => ({
                     ...x,
@@ -164,12 +164,12 @@ export default function AttendancePage() {
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="mb-4 rounded-xl border border-slate-200 bg-white px-3 py-2"
+            className="mb-4 rounded-xl border border-border bg-surface px-3 py-2"
           />
           {monthly ? (
-            <section className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+            <section className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-surface-secondary text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="p-4">Employee</th>
                     <th className="p-4">Working Days</th>
@@ -185,7 +185,7 @@ export default function AttendancePage() {
                     <tr key={r.employeeId}>
                       <td className="p-4">
                         <p className="font-semibold">{r.employeeName}</p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-muted-foreground">
                           {r.employeeCode} · {r.department}
                         </p>
                       </td>

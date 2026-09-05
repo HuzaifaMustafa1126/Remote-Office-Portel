@@ -14,17 +14,17 @@ const cards = [
 ];
 export default function EmployeeLeavePanel({ summary = {}, requests = [] }) {
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">My Leave</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Current month leave overview
           </p>
         </div>
         <Link
           to="/leave"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
         >
           <Plus size={14} />
           Request Leave
@@ -32,19 +32,19 @@ export default function EmployeeLeavePanel({ summary = {}, requests = [] }) {
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
         {cards.map(([label, Icon, key]) => (
-          <div key={key} className="rounded-xl bg-slate-50 p-3">
-            <Icon size={15} className="text-indigo-600" />
+          <div key={key} className="rounded-xl bg-surface-secondary p-3">
+            <Icon size={15} className="text-primary-text" />
             <p className="mt-2 text-xl font-black">{summary[key] || 0}</p>
-            <p className="text-[10px] text-slate-500">{label}</p>
+            <p className="text-[10px] text-muted-foreground">{label}</p>
           </div>
         ))}
       </div>
-      <div className="mt-4 border-t border-slate-100 pt-3">
+      <div className="mt-4 border-t border-border pt-3">
         <div className="mb-2 flex justify-between">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Recent Requests
           </p>
-          <Link to="/leave" className="text-xs font-semibold text-indigo-600">
+          <Link to="/leave" className="text-xs font-semibold text-primary-text">
             View all
           </Link>
         </div>
@@ -53,13 +53,13 @@ export default function EmployeeLeavePanel({ summary = {}, requests = [] }) {
             {requests.slice(0, 3).map((r) => (
               <div
                 key={r.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/70 p-2.5"
+                className="flex items-center justify-between gap-3 rounded-xl bg-surface-secondary/70 p-2.5"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {r.leaveType[0] + r.leaveType.slice(1).toLowerCase()} Leave
                   </p>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-muted-foreground">
                     {formatDate(r.startDate)} • {r.totalDays} day
                     {r.totalDays === 1 ? "" : "s"}
                   </p>
@@ -69,7 +69,7 @@ export default function EmployeeLeavePanel({ summary = {}, requests = [] }) {
             ))}
           </div>
         ) : (
-          <p className="py-3 text-center text-xs text-slate-400">
+          <p className="py-3 text-center text-xs text-muted-foreground">
             No leave requests yet.
           </p>
         )}

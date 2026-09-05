@@ -9,7 +9,7 @@ export default function AttendanceFilters({
     <div className="grid gap-3 border-b p-4 sm:grid-cols-2 lg:grid-cols-5">
       {showEmployee && (
         <select
-          className="rounded-xl border border-slate-200 px-3 py-2"
+          className="rounded-xl border border-border px-3 py-2"
           value={filters.employeeId || ""}
           onChange={(e) => set("employeeId", e.target.value)}
         >
@@ -23,27 +23,27 @@ export default function AttendanceFilters({
       )}
       <input
         type="date"
-        className="rounded-xl border border-slate-200 px-3 py-2"
+        className="rounded-xl border border-border px-3 py-2"
         value={filters.from || ""}
         onChange={(e) => set("from", e.target.value)}
       />
       <input
         type="date"
-        className="rounded-xl border border-slate-200 px-3 py-2"
+        className="rounded-xl border border-border px-3 py-2"
         value={filters.to || ""}
         onChange={(e) => set("to", e.target.value)}
       />
       {showEmployee && (
         <input
           placeholder="Department"
-          className="rounded-xl border border-slate-200 px-3 py-2"
+          className="rounded-xl border border-border px-3 py-2"
           value={filters.department || ""}
           onChange={(e) => set("department", e.target.value)}
         />
       )}{" "}
       {showEmployee && (
         <select
-          className="rounded-xl border border-slate-200 px-3 py-2"
+          className="rounded-xl border border-border px-3 py-2"
           value={filters.status || ""}
           onChange={(e) => set("status", e.target.value)}
         >

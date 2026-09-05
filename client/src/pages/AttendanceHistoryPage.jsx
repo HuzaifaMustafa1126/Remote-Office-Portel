@@ -58,8 +58,8 @@ export default function AttendanceHistoryPage() {
         description="Review your daily working time and break duration."
         action={<RefreshButton refreshing={refreshing} onClick={load} />}
       />
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-4">
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="border-b border-border p-4">
           <div className="flex flex-wrap gap-2">
             {Object.entries({
               today: "Today",
@@ -69,18 +69,18 @@ export default function AttendanceHistoryPage() {
               <button
                 key={key}
                 onClick={() => choose(key)}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${preset === key ? "bg-indigo-600 text-white" : "bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"}`}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${preset === key ? "bg-primary text-primary-foreground" : "bg-surface-secondary text-muted-foreground hover:bg-primary-soft hover:text-primary-text"}`}
               >
                 {label}
               </button>
             ))}
           </div>
           <div className="mt-4 flex flex-wrap items-end gap-3">
-            <label className="text-xs font-semibold text-slate-500">
+            <label className="text-xs font-semibold text-muted-foreground">
               From
               <input
                 type="date"
-                className="mt-1 block rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm text-foreground"
                 value={filters.from}
                 onChange={(e) => {
                   setPreset("");
@@ -88,11 +88,11 @@ export default function AttendanceHistoryPage() {
                 }}
               />
             </label>
-            <label className="text-xs font-semibold text-slate-500">
+            <label className="text-xs font-semibold text-muted-foreground">
               To
               <input
                 type="date"
-                className="mt-1 block rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm text-foreground"
                 value={filters.to}
                 onChange={(e) => {
                   setPreset("");
@@ -102,7 +102,7 @@ export default function AttendanceHistoryPage() {
             </label>
             <button
               onClick={() => choose("month")}
-              className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+              className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-surface-secondary"
             >
               <RotateCcw size={14} />
               Reset
@@ -110,7 +110,7 @@ export default function AttendanceHistoryPage() {
           </div>
         </div>
         {error && (
-          <div className="m-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <div className="m-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}
           </div>
         )}

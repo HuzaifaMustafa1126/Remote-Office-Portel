@@ -111,19 +111,19 @@ export default function EmployeesPage() {
         }
       />
       {notice && (
-        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-700">
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm text-primary-text">
           {notice}
         </div>
       )}
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface shadow-sm">
         <div className="p-4">
         <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search employees…"
-            className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 outline-none focus:border-indigo-500"
+            className="w-full rounded-xl border border-border py-2.5 pl-10 pr-3 outline-none focus:border-primary-border"
           />
         </div>
         </div>
@@ -156,14 +156,14 @@ export default function EmployeesPage() {
       </Modal>
       <Modal open={Boolean(resetting)} title="Reset Password" onClose={() => !busy && setResetting(null)}>
         {resetting && <form className="space-y-4" onSubmit={resetPassword}>
-          <div className="rounded-xl bg-slate-50 p-3"><p className="font-semibold">{resetting.firstName} {resetting.lastName}</p><p className="text-sm text-slate-500">{resetting.email}</p></div>
+          <div className="rounded-xl bg-surface-secondary p-3"><p className="font-semibold">{resetting.firstName} {resetting.lastName}</p><p className="text-sm text-muted-foreground">{resetting.email}</p></div>
           <PasswordInput required minLength={8} maxLength={72} autoComplete="new-password" label="New Password *" value={password.newPassword} onChange={(e) => setPassword({...password,newPassword:e.target.value})}/>
           <PasswordInput required minLength={8} maxLength={72} autoComplete="new-password" label="Confirm Password *" value={password.confirmPassword} onChange={(e) => setPassword({...password,confirmPassword:e.target.value})}/>
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => setResetting(null)}>Cancel</Button><Button disabled={busy}>{busy ? "Resetting…" : "Reset Password"}</Button></div>
         </form>}
       </Modal>
       <Modal open={Boolean(deleting)} title="Permanently Delete Employee?" onClose={() => !busy && setDeleting(null)}>
-        {deleting && <div><p className="text-slate-700">You are about to permanently delete <b>{deleting.firstName} {deleting.lastName}</b>.</p><p className="mt-3 text-sm font-medium text-red-600">Their account and all attendance, salary, leave, shift, payroll, and related records will be permanently removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={removeEmployee}>{busy ? "Deleting…" : "Delete Permanently"}</Button></div></div>}
+        {deleting && <div><p className="text-foreground">You are about to permanently delete <b>{deleting.firstName} {deleting.lastName}</b>.</p><p className="mt-3 text-sm font-medium text-danger">Their account and all attendance, salary, leave, shift, payroll, and related records will be permanently removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={removeEmployee}>{busy ? "Deleting…" : "Delete Permanently"}</Button></div></div>}
       </Modal>
     </>
   );

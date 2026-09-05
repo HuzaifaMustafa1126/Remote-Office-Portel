@@ -176,14 +176,14 @@ export default function PermissionsPage() {
         title="Permissions"
         description="Control exactly what each role can access."
       />
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 pb-5">
-          <label className="block w-full max-w-xs text-xs font-semibold uppercase tracking-wider text-slate-500">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
+          <label className="block w-full max-w-xs text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Role
             <select
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm normal-case text-slate-800"
+              className="mt-2 w-full rounded-xl border border-border bg-surface p-2.5 text-sm normal-case text-foreground"
             >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -193,7 +193,7 @@ export default function PermissionsPage() {
             </select>
           </label>
           {dirty && (
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+            <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">
               Unsaved changes
             </span>
           )}
@@ -202,9 +202,9 @@ export default function PermissionsPage() {
           {Object.entries(groups).map(([group, items]) => (
             <fieldset
               key={group}
-              className="rounded-2xl border border-slate-100 bg-slate-50/40 p-4"
+              className="rounded-2xl border border-border bg-surface-secondary/40 p-4"
             >
-              <legend className="px-2 text-xs font-bold uppercase tracking-[.14em] text-indigo-600">
+              <legend className="px-2 text-xs font-bold uppercase tracking-[.14em] text-primary-text">
                 {group}
               </legend>
               <div className="mt-1 space-y-2">
@@ -216,10 +216,10 @@ export default function PermissionsPage() {
                   return (
                     <label
                       key={p.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition hover:ring-indigo-200"
+                      className="flex cursor-pointer items-start gap-3 rounded-xl bg-surface p-3 shadow-sm ring-1 ring-border transition hover:ring-primary-border"
                     >
                       <span
-                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border ${selected.includes(p.id) ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}
+                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border ${selected.includes(p.id) ? "border-primary-border bg-primary text-primary-foreground" : "border-border"}`}
                       >
                         {selected.includes(p.id) && <Check size={13} />}
                       </span>
@@ -232,10 +232,10 @@ export default function PermissionsPage() {
                       />
                       <span>
                         <b className="block text-sm">{label}</b>
-                        <span className="block text-xs text-slate-500">
+                        <span className="block text-xs text-muted-foreground">
                           {description}
                         </span>
-                        <code className="mt-1 block text-[10px] text-slate-300">
+                        <code className="mt-1 block text-[10px] text-muted-foreground">
                           {p.name}
                         </code>
                       </span>
@@ -247,7 +247,7 @@ export default function PermissionsPage() {
           ))}
         </div>
         {manage && (
-          <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-5">
+          <div className="mt-6 flex items-center gap-3 border-t border-border pt-5">
             <Button disabled={!dirty || saving} onClick={save}>
               <span className="flex items-center gap-2">
                 <Save size={16} />
@@ -256,7 +256,7 @@ export default function PermissionsPage() {
             </Button>
             {notice && (
               <span
-                className={`text-sm font-medium ${notice.startsWith("Permissions updated") ? "text-indigo-600" : "text-red-600"}`}
+                className={`text-sm font-medium ${notice.startsWith("Permissions updated") ? "text-primary-text" : "text-danger"}`}
               >
                 {notice}
               </span>

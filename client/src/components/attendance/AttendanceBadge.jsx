@@ -1,12 +1,12 @@
 const styles = {
-  WORKING: "bg-emerald-50 text-emerald-700",
-  ON_BREAK: "bg-amber-50 text-amber-700",
-  CLOCKED_OUT: "bg-indigo-50 text-indigo-700",
-  NOT_CLOCKED_IN: "bg-slate-100 text-slate-600",
-  LEAVE: "bg-purple-50 text-purple-700",
-  ABSENT: "bg-red-50 text-red-700",
-  OFF_DAY: "bg-slate-100 text-slate-600",
-  WORKED_HOLIDAY: "bg-indigo-50 text-indigo-700",
+  WORKING: "bg-success-soft text-success",
+  ON_BREAK: "bg-warning-soft text-warning",
+  CLOCKED_OUT: "bg-primary-soft text-primary-text",
+  NOT_CLOCKED_IN: "bg-surface-secondary text-muted-foreground",
+  LEAVE: "bg-accent-soft text-accent-text",
+  ABSENT: "bg-danger-soft text-danger",
+  OFF_DAY: "bg-surface-secondary text-muted-foreground",
+  WORKED_HOLIDAY: "bg-primary-soft text-primary-text",
 };
 const labels = {
   WORKING: "Working",
@@ -23,6 +23,7 @@ export default function AttendanceBadge({ status = "NOT_CLOCKED_IN" }) {
     <span
       className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${styles[status] || styles.NOT_CLOCKED_IN}`}
     >
+      <span aria-hidden="true" className="mr-1">{["WORKING", "CLOCKED_OUT", "WORKED_HOLIDAY"].includes(status) ? "✓" : status === "ABSENT" ? "×" : status === "ON_BREAK" ? "Ⅱ" : "○"}</span>
       {labels[status] || status}
     </span>
   );

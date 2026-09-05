@@ -29,48 +29,62 @@ export default function LoginPage() {
     }
   }
   return (
-    <main className="grid min-h-screen bg-white lg:grid-cols-2">
-      <section className="hidden bg-[#111827] p-16 text-white lg:flex lg:flex-col lg:justify-between">
+    <main className="grid min-h-screen bg-surface lg:grid-cols-2">
+      <section className="hidden bg-sidebar p-16 text-sidebar-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-500 text-xl font-black">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground text-xl font-black">
             R
           </div>
-          <b className="text-xl">Remote Office Portal</b>
+          <b className="text-xl">Abdali Marketing Portel</b>
         </div>
         <div>
-          <p className="mb-4 text-sm font-bold tracking-widest text-indigo-300">
+          <p className="mb-4 text-sm font-bold tracking-widest text-sidebar-muted">
             ONE SECURE WORKSPACE
           </p>
           <h1 className="max-w-xl text-5xl font-bold leading-tight">
             Your people, roles, and operations—beautifully organized.
           </h1>
-          <p className="mt-5 max-w-lg text-slate-400">
+          <p className="mt-5 max-w-lg text-sidebar-muted">
             A focused foundation for managing your remote team securely and
             efficiently.
           </p>
         </div>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-sidebar-muted">
           Protected by role-based access control
         </p>
       </section>
       <section className="grid place-items-center p-6">
         <div className="w-full max-w-md">
           <div className="mb-10 lg:hidden">
-            <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600 text-xl font-black text-white">
-              R
+            <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground text-xl font-black">
+              A
             </div>
-            <b className="text-lg">Remote Office Portal</b>
+            <b className="text-lg">Abdali Marketing Portel</b>
           </div>
-          <LockKeyhole className="mb-5 text-indigo-600" />
+          <LockKeyhole className="mb-5 text-primary-text" />
           <h2 className="text-3xl font-bold">Welcome back</h2>
-          <p className="mt-2 text-slate-500">
+          <p className="mt-2 text-muted-foreground">
             Sign in to continue to your workspace.
           </p>
-          {sessionNotice&&<div role="status" className="notification-toast fixed right-5 top-5 z-50 max-w-sm rounded-2xl border border-indigo-100 bg-white p-4 text-sm text-slate-700 shadow-xl"><b className="block text-indigo-700">Session ended</b>{sessionNotice}<button onClick={clearSessionNotice} className="ml-2 font-bold text-indigo-600">Dismiss</button></div>}
+          {sessionNotice && (
+            <div
+              role="status"
+              className="notification-toast fixed right-5 top-5 z-50 max-w-sm rounded-2xl border border-primary-border bg-surface p-4 text-sm text-foreground shadow-xl"
+            >
+              <b className="block text-primary-text">Session ended</b>
+              {sessionNotice}
+              <button
+                onClick={clearSessionNotice}
+                className="ml-2 font-bold text-primary-text"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {error && (
             <div
               role="alert"
-              className="mt-6 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700"
+              className="mt-6 rounded-xl border border-danger-border bg-danger-soft p-3 text-sm text-danger"
             >
               {error}
             </div>
@@ -97,13 +111,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 aria-label="Show password"
-                className="absolute right-3 top-9 text-slate-400"
+                className="absolute right-3 top-9 text-muted-foreground"
                 onClick={() => setShow(!show)}
               >
                 {show ? <EyeOff size={19} /> : <Eye size={19} />}
               </button>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
                 checked={remember}

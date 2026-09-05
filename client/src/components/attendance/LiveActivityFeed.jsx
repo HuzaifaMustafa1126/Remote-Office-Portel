@@ -24,17 +24,17 @@ export default function LiveActivityFeed({ items = [] }) {
   return (
     <div className="space-y-4">
       <UpcomingHolidays rows={holidays} loading={holidaysLoading} error={holidaysError} />
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="font-bold">Leave Requests</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {leaves?.summary.pending || 0} pending review
             </p>
           </div>
           <Link
             to="/leave-requests"
-            className="text-xs font-semibold text-indigo-600"
+            className="text-xs font-semibold text-primary-text"
           >
             View all
           </Link>
@@ -44,38 +44,38 @@ export default function LiveActivityFeed({ items = [] }) {
             <Link
               to="/leave-requests"
               key={r.id}
-              className="block rounded-xl bg-slate-50 p-2.5"
+              className="block rounded-xl bg-surface-secondary p-2.5"
             >
               <p className="text-sm font-semibold">{r.employeeName}</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 {r.leaveType} • {r.startDate}
               </p>
             </Link>
           ))}
           {leaves && !leaves.rows.length && (
-            <p className="py-3 text-center text-xs text-slate-400">
+            <p className="py-3 text-center text-xs text-muted-foreground">
               No pending leave requests.
             </p>
           )}
         </div>
       </section>
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="font-bold">Recent Activity</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Latest attendance events
             </p>
           </div>
           <Link
             to="/audit-logs"
-            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+            className="text-xs font-semibold text-primary-text hover:text-primary-text"
           >
             View all
           </Link>
         </div>
         {!items.length ? (
-          <p className="py-10 text-center text-sm text-slate-400">
+          <p className="py-10 text-center text-sm text-muted-foreground">
             No attendance activity yet today.
           </p>
         ) : (
@@ -84,17 +84,17 @@ export default function LiveActivityFeed({ items = [] }) {
               const Icon = icons[x.action] || LogIn;
               return (
                 <div
-                  className={`flex gap-3 py-2.5 ${index < Math.min(items.length, 8) - 1 ? "border-b border-slate-100" : ""}`}
+                  className={`flex gap-3 py-2.5 ${index < Math.min(items.length, 8) - 1 ? "border-b border-border" : ""}`}
                   key={x.id}
                 >
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-indigo-600">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text">
                     <Icon size={14} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm leading-snug text-slate-700">
+                    <p className="text-sm leading-snug text-foreground">
                       {x.description}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-400">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {new Intl.DateTimeFormat("en-PK", {
                         hour: "2-digit",
                         minute: "2-digit",

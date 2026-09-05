@@ -81,15 +81,15 @@ export default function CompanyCalendarPage() {
         }
       />
       {notice && (
-        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-700">
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm text-primary-text">
           {notice}
         </div>
       )}
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         {rows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
+              <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4">Date</th>
                   <th>Day</th>
@@ -100,9 +100,9 @@ export default function CompanyCalendarPage() {
                   <th className="pr-4">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {rows.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
+                  <tr key={r.id} className="hover:bg-surface-secondary">
                     <td className="p-4 font-semibold">
                       {formatDate(r.calendarDate)}
                     </td>
@@ -115,7 +115,7 @@ export default function CompanyCalendarPage() {
                     <td>
                       <HolidayBadge type={r.dayType} />
                     </td>
-                    <td className="max-w-56 truncate text-slate-500">
+                    <td className="max-w-56 truncate text-muted-foreground">
                       {r.description || "—"}
                     </td>
                     <td>{r.status}</td>

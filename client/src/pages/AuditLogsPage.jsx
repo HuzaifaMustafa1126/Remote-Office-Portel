@@ -83,13 +83,13 @@ const moduleName = (a) =>
 const iso = (d) => d.toISOString().slice(0, 10);
 function Summary({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+      <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary-text">
         <Icon size={17} />
       </div>
       <div>
         <p className="text-xl font-black">{value || 0}</p>
-        <p className="text-xs text-slate-500">{label}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
   );
@@ -165,24 +165,24 @@ export default function AuditLogsPage() {
           />
         </div>
       )}
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="grid gap-3 border-b border-slate-100 p-4 md:grid-cols-2 xl:grid-cols-6">
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="grid gap-3 border-b border-border p-4 md:grid-cols-2 xl:grid-cols-6">
           <label className="relative xl:col-span-2">
             <Search
-              className="absolute left-3 top-2.5 text-slate-400"
+              className="absolute left-3 top-2.5 text-muted-foreground"
               size={17}
             />
             <input
               value={filters.search}
               onChange={(e) => set("search", e.target.value)}
               placeholder="Search activity…"
-              className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm"
+              className="w-full rounded-xl border border-border py-2 pl-9 pr-3 text-sm"
             />
           </label>
           <select
             value={filters.category}
             onChange={(e) => set("category", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           >
             <option value="">All Actions</option>
             <option value="authentication">Authentication</option>
@@ -197,7 +197,7 @@ export default function AuditLogsPage() {
           <select
             value={filters.userId}
             onChange={(e) => set("userId", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           >
             <option value="">All Users</option>
             {result?.users.map((u) => (
@@ -210,24 +210,24 @@ export default function AuditLogsPage() {
             type="date"
             value={filters.from}
             onChange={(e) => set("from", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           />
           <input
             type="date"
             value={filters.to}
             onChange={(e) => set("to", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap gap-2 xl:col-span-6">
             <button
               onClick={() => range(1)}
-              className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-semibold"
+              className="rounded-lg bg-surface-secondary px-3 py-1.5 text-xs font-semibold"
             >
               Today
             </button>
             <button
               onClick={() => range(7)}
-              className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-semibold"
+              className="rounded-lg bg-surface-secondary px-3 py-1.5 text-xs font-semibold"
             >
               Last 7 Days
             </button>
@@ -241,26 +241,26 @@ export default function AuditLogsPage() {
                   page: 1,
                 }));
               }}
-              className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-semibold"
+              className="rounded-lg bg-surface-secondary px-3 py-1.5 text-xs font-semibold"
             >
               This Month
             </button>
             <button
               onClick={reset}
-              className="ml-auto flex items-center gap-1 text-xs font-semibold text-slate-500"
+              className="ml-auto flex items-center gap-1 text-xs font-semibold text-muted-foreground"
             >
               <X size={14} />
               Reset Filters
             </button>
           </div>
         </div>
-        {error && <p className="p-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="p-4 text-sm text-danger">{error}</p>}
         {!result ? (
           <Loader />
         ) : result.rows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px] text-left text-sm">
-              <thead className="bg-slate-50/70 text-[10px] uppercase tracking-wider text-slate-400">
+              <thead className="bg-surface-secondary/70 text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-5 py-3">Date & Time</th>
                   <th className="px-4 py-3">User</th>
@@ -269,11 +269,11 @@ export default function AuditLogsPage() {
                   <th className="px-5 py-3">Module</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {result.rows.map((l) => {
                   const d = new Date(l.createdAt);
                   return (
-                    <tr className="hover:bg-slate-50/60" key={l.id}>
+                    <tr className="hover:bg-surface-secondary/60" key={l.id}>
                       <td className="whitespace-nowrap px-5 py-3">
                         <p className="font-medium">
                           {new Intl.DateTimeFormat("en-PK", {
@@ -282,7 +282,7 @@ export default function AuditLogsPage() {
                             year: "numeric",
                           }).format(d)}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-muted-foreground">
                           {new Intl.DateTimeFormat("en-PK", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -293,7 +293,7 @@ export default function AuditLogsPage() {
                         {l.userName || "System"}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+                        <span className="rounded-lg bg-primary-soft px-2 py-1 text-xs font-semibold text-primary-text">
                           {labels[l.action] ||
                             l.action
                               .replaceAll("_", " ")
@@ -301,10 +301,10 @@ export default function AuditLogsPage() {
                               .replace(/\b\w/g, (c) => c.toUpperCase())}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3 text-muted-foreground">
                         {l.description}
                       </td>
-                      <td className="px-5 py-3 text-xs text-slate-500">
+                      <td className="px-5 py-3 text-xs text-muted-foreground">
                         {moduleName(l.action)}
                       </td>
                     </tr>
@@ -320,8 +320,8 @@ export default function AuditLogsPage() {
           />
         )}
         {result && (
-          <div className="flex items-center justify-between border-t border-slate-100 p-4">
-            <p className="text-xs text-slate-400">
+          <div className="flex items-center justify-between border-t border-border p-4">
+            <p className="text-xs text-muted-foreground">
               Page {result.meta.page} of {result.meta.pages} ·{" "}
               {result.meta.total} events
             </p>

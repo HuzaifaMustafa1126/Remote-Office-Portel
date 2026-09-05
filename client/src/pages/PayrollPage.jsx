@@ -66,7 +66,7 @@ export default function PayrollPage() {
         title="Payroll"
         description="5th-inclusive through next 5th-exclusive salary periods."
       />
-      <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border bg-white p-4">
+      <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border bg-surface p-4">
         <input
           type="month"
           value={label}
@@ -78,33 +78,33 @@ export default function PayrollPage() {
         </Button>
       </div>
       <div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]">
-        <section className="overflow-hidden rounded-2xl border bg-white">
+        <section className="overflow-hidden rounded-2xl border bg-surface">
           <div className="border-b p-4 font-bold">Payroll Runs</div>
           {runs.map((x) => (
             <button
               key={x.id}
               onClick={() => open(x.id)}
-              className="flex w-full items-center justify-between border-b px-4 py-3 text-left hover:bg-slate-50"
+              className="flex w-full items-center justify-between border-b px-4 py-3 text-left hover:bg-surface-secondary"
             >
               <span>
                 <b>{x.periodLabel}</b>
-                <small className="block text-slate-400">
+                <small className="block text-muted-foreground">
                   {x.periodStart} → {x.periodEnd}
                 </small>
               </span>
-              <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">
+              <span className="rounded-full bg-primary-soft px-2 py-1 text-xs font-bold text-primary-text">
                 {x.status}
               </span>
             </button>
           ))}
         </section>
-        <section className="overflow-x-auto rounded-2xl border bg-white">
+        <section className="overflow-x-auto rounded-2xl border bg-surface">
           {selected ? (
             <>
               <div className="flex items-center justify-between border-b p-4">
                 <div>
                   <b>{selected.periodLabel} Payroll</b>
-                  <small className="block text-slate-400">
+                  <small className="block text-muted-foreground">
                     {selected.periodStart} → {selected.periodEnd}
                   </small>
                 </div>
@@ -118,7 +118,7 @@ export default function PayrollPage() {
                 </div>
               </div>
               <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-400">
+                <thead className="bg-surface-secondary text-xs text-muted-foreground">
                   <tr>
                     {[
                       "Employee",
@@ -154,20 +154,20 @@ export default function PayrollPage() {
                       <td>{money(x.leave_deduction)}</td>
                       <td>{money(x.absence_deduction)}</td>
                       <td className="font-bold">{money(x.net_salary)}</td>
-                      {selected.status==="DRAFT"&&<td><button className="font-semibold text-indigo-600 hover:text-indigo-800" onClick={()=>showAdjustment(x)}>Add adjustment</button></td>}
+                      {selected.status==="DRAFT"&&<td><button className="font-semibold text-primary-text hover:text-primary-text" onClick={()=>showAdjustment(x)}>Add adjustment</button></td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {selected.reviewRequired?<p className="m-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Requires Review — underlying salary or operational data changed after approval.</p>:null}
+              {selected.reviewRequired?<p className="m-4 rounded-xl bg-warning-soft p-3 text-sm font-semibold text-warning">Requires Review — underlying salary or operational data changed after approval.</p>:null}
               <div className="grid gap-5 border-t p-4 lg:grid-cols-2">
-                <section><h3 className="mb-3 font-bold">Adjustments</h3>{selected.adjustments?.length?selected.adjustments.map(x=><div key={x.id} className="mb-2 rounded-xl bg-slate-50 p-3 text-sm"><b>{x.title}</b> · {x.type} · {money(x.amount)}<p className="text-slate-500">{x.reason} · {x.createdBy||"System"}</p>{selected.status==="DRAFT"&&<button className="mt-1 text-red-600" onClick={async()=>{if(confirm("Remove this adjustment?")){await api.removeAdjustment(selected.id,x.id);await refresh()}}}>Remove</button>}</div>):<p className="text-sm text-slate-400">No manual adjustments.</p>}</section>
-                <section><h3 className="mb-3 font-bold">Payroll Activity</h3>{selected.activity?.length?selected.activity.map(x=><div key={x.id} className="mb-3 border-l-2 border-indigo-200 pl-3 text-sm"><b>{x.description}</b><p className="text-slate-400">{x.performedBy||"System"} · {new Date(x.createdAt).toLocaleString()}</p>{x.reason&&<p>Reason: {x.reason}</p>}</div>):<p className="text-sm text-slate-400">No activity recorded.</p>}</section>
+                <section><h3 className="mb-3 font-bold">Adjustments</h3>{selected.adjustments?.length?selected.adjustments.map(x=><div key={x.id} className="mb-2 rounded-xl bg-surface-secondary p-3 text-sm"><b>{x.title}</b> · {x.type} · {money(x.amount)}<p className="text-muted-foreground">{x.reason} · {x.createdBy||"System"}</p>{selected.status==="DRAFT"&&<button className="mt-1 text-danger" onClick={async()=>{if(confirm("Remove this adjustment?")){await api.removeAdjustment(selected.id,x.id);await refresh()}}}>Remove</button>}</div>):<p className="text-sm text-muted-foreground">No manual adjustments.</p>}</section>
+                <section><h3 className="mb-3 font-bold">Payroll Activity</h3>{selected.activity?.length?selected.activity.map(x=><div key={x.id} className="mb-3 border-l-2 border-primary-border pl-3 text-sm"><b>{x.description}</b><p className="text-muted-foreground">{x.performedBy||"System"} · {new Date(x.createdAt).toLocaleString()}</p>{x.reason&&<p>Reason: {x.reason}</p>}</div>):<p className="text-sm text-muted-foreground">No activity recorded.</p>}</section>
               </div>
               <details className="border-t p-4"><summary className="cursor-pointer font-bold">Day Breakdown ({selected.days?.length||0})</summary><div className="mt-3 max-h-96 overflow-auto"><table className="w-full text-sm"><thead><tr><th>Employee</th><th>Work Date</th><th>Classification</th><th>Deduction</th><th>Source</th></tr></thead><tbody>{selected.days?.map(x=><tr className="border-t" key={x.id}><td>{selected.items.find(i=>i.employee_id===x.employeeId)?.employeeName}</td><td>{x.work_date}</td><td>{x.classification}</td><td>{money(x.deduction_amount)}</td><td>{x.attendance_id?`Attendance #${x.attendance_id}`:x.leave_day_id?`Leave #${x.leave_day_id}`:x.calendar_day_id?`Calendar #${x.calendar_day_id}`:"Policy"}</td></tr>)}</tbody></table></div></details>
             </>
           ) : (
-            <p className="p-10 text-center text-slate-400">
+            <p className="p-10 text-center text-muted-foreground">
               Select or generate a payroll run.
             </p>
           )}
@@ -179,9 +179,9 @@ export default function PayrollPage() {
         onClose={closeAdjustment}
       >
         <form className="space-y-5" onSubmit={addAdjustment}>
-          <div className="rounded-xl bg-indigo-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Employee</p>
-            <p className="mt-1 font-bold text-slate-900">{adjustmentEmployee?.employeeName}</p>
+          <div className="rounded-xl bg-primary-soft px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary-text">Employee</p>
+            <p className="mt-1 font-bold text-foreground">{adjustmentEmployee?.employeeName}</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
@@ -195,9 +195,9 @@ export default function PayrollPage() {
               onChange={(e) => setAdjustment({ ...adjustment, title: e.target.value })}
             />
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Adjustment type</span>
+              <span className="mb-1.5 block text-sm font-medium text-foreground">Adjustment type</span>
               <select
-                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-3 focus:ring-indigo-100"
+                className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 outline-none transition focus:border-primary-border focus:ring-3 focus:ring-primary-border"
                 value={adjustment.type}
                 onChange={(e) => setAdjustment({ ...adjustment, type: e.target.value })}
               >
@@ -219,9 +219,9 @@ export default function PayrollPage() {
               onChange={(e) => setAdjustment({ ...adjustment, amount: e.target.value })}
             />
             <label className="block sm:col-span-2">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Reason</span>
+              <span className="mb-1.5 block text-sm font-medium text-foreground">Reason</span>
               <textarea
-                className="min-h-28 w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-3 focus:ring-indigo-100"
+                className="min-h-28 w-full resize-y rounded-xl border border-border px-3.5 py-2.5 outline-none transition focus:border-primary-border focus:ring-3 focus:ring-primary-border"
                 placeholder="Explain why this adjustment is being added"
                 minLength="3"
                 maxLength="500"
@@ -231,7 +231,7 @@ export default function PayrollPage() {
               />
             </label>
           </div>
-          {adjustmentError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{adjustmentError}</p>}
+          {adjustmentError && <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{adjustmentError}</p>}
           <div className="flex justify-end gap-3 border-t pt-4">
             <Button type="button" variant="secondary" disabled={savingAdjustment} onClick={closeAdjustment}>Cancel</Button>
             <Button type="submit" disabled={savingAdjustment}>{savingAdjustment ? "Adding…" : "Add Adjustment"}</Button>

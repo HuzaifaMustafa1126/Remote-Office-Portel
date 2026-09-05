@@ -15,11 +15,11 @@ export default function LeaveReviewModal({
   return (
     <Modal open title="Review Leave Request" onClose={onClose}>
       <div className="space-y-5">
-        <div className="rounded-xl bg-slate-50 p-4">
+        <div className="rounded-xl bg-surface-secondary p-4">
           <div className="flex justify-between">
             <div>
               <p className="font-bold">{request.employeeName}</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 {request.employeeCode} • {request.department}
               </p>
             </div>
@@ -27,26 +27,26 @@ export default function LeaveReviewModal({
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <p>
-              <span className="text-slate-400">From:</span>{" "}
+              <span className="text-muted-foreground">From:</span>{" "}
               {formatDate(request.startDate)}
             </p>
             <p>
-              <span className="text-slate-400">To:</span>{" "}
+              <span className="text-muted-foreground">To:</span>{" "}
               {formatDate(request.endDate)}
             </p>
             <p>
-              <span className="text-slate-400">Type:</span> {request.leaveType}
+              <span className="text-muted-foreground">Type:</span> {request.leaveType}
             </p>
             <p>
-              <span className="text-slate-400">Days:</span> {request.totalDays}
+              <span className="text-muted-foreground">Days:</span> {request.totalDays}
             </p>
           </div>
           <p className="mt-4 text-sm">
-            <span className="text-slate-400">Reason:</span> {request.reason}
+            <span className="text-muted-foreground">Reason:</span> {request.reason}
           </p>
         </div>
         {request.days?.some((d) => d.hasAttendanceConflict) && (
-          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
+          <p className="rounded-xl bg-warning-soft p-3 text-sm text-warning">
             Attendance exists on one or more requested leave days. Management
             reconciliation is required.
           </p>
@@ -57,7 +57,7 @@ export default function LeaveReviewModal({
             rows={3}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 p-3 font-normal"
+            className="mt-1.5 w-full resize-none rounded-xl border border-border p-3 font-normal"
           />
         </label>
         {request.status === "PENDING" && (

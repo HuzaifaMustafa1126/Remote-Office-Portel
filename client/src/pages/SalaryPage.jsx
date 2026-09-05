@@ -21,14 +21,14 @@ export default function SalaryPage() {
         description="Effective-dated employee salary profiles."
       />
       {error && (
-        <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p className="mb-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}
-      <section className="overflow-x-auto rounded-2xl border bg-white">
+      <section className="overflow-x-auto rounded-2xl border bg-surface">
         {rows?.length ? (
           <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+            <thead className="bg-surface-secondary text-xs uppercase text-muted-foreground">
               <tr>
                 {[
                   "Employee",
@@ -49,7 +49,7 @@ export default function SalaryPage() {
                 <tr key={x.id}>
                   <td className="px-4 py-3">
                     <b>{x.employeeName}</b>
-                    <small className="block text-slate-400">
+                    <small className="block text-muted-foreground">
                       {x.employeeCode}
                     </small>
                   </td>
@@ -70,7 +70,7 @@ export default function SalaryPage() {
             description="Configure salary from an employee's Work & Salary Settings card."
           />
         ) : (
-          <p className="p-8 text-center text-slate-400">Loading…</p>
+          <p className="p-8 text-center text-muted-foreground">Loading…</p>
         )}
       </section>
     </>

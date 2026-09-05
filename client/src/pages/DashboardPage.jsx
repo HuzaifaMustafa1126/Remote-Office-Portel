@@ -36,16 +36,16 @@ if (localStorage.getItem("remoteOffice.autoRefreshInterval") === null)
   localStorage.setItem("remoteOffice.autoRefreshInterval", "30000");
 function CompactStat({ label, value, detail, icon: Icon, tone = "indigo" }) {
   const colors = {
-    indigo: "bg-indigo-50 text-indigo-600",
-    purple: "bg-purple-50 text-purple-600",
-    slate: "bg-slate-100 text-slate-600",
+    indigo: "bg-primary-soft text-primary-text",
+    purple: "bg-accent-soft text-accent-text",
+    slate: "bg-surface-secondary text-muted-foreground",
   };
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-semibold text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
+          <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+          <p className="mt-2 text-2xl font-black text-foreground">{value}</p>
         </div>
         <div
           className={`grid h-9 w-9 place-items-center rounded-xl ${colors[tone]}`}
@@ -53,33 +53,33 @@ function CompactStat({ label, value, detail, icon: Icon, tone = "indigo" }) {
           <Icon size={17} />
         </div>
       </div>
-      <p className="mt-2 truncate text-[11px] text-slate-400">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-muted-foreground">{detail}</p>
     </div>
   );
 }
 function Overview({ stats }) {
   const rows = [
-    ["Present", stats.presentToday, "bg-indigo-600"],
-    ["Working", stats.workingNow, "bg-purple-500"],
-    ["On Break", stats.onBreak, "bg-indigo-300"],
-    ["Clocked Out", stats.clockedOut, "bg-slate-500"],
-    ["Not Arrived", stats.notClockedIn, "bg-slate-300"],
+    ["Present", stats.presentToday, "bg-chart-1"],
+    ["Working", stats.workingNow, "bg-chart-2"],
+    ["On Break", stats.onBreak, "bg-chart-3"],
+    ["Clocked Out", stats.clockedOut, "bg-chart-4"],
+    ["Not Arrived", stats.notClockedIn, "bg-chart-5"],
   ];
   const max = Math.max(stats.totalEmployees, 1);
   return (
-    <section className="h-full rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="h-full rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <h2 className="font-bold">Attendance Today</h2>
-      <p className="mt-0.5 text-xs text-slate-400">
+      <p className="mt-0.5 text-xs text-muted-foreground">
         Live distribution of active employees
       </p>
       <div className="mt-5 space-y-3">
         {rows.map(([label, value, color]) => (
           <div key={label}>
             <div className="mb-1.5 flex justify-between text-xs">
-              <span className="font-medium text-slate-600">{label}</span>
-              <span className="font-bold text-slate-800">{value}</span>
+              <span className="font-medium text-muted-foreground">{label}</span>
+              <span className="font-bold text-foreground">{value}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
               <div
                 className={`h-full rounded-full transition-all ${color}`}
                 style={{ width: `${(value / max) * 100}%` }}
@@ -93,22 +93,22 @@ function Overview({ stats }) {
 }
 function EmployeeAttendance({ employees }) {
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+    <section className="rounded-2xl border border-border bg-surface shadow-sm">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div>
           <h2 className="font-bold">Employee Attendance</h2>
-          <p className="text-xs text-slate-400">Today’s latest status</p>
+          <p className="text-xs text-muted-foreground">Today’s latest status</p>
         </div>
         <Link
           to="/attendance"
-          className="text-xs font-semibold text-indigo-600"
+          className="text-xs font-semibold text-primary-text"
         >
           View all
         </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[650px] text-left text-sm">
-          <thead className="bg-slate-50/70 text-[10px] uppercase tracking-wider text-slate-400">
+          <thead className="bg-surface-secondary/70 text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3">Employee</th>
               <th className="px-3 py-3">Job Title</th>
@@ -117,16 +117,16 @@ function EmployeeAttendance({ employees }) {
               <th className="px-5 py-3">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {employees.slice(0, 7).map((e) => (
-              <tr key={e.employeeId} className="hover:bg-slate-50/70">
+              <tr key={e.employeeId} className="hover:bg-surface-secondary/70">
                 <td className="px-5 py-3">
                   <p className="font-semibold">{e.employeeName}</p>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-muted-foreground">
                     {e.employeeCode} • {e.department}
                   </p>
                 </td>
-                <td className="px-3 py-3 text-slate-500">{e.jobTitle}</td>
+                <td className="px-3 py-3 text-muted-foreground">{e.jobTitle}</td>
                 <td className="px-3 py-3">{clock(e.clockInAt)}</td>
                 <td className="px-3 py-3 font-medium">
                   <LiveWorkTimer
@@ -142,7 +142,7 @@ function EmployeeAttendance({ employees }) {
           </tbody>
         </table>
         {!employees.length && (
-          <p className="p-10 text-center text-sm text-slate-400">
+          <p className="p-10 text-center text-sm text-muted-foreground">
             No attendance-tracked employees.
           </p>
         )}
@@ -204,7 +204,7 @@ export default function DashboardPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
-          <p className="mt-1 text-sm text-slate-500">{date}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{date}</p>
         </div>
         <AutoRefreshControl
           interval={interval}
@@ -217,23 +217,23 @@ export default function DashboardPage() {
         />
       </div>
       {own.notice && (
-        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
           {own.notice}
         </div>
       )}
       {own.error && !auto.error && (
-        <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {own.error}
         </div>
       )}
       {canClock && !own.loading && !own.data && (
-        <div className="rounded-2xl border border-red-100 bg-white p-8 text-center">
-          <p className="font-semibold text-red-700">
+        <div className="rounded-2xl border border-danger-border bg-surface p-8 text-center">
+          <p className="font-semibold text-danger">
             Unable to load your workday.
           </p>
           <button
             onClick={own.refresh}
-            className="mt-3 text-sm font-semibold text-indigo-600"
+            className="mt-3 text-sm font-semibold text-primary-text"
           >
             Try again
           </button>

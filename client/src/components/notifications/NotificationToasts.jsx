@@ -14,19 +14,19 @@ export default function NotificationToasts() {
       {toasts.map((x) => (
         <div
           key={x.id}
-          className="notification-toast pointer-events-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
+          className="notification-toast pointer-events-auto rounded-2xl border border-border bg-surface p-4 shadow-xl"
         >
           <div className="flex gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-100 text-indigo-600">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text">
               🔔
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{x.title}</p>
-              <p className="mt-1 text-sm text-slate-600">{x.message}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{x.message}</p>
               {x.actionUrl && (
                 <button
                   onClick={() => open(x)}
-                  className="mt-2 text-sm font-semibold text-indigo-600"
+                  className="mt-2 text-sm font-semibold text-primary-text"
                 >
                   View details
                 </button>
@@ -34,7 +34,7 @@ export default function NotificationToasts() {
             </div>
             <button
               onClick={() => dismissToast(x.id)}
-              className="self-start text-slate-400"
+              className="self-start text-muted-foreground"
             >
               <X size={17} />
             </button>

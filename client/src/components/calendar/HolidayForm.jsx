@@ -33,7 +33,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
           required
           value={form.title}
           onChange={(e) => set("title", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <label className="text-sm font-semibold">
@@ -41,7 +41,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
         <select
           value={form.dayType}
           onChange={(e) => set("dayType", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         >
           <option value="PUBLIC_HOLIDAY">Public Holiday</option>
           <option value="COMPANY_HOLIDAY">Company Holiday</option>
@@ -58,7 +58,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
           type="date"
           value={form.startDate}
           onChange={(e) => set("startDate", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <label className="text-sm font-semibold">
@@ -70,7 +70,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
           type="date"
           value={form.endDate}
           onChange={(e) => set("endDate", e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <label className="text-sm font-semibold sm:col-span-2">
@@ -79,7 +79,7 @@ export default function HolidayForm({ entry, onSubmit, busy }) {
           rows={3}
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
-          className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 p-2.5 font-normal"
+          className="mt-1.5 w-full resize-none rounded-xl border border-border p-2.5 font-normal"
         />
       </label>
       <div className="sm:col-span-2">

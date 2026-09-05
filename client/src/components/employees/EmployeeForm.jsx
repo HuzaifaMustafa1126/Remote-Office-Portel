@@ -101,7 +101,7 @@ export default function EmployeeForm({ employee, roles = [], onSubmit, busy }) {
       <label>
         <span className="mb-1.5 block text-sm font-medium">Role</span>
         <select
-          className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5"
+          className="w-full rounded-xl border border-border px-3.5 py-2.5"
           value={form.roleId}
           onChange={(e) => set("roleId", e.target.value)}
         >

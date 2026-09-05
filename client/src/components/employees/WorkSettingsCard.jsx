@@ -92,10 +92,10 @@ export default function WorkSettingsCard({
   );
   return (
     <>
-      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mt-5 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+            <p className="text-xs font-bold uppercase tracking-wider text-primary-text">
               Work & Salary Settings
             </p>
             <h2 className="mt-1 font-bold">Current configuration</h2>
@@ -127,7 +127,7 @@ export default function WorkSettingsCard({
               ["Effective from", formatDate(w.effectiveFrom)],
             ].map(([k, v]) => (
               <div key={k}>
-                <p className="text-xs font-semibold uppercase text-slate-400">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
                   {k}
                 </p>
                 <p className="mt-1 font-medium">{v}</p>
@@ -135,7 +135,7 @@ export default function WorkSettingsCard({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             No work schedule has been assigned yet.
           </p>
         )}
@@ -148,14 +148,14 @@ export default function WorkSettingsCard({
         <form onSubmit={submit} className="space-y-6">
           <div>
             <p className="mb-4 font-semibold">{data?.employee?.name}</p>
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Work Schedule
             </h3>
             <select
               required
               value={form.shiftId}
               onChange={(e) => setForm({ ...form, shiftId: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5"
+              className="w-full rounded-xl border border-border px-3.5 py-2.5"
             >
               <option value="">Select a shift</option>
               {data?.shifts?.map((x) => (
@@ -165,35 +165,35 @@ export default function WorkSettingsCard({
               ))}
             </select>
             {selected && (
-              <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm">
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-surface-secondary p-4 text-sm">
                 <div>
-                  <small className="text-slate-400">Schedule</small>
+                  <small className="text-muted-foreground">Schedule</small>
                   <p className="font-semibold">
                     {displayTime(selected.startTime)} →{" "}
                     {displayTime(selected.endTime)}
                   </p>
                 </div>
                 <div>
-                  <small className="text-slate-400">Required</small>
+                  <small className="text-muted-foreground">Required</small>
                   <p className="font-semibold">
                     {minutes(selected.requiredWorkMinutes)}
                   </p>
                 </div>
                 <div>
-                  <small className="text-slate-400">Break Allowance</small>
+                  <small className="text-muted-foreground">Break Allowance</small>
                   <p className="font-semibold">
                     {minutes(selected.breakAllowanceMinutes)}
                   </p>
                 </div>
                 <div>
-                  <small className="text-slate-400">Grace</small>
+                  <small className="text-muted-foreground">Grace</small>
                   <p className="font-semibold">{selected.graceMinutes}m</p>
                 </div>
               </div>
             )}
           </div>
           <div>
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
               Salary
             </h3>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -229,13 +229,13 @@ export default function WorkSettingsCard({
                 }
               />
             </div>
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
+            <label className="mt-4 block text-sm font-semibold text-foreground">
               Change reason
-              <textarea required minLength={3} maxLength={500} value={form.reason} onChange={(e)=>setForm({...form,reason:e.target.value})} placeholder="Example: Annual salary revision" className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 font-normal" />
+              <textarea required minLength={3} maxLength={500} value={form.reason} onChange={(e)=>setForm({...form,reason:e.target.value})} placeholder="Example: Annual salary revision" className="mt-1.5 w-full rounded-xl border border-border px-3.5 py-2.5 font-normal" />
             </label>
           </div>
           {error && (
-            <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
               {error}
             </p>
           )}

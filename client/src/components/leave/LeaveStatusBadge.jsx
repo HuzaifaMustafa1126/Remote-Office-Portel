@@ -1,14 +1,15 @@
 const styles = {
-  PENDING: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-indigo-50 text-indigo-700",
-  REJECTED: "bg-red-50 text-red-700",
-  CANCELLED: "bg-slate-100 text-slate-600",
+  PENDING: "bg-warning-soft text-warning",
+  APPROVED: "bg-primary-soft text-primary-text",
+  REJECTED: "bg-danger-soft text-danger",
+  CANCELLED: "bg-surface-secondary text-muted-foreground",
 };
 export default function LeaveStatusBadge({ status }) {
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-xs font-bold ${styles[status] || styles.CANCELLED}`}
     >
+      <span aria-hidden="true" className="mr-1">{status === "APPROVED" ? "✓" : status === "REJECTED" ? "×" : "○"}</span>
       {status?.[0] + status?.slice(1).toLowerCase()}
     </span>
   );

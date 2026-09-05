@@ -45,19 +45,19 @@ export default function RolesPage() {
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {roles.map((r) => (
-          <div key={r.id} className="rounded-2xl bg-white p-5 shadow-sm">
+          <div key={r.id} className="rounded-2xl bg-surface p-5 shadow-sm">
             <div className="flex justify-between">
               <h2 className="font-bold">{r.name}</h2>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted-foreground">
                 {r.userCount} users
               </span>
             </div>
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-muted-foreground">
               {r.permissions.length} permissions assigned
             </p>
             {manage && (
               <button
-                className="mt-5 text-sm font-semibold text-indigo-600"
+                className="mt-5 text-sm font-semibold text-primary-text"
                 onClick={() => {
                   setCurrent(r);
                   setName(r.name);

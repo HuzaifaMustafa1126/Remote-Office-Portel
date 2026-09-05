@@ -54,7 +54,7 @@ export default function NotificationsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Notifications</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Your activity updates and alerts.
           </p>
         </div>
@@ -67,7 +67,7 @@ export default function NotificationsPage() {
           <button
             key={name}
             onClick={() => setSelected(name)}
-            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${selected === name ? "bg-indigo-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${selected === name ? "bg-primary text-primary-foreground" : "border border-border bg-surface text-muted-foreground"}`}
           >
             {name}
           </button>
@@ -78,13 +78,13 @@ export default function NotificationsPage() {
           <NotificationItem key={x.id} item={x} onClick={choose} />
         ))}
         {!loading && !data.rows.length && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500">
+          <div className="rounded-2xl border border-border bg-surface p-12 text-center text-muted-foreground">
             No notifications in this category.
           </div>
         )}
       </div>
       {loading && (
-        <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
       )}
       {page < data.pagination.pages && !loading && (
         <div className="py-6 text-center">

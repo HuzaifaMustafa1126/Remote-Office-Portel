@@ -1,23 +1,18 @@
-import { X } from "lucide-react";
+import { useEffect, useId, useRef } from 'react';
+import { X } from 'lucide-react';
 export default function Modal({ open, title, onClose, children }) {
+  const dialog = useRef(null), titleId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement;
+    dialog.current?.showModal();
+    return () => { dialog.current?.close(); previous?.focus(); };
+  }, [open]);
   if (!open) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
-      onMouseDown={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white shadow-2xl"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b p-5">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
+  return <dialog ref={dialog} aria-labelledby={titleId} onCancel={onClose}
+    onClick={e=>{if(e.target===dialog.current){const r=dialog.current.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}
+    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-auto rounded-2xl border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-overlay/50">
+    <div className="flex items-center justify-between border-b border-border p-5"><h2 id={titleId} className="text-lg font-bold">{title}</h2><button type="button" aria-label="Close dialog" onClick={onClose} className="rounded-lg p-1 hover:bg-hover"><X size={20}/></button></div>
+    <div className="p-5">{children}</div>
+  </dialog>;
 }

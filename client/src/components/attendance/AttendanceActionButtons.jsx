@@ -44,7 +44,7 @@ export default function AttendanceActionButtons({
       </Button>
     );
   return (
-    <p className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600">
+    <p className="rounded-xl bg-surface-secondary px-4 py-3 text-sm font-semibold text-muted-foreground">
       Workday Completed
     </p>
   );

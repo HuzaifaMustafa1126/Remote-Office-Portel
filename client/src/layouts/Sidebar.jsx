@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Palette,
   Users,
   Shield,
   KeyRound,
@@ -39,7 +40,9 @@ const groups = [
   },
   {
     label: "REPORTS",
-    items: [["Reports & Analytics", "/reports", ChartNoAxesCombined, P.REPORTS_VIEW]],
+    items: [
+      ["Reports & Analytics", "/reports", ChartNoAxesCombined, P.REPORTS_VIEW],
+    ],
   },
   {
     label: "MANAGEMENT",
@@ -52,7 +55,7 @@ const groups = [
   },
   {
     label: "SYSTEM",
-    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW]],
+    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
   },
 ];
 export default function Sidebar({ open, onClose }) {
@@ -61,33 +64,33 @@ export default function Sidebar({ open, onClose }) {
     <>
       <div
         onClick={onClose}
-        className={`fixed inset-0 z-30 bg-slate-950/40 lg:hidden ${open ? "block" : "hidden"}`}
+        className={`fixed inset-0 z-30 bg-overlay/40 lg:hidden ${open ? "block" : "hidden"}`}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-[#111827] text-white transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex h-20 items-center justify-between px-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-500 font-black">
-              R
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground font-black">
+              A
             </div>
             <div>
-              <p className="font-bold">Remote Office</p>
-              <p className="text-xs text-slate-400">Portal</p>
+              <p className="font-bold">Abdali Marketing</p>
+              <p className="text-xs text-sidebar-muted">Portel</p>
             </div>
           </div>
-          <button className="lg:hidden" onClick={onClose}>
+          <button aria-label="Close navigation" className="lg:hidden" onClick={onClose}>
             <X />
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {groups.map((g) => {
             const allowed = g.items.filter((i) =>
-              user.permissions.includes(i[3]),
+              !i[3] || user.permissions.includes(i[3]),
             );
             return allowed.length ? (
               <div className="mb-6" key={g.label}>
-                <p className="mb-2 px-3 text-[10px] font-bold tracking-widest text-slate-500">
+                <p className="mb-2 px-3 text-[10px] font-bold tracking-widest text-sidebar-muted">
                   {g.label}
                 </p>
                 {allowed.map(([name, to, Icon]) => (
@@ -97,7 +100,7 @@ export default function Sidebar({ open, onClose }) {
                     key={to}
                     to={to}
                     className={({ isActive }) =>
-                      `mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${isActive ? "bg-indigo-600 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"}`
+                      `mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${isActive ? "bg-sidebar-active text-sidebar-active-foreground" : "text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"}`
                     }
                   >
                     <Icon size={18} />
@@ -108,7 +111,7 @@ export default function Sidebar({ open, onClose }) {
             ) : null;
           })}
         </nav>
-        <div className="border-t border-white/10 p-4 text-xs text-slate-400">
+        <div className="border-t border-sidebar-foreground/10 p-4 text-xs text-sidebar-muted">
           Secure Workspace
         </div>
       </aside>

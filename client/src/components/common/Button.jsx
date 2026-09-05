@@ -5,10 +5,10 @@ export default function Button({
   ...props
 }) {
   const styles = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+    primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
     secondary:
-      "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
-    danger: "bg-red-50 text-red-700 hover:bg-red-100",
+      "bg-surface text-foreground border border-border hover:bg-surface-secondary",
+    danger: "bg-danger-soft text-danger hover:bg-danger-soft",
   };
   return (
     <button

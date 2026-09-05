@@ -30,7 +30,7 @@ export default function AttendanceTable({ rows = [], showEmployee = false }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[700px] text-left text-sm">
-        <thead className="bg-slate-50/70 text-[10px] uppercase tracking-wider text-slate-400">
+        <thead className="bg-surface-secondary/70 text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             {showEmployee && <th className="px-5 py-3">Employee</th>}
             <th className="px-4 py-3">Work Date</th>
@@ -41,17 +41,17 @@ export default function AttendanceTable({ rows = [], showEmployee = false }) {
             <th className="px-5 py-3">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {rows.map((r) => (
             <tr
               key={r.id || `${r.employeeId}-${r.attendanceDate}`}
-              className="hover:bg-slate-50/60"
+              className="hover:bg-surface-secondary/60"
             >
               <>
                 {showEmployee && (
                   <td className="px-5 py-3">
                     <p className="font-semibold">{r.employeeName}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-muted-foreground">
                       {r.employeeCode} · {r.department}
                     </p>
                   </td>

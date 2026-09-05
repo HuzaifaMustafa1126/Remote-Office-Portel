@@ -14,7 +14,7 @@ export default function LeaveHistoryTable({ rows, onCancel, busy }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[800px] text-left text-sm">
-        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
+        <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="p-4">Leave Type</th>
             <th>From</th>
@@ -26,9 +26,9 @@ export default function LeaveHistoryTable({ rows, onCancel, busy }) {
             <th className="pr-4">Action</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50">
+            <tr key={r.id} className="hover:bg-surface-secondary">
               <td className="p-4 font-semibold">{type(r.leaveType)}</td>
               <td>{formatDate(r.startDate)}</td>
               <td>{formatDate(r.endDate)}</td>
@@ -37,7 +37,7 @@ export default function LeaveHistoryTable({ rows, onCancel, busy }) {
                 <LeaveStatusBadge status={r.status} />
               </td>
               <td>{formatDate(r.createdAt)}</td>
-              <td className="max-w-48 truncate text-slate-500">
+              <td className="max-w-48 truncate text-muted-foreground">
                 {r.reviewComment || "—"}
               </td>
               <td className="pr-4">

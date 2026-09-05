@@ -4,10 +4,10 @@ import BreakTimer from "./BreakTimer";
 import LiveWorkTimer from "./LiveWorkTimer";
 
 const colors = {
-  NOT_CLOCKED_IN: "bg-slate-100 text-slate-600",
-  WORKING: "bg-emerald-100 text-emerald-700",
-  ON_BREAK: "bg-amber-100 text-amber-700",
-  CLOCKED_OUT: "bg-indigo-100 text-indigo-700",
+  NOT_CLOCKED_IN: "bg-surface-secondary text-muted-foreground",
+  WORKING: "bg-success-soft text-success",
+  ON_BREAK: "bg-warning-soft text-warning",
+  CLOCKED_OUT: "bg-primary-soft text-primary-text",
 };
 const time = (value) =>
   value
@@ -33,21 +33,21 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
 
   const statusCard =
     data?.companyDay && !data.companyDay.isWorkingDay && !record ? (
-      <section className="rounded-3xl bg-gradient-to-br from-slate-900 to-indigo-950 p-8 text-white shadow-xl">
-        <p className="text-xs font-bold tracking-[.2em] text-indigo-300">
+      <section className="rounded-3xl bg-gradient-to-br from-hero to-hero-end p-8 text-hero-foreground shadow-xl">
+        <p className="text-xs font-bold tracking-[.2em] text-hero-muted">
           OFFICE CLOSED TODAY
         </p>
         <h2 className="mt-4 text-3xl font-black">{data.companyDay.title}</h2>
-        <p className="mt-2 text-slate-300">
+        <p className="mt-2 text-hero-muted">
           {data.companyDay.dayType.replaceAll("_", " ")} · Attendance is not
           required today.
         </p>
       </section>
     ) : (
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-indigo-950 p-6 text-white shadow-xl sm:p-8">
+      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-hero to-hero-end p-6 text-hero-foreground shadow-xl sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
-            <p className="text-xs font-bold tracking-[.2em] text-indigo-300">
+            <p className="text-xs font-bold tracking-[.2em] text-hero-muted">
               CURRENT STATUS
             </p>
             <span
@@ -61,22 +61,22 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
                 running={status === "WORKING"}
               />
             </h2>
-            <p className="mt-1 text-sm text-slate-400">Live work time</p>
+            <p className="mt-1 text-sm text-hero-muted">Live work time</p>
           </div>
           <AttendanceActionButtons status={status} busy={busy} {...actions} />
         </div>
-        <div className="mt-8 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
+        <div className="mt-8 grid gap-3 border-t border-sidebar-foreground/10 pt-5 sm:grid-cols-3">
           <div className="flex items-center gap-3">
-            <Clock3 className="text-indigo-300" />
+            <Clock3 className="text-hero-muted" />
             <div>
-              <p className="text-xs text-slate-400">Clocked in</p>
+              <p className="text-xs text-hero-muted">Clocked in</p>
               <p className="font-semibold">{time(record?.clockInAt)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Coffee className="text-indigo-300" />
+            <Coffee className="text-hero-muted" />
             <div>
-              <p className="text-xs text-slate-400">Completed breaks</p>
+              <p className="text-xs text-hero-muted">Completed breaks</p>
               <p className="font-semibold">
                 {record?.totalBreakMinutes || 0} min
               </p>
@@ -84,8 +84,8 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
           </div>
           {activeBreak && (
             <div>
-              <p className="text-xs text-slate-400">Current break</p>
-              <BreakTimer seconds={activeBreak.liveDurationSeconds} running />
+              <p className="text-xs text-hero-muted">Current break</p>
+              <BreakTimer seconds={activeBreak.liveDurationSeconds} running className="font-mono font-bold text-hero-foreground" />
             </div>
           )}
         </div>
@@ -95,38 +95,38 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
   return (
     <div className="space-y-5">
       {data?.schedule && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-primary-text">
             Today's Schedule
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-4">
             <div>
-              <p className="text-xs text-slate-400">Shift</p>
+              <p className="text-xs text-muted-foreground">Shift</p>
               <p className="font-semibold">
                 {scheduleTime(data.schedule.clockInTime)} →{" "}
                 {scheduleTime(data.schedule.clockOutTime)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Grace</p>
+              <p className="text-xs text-muted-foreground">Grace</p>
               <p className="font-semibold">{data.schedule.graceMinutes} min</p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Required</p>
+              <p className="text-xs text-muted-foreground">Required</p>
               <p className="font-semibold">
                 {duration(data.schedule.requiredWorkMinutes)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Break</p>
+              <p className="text-xs text-muted-foreground">Break</p>
               <p className="font-semibold">
                 {duration(data.schedule.breakAllowanceMinutes)}
               </p>
             </div>
           </div>
           {record && (
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-xs">
-              <span className="rounded-full bg-indigo-50 px-3 py-1 font-semibold text-indigo-700">
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4 text-xs">
+              <span className="rounded-full bg-primary-soft px-3 py-1 font-semibold text-primary-text">
                 Work date:{" "}
                 {new Date(`${record.workDate}T00:00:00`).toLocaleDateString(
                   "en-PK",
@@ -134,26 +134,26 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
                 )}
               </span>
               <span
-                className={`rounded-full px-3 py-1 font-bold ${record.arrivalStatus === "LATE" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
+                className={`rounded-full px-3 py-1 font-bold ${record.arrivalStatus === "LATE" ? "bg-warning-soft text-warning" : "bg-success-soft text-success"}`}
               >
                 {record.arrivalStatus === "LATE"
                   ? `${record.lateMinutes}m late`
                   : "On time"}
               </span>
               {record.reconciliationStatus === "OPEN_SHIFT" && (
-                <span className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-700">
+                <span className="rounded-full bg-danger-soft px-3 py-1 font-bold text-danger">
                   Open shift · review required
                 </span>
               )}
               {status === "CLOCKED_OUT" && (
                 <>
-                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                  <span className="rounded-full bg-surface-secondary px-3 py-1">
                     Short: {record.shortMinutes}m
                   </span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                  <span className="rounded-full bg-surface-secondary px-3 py-1">
                     Extra: {record.extraMinutes}m
                   </span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1">
+                  <span className="rounded-full bg-surface-secondary px-3 py-1">
                     Break exceeded: {record.breakExceededMinutes}m
                   </span>
                 </>

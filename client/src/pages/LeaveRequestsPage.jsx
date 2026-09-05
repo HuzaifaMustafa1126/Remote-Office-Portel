@@ -69,7 +69,7 @@ export default function LeaveRequestsPage() {
         description="Review employee leave and payroll deduction status."
       />
       {notice && (
-        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-sm font-semibold text-indigo-700">
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
           {notice}
         </div>
       )}
@@ -77,34 +77,34 @@ export default function LeaveRequestsPage() {
         {cards.map(([label, key, Icon]) => (
           <div
             key={key}
-            className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+            className="rounded-2xl border border-border bg-surface p-4 shadow-sm"
           >
             <div className="flex justify-between">
               <div>
-                <p className="text-xs text-slate-500">{label}</p>
+                <p className="text-xs text-muted-foreground">{label}</p>
                 <p className="mt-2 text-2xl font-black">
                   {data.summary[key] || 0}
                 </p>
               </div>
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary-text">
                 <Icon size={17} />
               </div>
             </div>
           </div>
         ))}
       </div>
-      <section className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 xl:grid-cols-6">
+      <section className="mt-5 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2 xl:grid-cols-6">
           <input
             value={filters.search}
             onChange={(e) => set("search", e.target.value)}
             placeholder="Search employee or reason…"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2"
+            className="rounded-xl border border-border px-3 py-2 text-sm xl:col-span-2"
           />
           <select
             value={filters.status}
             onChange={(e) => set("status", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           >
             <option value="">All Statuses</option>
             <option>PENDING</option>
@@ -115,7 +115,7 @@ export default function LeaveRequestsPage() {
           <select
             value={filters.leaveType}
             onChange={(e) => set("leaveType", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           >
             <option value="">All Types</option>
             <option value="CASUAL">Casual</option>
@@ -128,7 +128,7 @@ export default function LeaveRequestsPage() {
             value={filters.department}
             onChange={(e) => set("department", e.target.value)}
             placeholder="Department"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           />
           <button
             onClick={() =>
@@ -141,7 +141,7 @@ export default function LeaveRequestsPage() {
                 to: "",
               })
             }
-            className="text-sm font-semibold text-slate-500"
+            className="text-sm font-semibold text-muted-foreground"
           >
             Reset Filters
           </button>
@@ -149,19 +149,19 @@ export default function LeaveRequestsPage() {
             type="date"
             value={filters.from}
             onChange={(e) => set("from", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           />
           <input
             type="date"
             value={filters.to}
             onChange={(e) => set("to", e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-border px-3 py-2 text-sm"
           />
         </div>
         {data.rows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
+              <thead className="bg-surface-secondary text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4">Employee</th>
                   <th>Type</th>
@@ -174,12 +174,12 @@ export default function LeaveRequestsPage() {
                   <th className="pr-4">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {data.rows.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
+                  <tr key={r.id} className="hover:bg-surface-secondary">
                     <td className="p-4">
                       <p className="font-semibold">{r.employeeName}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-muted-foreground">
                         {r.employeeCode} • {r.department}
                       </p>
                     </td>

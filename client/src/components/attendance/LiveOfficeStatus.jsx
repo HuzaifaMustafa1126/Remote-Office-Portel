@@ -11,16 +11,16 @@ const time = (v) =>
     : "—";
 export default function LiveOfficeStatus({ employees = [] }) {
   return (
-    <section className="h-full rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="h-full rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-bold">Live Office Status</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Current employee availability
           </p>
         </div>
-        <span className="flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-600">
-          <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
+        <span className="flex items-center gap-2 rounded-full bg-primary-soft px-2.5 py-1 text-[10px] font-bold text-primary-text">
+          <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           LIVE
         </span>
       </div>
@@ -28,34 +28,34 @@ export default function LiveOfficeStatus({ employees = [] }) {
         {employees.length ? (
           employees.map((e) => (
             <div
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl p-2.5 transition hover:bg-slate-50"
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl p-2.5 transition hover:bg-surface-secondary"
               key={e.employeeId}
             >
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+              <div className="grid h-9 w-9 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary-text">
                 {initials(e.employeeName)}
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">
                   {e.employeeName}
                 </p>
-                <p className="truncate text-[11px] text-slate-400">
+                <p className="truncate text-[11px] text-muted-foreground">
                   {e.employeeCode} • {e.department}
                 </p>
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-muted-foreground">
                   In: {time(e.clockInAt)}
                 </p>
               </div>
               <div className="text-right">
                 <AttendanceBadge status={e.status} />
-                <div className="mt-1.5 text-xs font-semibold text-slate-700">
+                <div className="mt-1.5 text-xs font-semibold text-foreground">
                   {e.status === "ON_BREAK" ? (
                     <>
-                      <span className="mr-1 text-slate-400">Break:</span>
+                      <span className="mr-1 text-muted-foreground">Break:</span>
                       <BreakTimer seconds={e.currentBreakSeconds} running />
                     </>
                   ) : (
                     <>
-                      <span className="mr-1 text-slate-400">
+                      <span className="mr-1 text-muted-foreground">
                         {e.status === "CLOCKED_OUT" ? "Worked:" : "Work:"}
                       </span>
                       <LiveWorkTimer
@@ -69,7 +69,7 @@ export default function LiveOfficeStatus({ employees = [] }) {
             </div>
           ))
         ) : (
-          <p className="py-10 text-center text-sm text-slate-400">
+          <p className="py-10 text-center text-sm text-muted-foreground">
             No attendance-tracked employees.
           </p>
         )}
