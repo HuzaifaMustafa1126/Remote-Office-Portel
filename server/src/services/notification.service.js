@@ -111,13 +111,15 @@ export async function getPreferences(userId) {
     [userId],
   );
   const [[row]] = await pool.execute(
-    `SELECT sound_enabled AS soundEnabled,task_notifications AS taskNotifications,
-     leave_notifications AS leaveNotifications,break_notifications AS breakNotifications,
-     attendance_notifications AS attendanceNotifications,browser_notifications AS browserNotifications
+    `SELECT browser_notifications AS desktopEnabled,sound_enabled AS soundEnabled,task_notifications AS taskEnabled,
+     leave_notifications AS leaveEnabled,break_notifications AS breakEnabled,
+     attendance_notifications AS attendanceEnabled,announcement_notifications AS announcementEnabled
      FROM notification_preferences WHERE user_id=?`,
     [userId],
   );
-  return row;
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key, Boolean(value)]),
+  );
 }
 
 export async function updatePreferences(userId, data) {
@@ -126,16 +128,17 @@ export async function updatePreferences(userId, data) {
     [userId],
   );
   await pool.execute(
-    `UPDATE notification_preferences SET sound_enabled=?,task_notifications=?,leave_notifications=?,
-     break_notifications=?,attendance_notifications=?,browser_notifications=? WHERE user_id=?`,
+    `INSERT INTO notification_preferences(user_id,browser_notifications,sound_enabled,task_notifications,leave_notifications,break_notifications,attendance_notifications,announcement_notifications)
+     VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE browser_notifications=VALUES(browser_notifications),sound_enabled=VALUES(sound_enabled),task_notifications=VALUES(task_notifications),leave_notifications=VALUES(leave_notifications),break_notifications=VALUES(break_notifications),attendance_notifications=VALUES(attendance_notifications),announcement_notifications=VALUES(announcement_notifications)`,
     [
-      data.soundEnabled,
-      data.taskNotifications,
-      data.leaveNotifications,
-      data.breakNotifications,
-      data.attendanceNotifications,
-      data.browserNotifications,
       userId,
+      data.desktopEnabled,
+      data.soundEnabled,
+      data.taskEnabled,
+      data.leaveEnabled,
+      data.breakEnabled,
+      data.attendanceEnabled,
+      data.announcementEnabled,
     ],
   );
   return getPreferences(userId);

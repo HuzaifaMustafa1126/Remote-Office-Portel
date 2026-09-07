@@ -17,6 +17,7 @@ r.patch(
   asyncHandler(c.reconcile),
 );
 r.get("/today", p("attendance.view_own"), asyncHandler(c.today));
+r.get("/team-leave", p("attendance.view_own"), asyncHandler(c.teamLeave));
 r.get(
   "/history",
   p("attendance.view_own"),

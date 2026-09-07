@@ -7,6 +7,7 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  CalendarPlus,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import AttendanceBadge from "../components/attendance/AttendanceBadge";
@@ -22,6 +23,7 @@ import useAttendance from "../hooks/useAttendance";
 import useAuth from "../hooks/useAuth";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import usePermission from "../hooks/usePermission";
+import useNotifications from "../hooks/useNotifications";
 import * as attendance from "../services/attendance.service";
 import { myAccrual } from "../services/salary.service";
 import { PERMISSIONS as P } from "../utils/permissions";
@@ -62,7 +64,10 @@ function Overview({ stats }) {
   const rows = [
     ["Present", stats.presentToday, "bg-chart-1"],
     ["Working", stats.workingNow, "bg-chart-2"],
+    ["Late", stats.late, "bg-chart-3"],
+    ["Half Day", stats.halfDay, "bg-chart-4"],
     ["On Break", stats.onBreak, "bg-chart-3"],
+    ["On Leave", stats.onLeave, "bg-chart-5"],
     ["Clocked Out", stats.clockedOut, "bg-chart-4"],
     ["Not Arrived", stats.notClockedIn, "bg-chart-5"],
   ];
@@ -92,6 +97,7 @@ function Overview({ stats }) {
     </section>
   );
 }
+function WorkforceOverview({stats}) { return <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Workforce today</p><div className="mt-3 flex items-end gap-3"><span className="text-5xl font-black">{stats.totalEmployees}</span><span className="pb-1 text-sm text-muted-foreground">Total employees</span></div><div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">{[["Present",stats.presentToday],["Working",stats.workingNow],["Clocked out",stats.clockedOut],["Not arrived",stats.notClockedIn]].map(([label,value])=><div key={label}><p className="text-xl font-black">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div></section> }
 function EmployeeAttendance({ employees }) {
   return (
     <section className="rounded-2xl border border-border bg-surface shadow-sm">
@@ -114,8 +120,10 @@ function EmployeeAttendance({ employees }) {
               <th className="px-5 py-3">Employee</th>
               <th className="px-3 py-3">Job Title</th>
               <th className="px-3 py-3">Clock In</th>
+              <th className="px-3 py-3">Late By</th>
               <th className="px-3 py-3">Work Time</th>
-              <th className="px-5 py-3">Status</th>
+              <th className="px-3 py-3">Attendance</th>
+              <th className="px-5 py-3">Live Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -129,11 +137,15 @@ function EmployeeAttendance({ employees }) {
                 </td>
                 <td className="px-3 py-3 text-muted-foreground">{e.jobTitle}</td>
                 <td className="px-3 py-3">{clock(e.clockInAt)}</td>
+                <td className="px-3 py-3 text-muted-foreground">{Number(e.chargeableLateMinutes) ? `${e.chargeableLateMinutes} min` : "—"}</td>
                 <td className="px-3 py-3 font-medium">
                   <LiveWorkTimer
                     seconds={e.workSeconds}
                     running={e.status === "WORKING"}
                   />
+                </td>
+                <td className="px-3 py-3">
+                  <AttendanceBadge status={e.attendanceStatus || "PRESENT"} />
                 </td>
                 <td className="px-5 py-3">
                   <AttendanceBadge status={e.status} />
@@ -151,7 +163,15 @@ function EmployeeAttendance({ employees }) {
     </section>
   );
 }
+function TeamLeave({ rows = [] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const current = rows.filter((x) => String(x.leaveDate).slice(0, 10) === today);
+  const upcoming = rows.filter((x) => String(x.leaveDate).slice(0, 10) > today);
+  const block = (title, data) => <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm"><h2 className="font-bold">{title}</h2><div className="mt-3 space-y-2">{data.length ? data.slice(0,6).map((x)=><div key={`${x.employeeId}-${x.leaveDate}`} className="rounded-xl border border-border p-3"><p className="text-sm font-semibold">{x.employeeName}</p><p className="text-xs text-muted-foreground">{x.jobTitle || x.department} · {String(x.leaveType).replaceAll('_',' ')}</p><p className="mt-1 text-xs">{x.leaveDate}{x.returnDate !== x.leaveDate ? ` · Back after ${x.returnDate}` : " · Today only"}</p></div>) : <p className="text-sm text-muted-foreground">No approved leave.</p>}</div></section>;
+  return <div className="grid gap-4 md:grid-cols-2">{block("Who's On Leave Today",current)}{block("Upcoming Team Leave",upcoming)}</div>;
+}
 export default function DashboardPage() {
+  const {connected}=useNotifications();
   const { user } = useAuth(),
     canClock = usePermission(P.ATTENDANCE_CLOCK),
     canViewAll = usePermission(P.ATTENDANCE_ALL),
@@ -159,6 +179,7 @@ export default function DashboardPage() {
   const own = useAttendance(),
     [live, setLive] = useState(null),
     [activity, setActivity] = useState([]),
+    [teamLeave,setTeamLeave]=useState([]),
     [salaryAccrual,setSalaryAccrual]=useState(null),
     [interval, setIntervalPreference] = useState(() => {
       const stored = Number(
@@ -170,6 +191,7 @@ export default function DashboardPage() {
   const refreshDashboard = useCallback(async () => {
     const tasks = [];
     if (canClock) tasks.push(own.refresh());
+    if (canClock) tasks.push(attendance.getTeamLeave().then(setTeamLeave));
     if (canViewSalary) tasks.push(myAccrual().then(setSalaryAccrual));
     if (canViewAll)
       tasks.push(
@@ -260,72 +282,12 @@ export default function DashboardPage() {
           </aside>
         </div>
       )}
+      {canClock && <div className="mt-5"><TeamLeave rows={teamLeave} /></div>}
       {canViewAll && live && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12">
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="Total Employees"
-              value={live.stats.totalEmployees}
-              detail="Attendance-tracked employees"
-              icon={Users}
-            />
-          </div>
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="Present Today"
-              value={live.stats.presentToday}
-              detail={`Out of ${live.stats.totalEmployees} employees`}
-              icon={UserCheck}
-              tone="purple"
-            />
-          </div>
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="Working Now"
-              value={live.stats.workingNow}
-              detail="Currently active"
-              icon={BriefcaseBusiness}
-            />
-          </div>
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="On Break"
-              value={live.stats.onBreak}
-              detail="Currently paused"
-              icon={Coffee}
-              tone="purple"
-            />
-          </div>
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="Clocked Out"
-              value={live.stats.clockedOut}
-              detail="Workday completed"
-              icon={LogOut}
-              tone="slate"
-            />
-          </div>
-          <div className="xl:col-span-2">
-            <CompactStat
-              label="Not Clocked In"
-              value={live.stats.notClockedIn}
-              detail="Not arrived today"
-              icon={UserMinus}
-              tone="slate"
-            />
-          </div>
-          <div className="xl:col-span-5">
-            <Overview stats={live.stats} />
-          </div>
-          <div className="xl:col-span-7">
-            <LiveOfficeStatus employees={live.employees} />
-          </div>
-          <div className="xl:col-span-8">
-            <EmployeeAttendance employees={live.employees} />
-          </div>
-          <div className="xl:col-span-4">
-            <LiveActivityFeed items={activity} />
-          </div>
+        <div className="mt-5 space-y-4 min-w-0">
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(380px,.75fr)]"><WorkforceOverview stats={live.stats}/><div className="grid grid-cols-2 gap-4"><CompactStat label="Working Now" value={live.stats.workingNow} detail="Currently active" icon={BriefcaseBusiness}/><CompactStat label="Late Today" value={live.stats.late} detail="After configured grace" icon={UserMinus} tone="purple"/><CompactStat label="On Break" value={live.stats.onBreak} detail="Currently paused" icon={Coffee} tone="slate"/><CompactStat label="On Leave" value={live.stats.onLeave} detail="Approved leave today" icon={CalendarPlus} tone="slate"/></div></div>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(340px,.75fr)_minmax(0,1.25fr)]"><Overview stats={live.stats}/><LiveOfficeStatus employees={live.employees} connected={connected} /></div>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]"><EmployeeAttendance employees={live.employees}/><LiveActivityFeed items={activity}/></div>
         </div>
       )}
     </>

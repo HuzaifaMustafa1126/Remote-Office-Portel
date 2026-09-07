@@ -5,6 +5,8 @@ import { getCompanyDayStatus } from "../utils/workingDay.js";
 import { notifyRoles } from "./notification.service.js";
 import { applicableShift } from "./shift.service.js";
 import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
+import { current as currentPolicy } from "./attendancePolicy.service.js";
+import { classifyArrival } from "../utils/attendancePolicy.js";
 
 const attendanceSelect = `
   SELECT ar.id, ar.employee_id AS employeeId, ar.work_date AS workDate,ar.attendance_date AS attendanceDate,
@@ -113,11 +115,12 @@ export async function clockIn(user) {
       );
     if (await currentRecord(conn, user.employee_id, true))
       throw new ApiError(409, "You are already clocked in");
+    const policy = await currentPolicy(workDate, conn);
     let snapshot = { scheduledIn: null, scheduledOut: null, lateMinutes: 0 };
     if (settings)
       [[snapshot]] = await conn.execute(
         `SELECT TIMESTAMP(?,?) scheduledIn,TIMESTAMP(DATE_ADD(?,INTERVAL ? DAY),?) scheduledOut,
-         GREATEST(0,TIMESTAMPDIFF(MINUTE,DATE_ADD(TIMESTAMP(?,?),INTERVAL ? MINUTE),CURRENT_TIMESTAMP)) lateMinutes`,
+         GREATEST(0,TIMESTAMPDIFF(MINUTE,TIMESTAMP(?,?),CURRENT_TIMESTAMP)) lateMinutes`,
         [
           workDate,
           settings.clockInTime,
@@ -126,13 +129,13 @@ export async function clockIn(user) {
           settings.clockOutTime,
           workDate,
           settings.clockInTime,
-          settings.graceMinutes,
         ],
       );
+    const decision = classifyArrival(policy, Number(snapshot.lateMinutes || 0));
     const [result] = await conn.execute(
       `INSERT INTO attendance_records(employee_id,attendance_date,work_date,shift_id,scheduled_clock_in,scheduled_clock_out,
-       grace_minutes,required_work_minutes,break_allowance_minutes,arrival_status,late_minutes,clock_in_at,status,day_status)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'WORKING','PRESENT')`,
+       grace_minutes,required_work_minutes,break_allowance_minutes,arrival_status,late_minutes,clock_in_at,status,day_status,policy_id,policy_snapshot,actual_late_minutes,chargeable_late_minutes)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,'WORKING',?,?,?, ?,?)`,
       [
         user.employee_id,
         workDate,
@@ -143,12 +146,9 @@ export async function clockIn(user) {
         settings?.graceMinutes ?? null,
         settings?.requiredWorkMinutes ?? null,
         settings?.breakAllowanceMinutes ?? null,
-        settings
-          ? Number(snapshot.lateMinutes) > 0
-            ? "LATE"
-            : "ON_TIME"
-          : null,
+        settings ? (decision.status === "LATE" ? "LATE" : "ON_TIME") : null,
         Number(snapshot.lateMinutes || 0),
+        decision.status, policy.id, JSON.stringify(policy), Number(snapshot.lateMinutes || 0), decision.chargeableMinutes,
       ],
     );
     const [[record]] = await conn.execute(
@@ -467,13 +467,18 @@ export async function getLiveOffice() {
   const [employees] = await pool.execute(
     `SELECT e.id AS employeeId, CONCAT(e.first_name, ' ', e.last_name) AS employeeName,
       e.employee_code AS employeeCode, e.department, e.job_title AS jobTitle,
-      COALESCE(ar.status, 'NOT_CLOCKED_IN') AS status, ar.clock_in_at AS clockInAt,
-      ar.work_date AS workDate,ar.arrival_status AS arrivalStatus,CASE WHEN ar.status IN ('WORKING','ON_BREAK') AND ar.scheduled_clock_out<CURRENT_TIMESTAMP THEN 'OPEN_SHIFT' ELSE ar.reconciliation_status END AS reconciliationStatus,
+      CASE WHEN al.leaveRequestId IS NOT NULL THEN 'OFFLINE' ELSE COALESCE(ar.status, 'NOT_CLOCKED_IN') END AS liveStatus,
+      CASE WHEN al.leaveRequestId IS NOT NULL THEN 'ON_LEAVE' ELSE COALESCE(ar.status, 'NOT_CLOCKED_IN') END AS status,
+      CASE WHEN al.leaveRequestId IS NOT NULL THEN 'ON_LEAVE' ELSE COALESCE(ar.day_status, ar.arrival_status, 'PRESENT') END AS attendanceStatus,
+      ar.clock_in_at AS clockInAt,
+      ar.work_date AS workDate,ar.arrival_status AS arrivalStatus,ar.chargeable_late_minutes AS chargeableLateMinutes,TIME_FORMAT(ws.start_time,'%H:%i') shiftStart,TIME_FORMAT(ws.end_time,'%H:%i') shiftEnd,al.leaveType,al.returnDate,CASE WHEN ar.status IN ('WORKING','ON_BREAK') AND ar.scheduled_clock_out<CURRENT_TIMESTAMP THEN 'OPEN_SHIFT' ELSE ar.reconciliation_status END AS reconciliationStatus,
       GREATEST(0, COALESCE(TIMESTAMPDIFF(SECOND, ar.clock_in_at, COALESCE(ar.clock_out_at, CURRENT_TIMESTAMP)), 0) -
         COALESCE((SELECT SUM(TIMESTAMPDIFF(SECOND, b.break_start_at, COALESCE(b.break_end_at, CURRENT_TIMESTAMP))) FROM attendance_breaks b WHERE b.attendance_id = ar.id), 0)) AS workSeconds,
       COALESCE((SELECT TIMESTAMPDIFF(SECOND, b.break_start_at, CURRENT_TIMESTAMP) FROM attendance_breaks b WHERE b.attendance_id = ar.id AND b.status = 'ACTIVE' LIMIT 1), 0) AS currentBreakSeconds
      FROM employees e LEFT JOIN attendance_records ar ON ar.employee_id = e.id AND
        (ar.work_date=CURRENT_DATE OR (ar.status IN ('WORKING','ON_BREAK') AND ar.work_date<CURRENT_DATE))
+     LEFT JOIN work_shifts ws ON ws.id=ar.shift_id
+     LEFT JOIN (SELECT ld.employee_id,MAX(lr.id) leaveRequestId,MAX(lr.leave_type) leaveType,MAX(lr.end_date) returnDate FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id AND lr.status='APPROVED' WHERE ld.leave_date=CURRENT_DATE GROUP BY ld.employee_id) al ON al.employee_id=e.id
      WHERE e.status = 'ACTIVE' AND e.track_attendance = TRUE ORDER BY FIELD(COALESCE(ar.status, 'NOT_CLOCKED_IN'), 'ON_BREAK','WORKING','CLOCKED_OUT','NOT_CLOCKED_IN'), e.first_name, e.last_name`,
   );
   const stats = {
@@ -484,18 +489,26 @@ export async function getLiveOffice() {
     clockedOut: 0,
     notClockedIn: 0,
     late: 0,
+    halfDay: 0,
+    onLeave: 0,
     openShifts: 0,
   };
   for (const e of employees) {
-    if (e.status !== "NOT_CLOCKED_IN") stats.presentToday += 1;
+    if (!["NOT_CLOCKED_IN", "ON_LEAVE"].includes(e.status)) stats.presentToday += 1;
     if (e.status === "WORKING") stats.workingNow += 1;
     if (e.status === "ON_BREAK") stats.onBreak += 1;
     if (e.status === "CLOCKED_OUT") stats.clockedOut += 1;
     if (e.status === "NOT_CLOCKED_IN") stats.notClockedIn += 1;
-    if (e.arrivalStatus === "LATE") stats.late += 1;
+    if (e.status === "ON_LEAVE") stats.onLeave += 1;
+    if (e.attendanceStatus === "LATE" || e.arrivalStatus === "LATE") stats.late += 1;
+    if (e.attendanceStatus === "HALF_DAY") stats.halfDay += 1;
     if (e.reconciliationStatus === "OPEN_SHIFT") stats.openShifts += 1;
   }
   return { stats, employees, serverTime: new Date().toISOString() };
+}
+export async function getTeamLeave() {
+  const [rows] = await pool.execute(`SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,e.department,e.job_title jobTitle,lr.leave_type leaveType,ld.leave_date leaveDate,lr.end_date returnDate FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id AND lr.status='APPROVED' JOIN employees e ON e.id=ld.employee_id WHERE ld.leave_date BETWEEN CURRENT_DATE AND DATE_ADD(CURRENT_DATE,INTERVAL 30 DAY) ORDER BY ld.leave_date,e.first_name`);
+  return rows;
 }
 
 export async function getActivity() {

@@ -35,6 +35,7 @@ export async function list(req, res) {
 export async function live(req, res) {
   res.json({ success: true, data: await service.getLiveOffice() });
 }
+export async function teamLeave(req,res){res.json({success:true,data:await service.getTeamLeave()});}
 export async function activity(req, res) {
   res.json({ success: true, data: await service.getActivity() });
 }

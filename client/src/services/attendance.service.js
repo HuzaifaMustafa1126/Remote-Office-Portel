@@ -15,6 +15,8 @@ export const getAttendance = (params) =>
   api.get("/attendance", { params }).then((r) => r.data.data);
 export const getLive = () =>
   api.get("/attendance/live").then((r) => r.data.data);
+export const getTeamLeave = () =>
+  api.get("/attendance/team-leave").then((r) => r.data.data);
 export const getActivity = () =>
   api.get("/attendance/activity").then((r) => r.data.data);
 export const getDailyReport = (params) =>

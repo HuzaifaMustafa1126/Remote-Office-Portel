@@ -13,6 +13,11 @@ const requiredTables = [
   "payroll_items",
   "notifications",
   "auth_sessions",
+  "attendance_policies",
+  "employee_late_counters",
+  "attendance_late_events",
+  "attendance_penalties",
+  "notification_subscriptions",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
@@ -25,6 +30,9 @@ const requiredMigrations = [
   "015_remove_employee_archiving.sql",
   "016_fix_saturday_off_calendar_type.sql",
   "017_repair_default_role_permissions.sql",
+  "019_attendance_policy.sql",
+  "020_notification_push_subscriptions.sql",
+  "021_notification_announcement_preference.sql",
 ];
 
 export async function validateSchema() {

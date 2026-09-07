@@ -6,6 +6,7 @@ export const listSchema = z.object({
   category: z.enum(["TASK", "LEAVE", "BREAK", "ATTENDANCE"]).optional(),
 });
 export const preferencesSchema = z.object({
-  soundEnabled: z.boolean(), taskNotifications: z.boolean(), leaveNotifications: z.boolean(),
-  breakNotifications: z.boolean(), attendanceNotifications: z.boolean(), browserNotifications: z.boolean(),
-});
+  desktopEnabled: z.boolean(), soundEnabled: z.boolean(), taskEnabled: z.boolean(),
+  leaveEnabled: z.boolean(), breakEnabled: z.boolean(), attendanceEnabled: z.boolean(),
+  announcementEnabled: z.boolean(),
+}).strict("Unexpected notification preference field");

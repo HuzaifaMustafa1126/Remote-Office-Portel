@@ -10,12 +10,12 @@ export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "") =>
   type.startsWith("TASK_")
-    ? "taskNotifications"
+    ? "taskEnabled"
     : type.startsWith("LEAVE_")
-      ? "leaveNotifications"
+      ? "leaveEnabled"
       : type.startsWith("BREAK_")
-        ? "breakNotifications"
-        : "attendanceNotifications";
+        ? "breakEnabled"
+        : type.startsWith("ANNOUNCEMENT") ? "announcementEnabled" : "attendanceEnabled";
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -114,14 +114,14 @@ export function NotificationProvider({ children }) {
         ),
       );
       setUnread((n) => n + 1);
-      setToasts((old) => [...old, notification]);
+      if (!document.hidden) setToasts((old) => [...old, notification]);
       play(notification);
-      setTimeout(
+      if (!document.hidden) setTimeout(
         () => setToasts((old) => old.filter((x) => x.id !== notification.id)),
         7000,
       );
       if (
-        preferencesRef.current?.browserNotifications &&
+        preferencesRef.current?.desktopEnabled &&
         "Notification" in window &&
         Notification.permission === "granted" &&
         document.hidden

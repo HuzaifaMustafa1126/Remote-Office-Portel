@@ -7,6 +7,10 @@ const styles = {
   ABSENT: "bg-danger-soft text-danger",
   OFF_DAY: "bg-surface-secondary text-muted-foreground",
   WORKED_HOLIDAY: "bg-primary-soft text-primary-text",
+  LATE: "bg-warning-soft text-warning",
+  HALF_DAY: "bg-danger-soft text-danger",
+  OFFLINE: "bg-surface-secondary text-muted-foreground",
+  ON_LEAVE: "bg-surface-secondary text-foreground",
 };
 const labels = {
   WORKING: "Working",
@@ -17,6 +21,10 @@ const labels = {
   ABSENT: "Unauthorized Absence",
   OFF_DAY: "Official Off Day",
   WORKED_HOLIDAY: "Worked on Holiday",
+  LATE: "Late",
+  HALF_DAY: "Half Day",
+  OFFLINE: "Offline",
+  ON_LEAVE: "On Leave",
 };
 export default function AttendanceBadge({ status = "NOT_CLOCKED_IN" }) {
   return (

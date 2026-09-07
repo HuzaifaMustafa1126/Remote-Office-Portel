@@ -16,6 +16,7 @@ import {
   Clock4,
   WalletCards,
   ChartNoAxesCombined,
+  SlidersHorizontal,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
@@ -57,7 +58,7 @@ const groups = [
   },
   {
     label: "SYSTEM",
-    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
+    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Attendance Policy", "/settings/attendance-policy", SlidersHorizontal, P.ATTENDANCE_POLICY_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
   },
 ];
 export default function Sidebar({ open, onClose }) {
