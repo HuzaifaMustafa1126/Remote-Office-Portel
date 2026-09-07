@@ -26,6 +26,7 @@ import ReportsPage from "../pages/ReportsPage";
 import AppearancePage from "../pages/AppearancePage";
 import AccountSettingsPage from "../pages/AccountSettingsPage";
 import AttendancePolicyPage from "../pages/AttendancePolicyPage";
+import NotificationPermissionsPage from "../pages/NotificationPermissionsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -49,6 +50,7 @@ export default function AppRoutes() {
         <Route path="settings/appearance" element={<AppearancePage />} />
         <Route path="account-settings" element={<AccountSettingsPage />} />
         <Route path="settings/attendance-policy" element={<Gate permission={P.ATTENDANCE_POLICY_VIEW}><AttendancePolicyPage /></Gate>} />
+        <Route path="settings/notification-permissions" element={<Gate permission={P.NOTIFICATION_POLICY_VIEW}><NotificationPermissionsPage /></Gate>} />
         <Route
           index
           element={

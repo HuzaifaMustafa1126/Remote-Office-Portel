@@ -1,0 +1,15 @@
+CREATE TABLE notification_policies(
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,event_type VARCHAR(50) NOT NULL UNIQUE,
+ enabled BOOLEAN NOT NULL DEFAULT TRUE,audience_type ENUM('ALL_EMPLOYEES','CEO_ADMIN','MANAGERS','SAME_DEPARTMENT','SELECTED_ROLES','SELECTED_EMPLOYEES','NOBODY') NOT NULL,
+ mandatory BOOLEAN NOT NULL DEFAULT FALSE,notify_actor BOOLEAN NOT NULL DEFAULT FALSE,
+ in_app_enabled BOOLEAN NOT NULL DEFAULT TRUE,desktop_enabled BOOLEAN NOT NULL DEFAULT FALSE,sound_enabled BOOLEAN NOT NULL DEFAULT FALSE,push_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+ created_by BIGINT UNSIGNED NULL,updated_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+CREATE TABLE notification_policy_roles(policy_id BIGINT UNSIGNED NOT NULL,role_id BIGINT UNSIGNED NOT NULL,PRIMARY KEY(policy_id,role_id),FOREIGN KEY(policy_id) REFERENCES notification_policies(id) ON DELETE CASCADE,FOREIGN KEY(role_id) REFERENCES roles(id) ON DELETE CASCADE);
+CREATE TABLE notification_policy_employees(policy_id BIGINT UNSIGNED NOT NULL,employee_id BIGINT UNSIGNED NOT NULL,PRIMARY KEY(policy_id,employee_id),FOREIGN KEY(policy_id) REFERENCES notification_policies(id) ON DELETE CASCADE,FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE);
+ALTER TABLE notifications ADD COLUMN event_key VARCHAR(190) NULL,ADD COLUMN desktop_allowed BOOLEAN NOT NULL DEFAULT TRUE,ADD COLUMN sound_allowed BOOLEAN NOT NULL DEFAULT TRUE,ADD UNIQUE KEY uq_notification_event_user(event_key,user_id);
+INSERT INTO notification_policies(event_type,audience_type,in_app_enabled,desktop_enabled,sound_enabled) VALUES
+('CLOCK_IN','ALL_EMPLOYEES',1,0,0),('CLOCK_OUT','ALL_EMPLOYEES',1,0,0),('BREAK_STARTED','ALL_EMPLOYEES',1,1,1),('BREAK_ENDED','ALL_EMPLOYEES',1,1,0),('LATE_ARRIVAL','CEO_ADMIN',1,1,0),('HALF_DAY','CEO_ADMIN',1,1,0),('ON_LEAVE','ALL_EMPLOYEES',1,0,0),('LEAVE_APPROVED','CEO_ADMIN',1,1,0),('LEAVE_REJECTED','CEO_ADMIN',1,1,0),('TASK_ASSIGNED','ALL_EMPLOYEES',1,1,0),('TASK_UPDATED','ALL_EMPLOYEES',1,0,0),('ANNOUNCEMENT','ALL_EMPLOYEES',1,1,1),('PAYROLL_GENERATED','CEO_ADMIN',1,1,0);
+INSERT INTO permissions(name,description) VALUES('notification_policy.view','View company notification policies'),('notification_policy.manage','Manage company notification policies'),('notification_preferences.view','View own notification preferences'),('notification_preferences.manage','Manage own notification preferences'),('notification.view_own','View own notifications');
+INSERT IGNORE INTO role_permissions(role_id,permission_id) SELECT r.id,p.id FROM roles r JOIN permissions p ON (UPPER(r.name) IN('CEO','ADMIN') AND p.name IN('notification_policy.view','notification_policy.manage','notification_preferences.view','notification_preferences.manage','notification.view_own')) OR (UPPER(r.name)='EMPLOYEE' AND p.name IN('notification_preferences.view','notification_preferences.manage','notification.view_own'));

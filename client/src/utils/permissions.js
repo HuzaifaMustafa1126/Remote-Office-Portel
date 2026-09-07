@@ -20,6 +20,8 @@ export const PERMISSIONS = {
   ATTENDANCE_REPORTS: "attendance.reports",
   ATTENDANCE_POLICY_VIEW: "attendance_policy.view",
   ATTENDANCE_POLICY_MANAGE: "attendance_policy.manage",
+  NOTIFICATION_POLICY_VIEW: "notification_policy.view",
+  NOTIFICATION_POLICY_MANAGE: "notification_policy.manage",
   LEAVE_CREATE: "leave.create",
   LEAVE_OWN: "leave.view_own",
   LEAVE_ALL: "leave.view_all",

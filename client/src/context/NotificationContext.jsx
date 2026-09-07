@@ -40,7 +40,7 @@ export function NotificationProvider({ children }) {
   }, []);
   const play = useCallback((notification) => {
     const current = preferencesRef.current;
-    if (!current?.soundEnabled || !current[categoryFor(notification.type)])
+    if (!current?.soundEnabled || notification.soundAllowed === 0 || !current[categoryFor(notification.type)])
       return;
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -107,6 +107,8 @@ export function NotificationProvider({ children }) {
     socket.on("disconnect", () => setConnected(false));
     socket.on("notification:new", (notification) => {
       if (!active) return;
+      if (["CLOCK_IN","CLOCK_OUT","BREAK_STARTED","BREAK_ENDED","ON_LEAVE"].includes(notification.type))
+        window.dispatchEvent(new CustomEvent("office:activity"));
       setItems((old) =>
         [notification, ...old.filter((x) => x.id !== notification.id)].slice(
           0,
@@ -121,7 +123,7 @@ export function NotificationProvider({ children }) {
         7000,
       );
       if (
-        preferencesRef.current?.desktopEnabled &&
+        preferencesRef.current?.desktopEnabled && notification.desktopAllowed !== 0 &&
         "Notification" in window &&
         Notification.permission === "granted" &&
         document.hidden

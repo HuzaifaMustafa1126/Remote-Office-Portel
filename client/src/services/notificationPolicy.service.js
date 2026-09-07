@@ -1,0 +1,1 @@
+import api from './api'; export const listPolicies=()=>api.get('/notification-policies').then(r=>r.data.data); export const savePolicies=policies=>api.put('/notification-policies',{policies}).then(r=>r.data.data);

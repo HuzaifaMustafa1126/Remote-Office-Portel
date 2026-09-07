@@ -18,6 +18,7 @@ const requiredTables = [
   "attendance_late_events",
   "attendance_penalties",
   "notification_subscriptions",
+  "notification_policies",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
@@ -33,6 +34,7 @@ const requiredMigrations = [
   "019_attendance_policy.sql",
   "020_notification_push_subscriptions.sql",
   "021_notification_announcement_preference.sql",
+  "022_notification_policies.sql",
 ];
 
 export async function validateSchema() {

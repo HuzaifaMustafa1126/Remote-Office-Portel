@@ -211,6 +211,7 @@ export default function DashboardPage() {
     enabled: canClock || canViewAll,
     onRefresh: refreshDashboard,
   });
+  useEffect(()=>{const refresh=()=>refreshDashboard().catch(()=>{});window.addEventListener("office:activity",refresh);return()=>window.removeEventListener("office:activity",refresh)},[refreshDashboard]);
   const changeInterval = (value) => {
     localStorage.setItem("remoteOffice.autoRefreshInterval", String(value));
     setIntervalPreference(value);

@@ -58,7 +58,7 @@ const groups = [
   },
   {
     label: "SYSTEM",
-    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Attendance Policy", "/settings/attendance-policy", SlidersHorizontal, P.ATTENDANCE_POLICY_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
+    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Attendance Policy", "/settings/attendance-policy", SlidersHorizontal, P.ATTENDANCE_POLICY_VIEW], ["Notification Permissions", "/settings/notification-permissions", SlidersHorizontal, P.NOTIFICATION_POLICY_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
   },
 ];
 export default function Sidebar({ open, onClose }) {

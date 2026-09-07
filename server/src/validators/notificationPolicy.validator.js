@@ -1,0 +1,2 @@
+import {z} from 'zod';
+export const policiesSchema=z.object({policies:z.array(z.object({id:z.number().int().positive(),enabled:z.boolean(),audienceType:z.enum(['ALL_EMPLOYEES','CEO_ADMIN','MANAGERS','SAME_DEPARTMENT','SELECTED_ROLES','SELECTED_EMPLOYEES','NOBODY']),mandatory:z.boolean(),notifyActor:z.boolean(),inAppEnabled:z.boolean(),desktopEnabled:z.boolean(),soundEnabled:z.boolean(),pushEnabled:z.boolean()}))}).strict();

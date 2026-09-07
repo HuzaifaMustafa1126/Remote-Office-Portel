@@ -2,7 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { formatAuditTime } from "../utils/attendanceTime.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
-import { notifyRoles } from "./notification.service.js";
+import { notifyByPolicy } from "./notification.service.js";
 import { applicableShift } from "./shift.service.js";
 import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
 import { current as currentPolicy } from "./attendancePolicy.service.js";
@@ -170,10 +170,7 @@ export async function clockIn(user) {
       lateMinutes: Number(snapshot.lateMinutes || 0),
     };
   });
-  await notifyRoles(["CEO", "ADMIN"], {
-    type: outcome.lateMinutes
-      ? "ATTENDANCE_LATE_ARRIVAL"
-      : "ATTENDANCE_CLOCK_IN",
+  await notifyByPolicy(outcome.lateMinutes ? "LATE_ARRIVAL" : "CLOCK_IN", user, {
     title: outcome.lateMinutes ? "Late Arrival" : "Employee Clocked In",
     message: outcome.lateMinutes
       ? `${outcome.name} clocked in ${outcome.lateMinutes} minutes late.`
@@ -226,8 +223,7 @@ export async function startBreak(user) {
       at: entry.break_start_at,
     };
   });
-  await notifyRoles(["CEO", "ADMIN"], {
-    type: "BREAK_STARTED",
+  await notifyByPolicy("BREAK_STARTED", user, {
     title: "Break Started",
     message: `${outcome.name} started a break at ${formatAuditTime(outcome.at)}.`,
     referenceType: "ATTENDANCE",
@@ -283,8 +279,7 @@ export async function endBreak(user) {
       duration: Number(entry.duration_minutes || 0),
     };
   });
-  await notifyRoles(["CEO", "ADMIN"], {
-    type: "BREAK_ENDED",
+  await notifyByPolicy("BREAK_ENDED", user, {
     title: "Break Ended",
     message: `${outcome.name} returned from break. Duration: ${outcome.duration} minutes.`,
     referenceType: "ATTENDANCE",
@@ -340,8 +335,7 @@ export async function clockOut(user) {
       at: entry.clock_out_at,
     };
   });
-  await notifyRoles(["CEO", "ADMIN"], {
-    type: "ATTENDANCE_CLOCK_OUT",
+  await notifyByPolicy("CLOCK_OUT", user, {
     title: "Employee Clocked Out",
     message: `${outcome.name} clocked out at ${formatAuditTime(outcome.at)}.`,
     referenceType: "ATTENDANCE",
