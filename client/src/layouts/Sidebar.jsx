@@ -17,6 +17,7 @@ import {
   WalletCards,
   ChartNoAxesCombined,
   SlidersHorizontal,
+  ClipboardList,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
@@ -32,6 +33,10 @@ const groups = [
       ["Employees", "/employees", Users, P.EMPLOYEES_ALL],
       ["Leave Requests", "/leave-requests", ClipboardCheck, P.LEAVE_ALL],
     ],
+  },
+  {
+    label: "WORK",
+    items: [["Task Management", "/tasks", ClipboardList, P.TASK_VIEW_OWN]],
   },
   {
     label: "PAYROLL",
@@ -58,13 +63,30 @@ const groups = [
   },
   {
     label: "SYSTEM",
-    items: [["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW], ["Attendance Policy", "/settings/attendance-policy", SlidersHorizontal, P.ATTENDANCE_POLICY_VIEW], ["Notification Permissions", "/settings/notification-permissions", SlidersHorizontal, P.NOTIFICATION_POLICY_VIEW], ["Appearance", "/settings/appearance", Palette, null]],
+    items: [
+      ["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW],
+      [
+        "Attendance Policy",
+        "/settings/attendance-policy",
+        SlidersHorizontal,
+        P.ATTENDANCE_POLICY_VIEW,
+      ],
+      [
+        "Notification Permissions",
+        "/settings/notification-permissions",
+        SlidersHorizontal,
+        P.NOTIFICATION_POLICY_VIEW,
+      ],
+      ["Appearance", "/settings/appearance", Palette, null],
+    ],
   },
 ];
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth();
   const panel = useRef(null);
-  const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+  const [desktop, setDesktop] = useState(
+    () => window.matchMedia("(min-width: 1024px)").matches,
+  );
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
     const update = () => setDesktop(media.matches);
@@ -82,13 +104,26 @@ export default function Sidebar({ open, onClose }) {
     const keydown = (event) => {
       if (event.key === "Escape") close.current();
       if (event.key !== "Tab") return;
-      const focusable = [...panel.current.querySelectorAll("a[href], button:not([disabled])")].filter(el => el.getClientRects().length);
-      const first = focusable[0], last = focusable.at(-1);
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      const focusable = [
+        ...panel.current.querySelectorAll("a[href], button:not([disabled])"),
+      ].filter((el) => el.getClientRects().length);
+      const first = focusable[0],
+        last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      }
+      if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
     };
     document.addEventListener("keydown", keydown);
-    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", keydown); previous?.focus(); };
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", keydown);
+      previous?.focus();
+    };
   }, [open, desktop]);
   return (
     <>
@@ -114,14 +149,18 @@ export default function Sidebar({ open, onClose }) {
               <p className="text-xs text-sidebar-muted">Portel</p>
             </div>
           </div>
-          <button aria-label="Close navigation" className="shrink-0 rounded-lg p-2 lg:hidden" onClick={onClose}>
+          <button
+            aria-label="Close navigation"
+            className="shrink-0 rounded-lg p-2 lg:hidden"
+            onClick={onClose}
+          >
             <X />
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {groups.map((g) => {
-            const allowed = g.items.filter((i) =>
-              !i[3] || user.permissions.includes(i[3]),
+            const allowed = g.items.filter(
+              (i) => !i[3] || user.permissions.includes(i[3]),
             );
             return allowed.length ? (
               <div className="mb-6" key={g.label}>
@@ -147,9 +186,16 @@ export default function Sidebar({ open, onClose }) {
           })}
         </nav>
         <div className="border-t border-sidebar-foreground/10 p-4 text-xs text-sidebar-muted">
-          <p className="break-words font-semibold text-sidebar-foreground">{user.name}</p>
+          <p className="break-words font-semibold text-sidebar-foreground">
+            {user.name}
+          </p>
           <p className="mt-1">{user.roles.join(", ")}</p>
-          <button onClick={logout} className="mt-3 flex w-full items-center gap-2 rounded-lg p-2 text-sidebar-foreground hover:bg-sidebar-foreground/10"><LogOut size={18} /> Sign Out</button>
+          <button
+            onClick={logout}
+            className="mt-3 flex w-full items-center gap-2 rounded-lg p-2 text-sidebar-foreground hover:bg-sidebar-foreground/10"
+          >
+            <LogOut size={18} /> Sign Out
+          </button>
         </div>
       </aside>
     </>

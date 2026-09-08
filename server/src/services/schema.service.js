@@ -19,6 +19,15 @@ const requiredTables = [
   "attendance_penalties",
   "notification_subscriptions",
   "notification_policies",
+  "user_permission_overrides",
+  "tasks",
+  "task_settings",
+  "task_activities",
+  "task_work_sessions",
+  "task_images",
+  "task_comments",
+  "task_change_requests",
+  "task_assignment_history",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
@@ -35,6 +44,8 @@ const requiredMigrations = [
   "020_notification_push_subscriptions.sql",
   "021_notification_announcement_preference.sql",
   "022_notification_policies.sql",
+  "023_user_permission_overrides.sql",
+  "024_task_management_phase1.sql",
 ];
 
 export async function validateSchema() {
@@ -45,15 +56,17 @@ export async function validateSchema() {
   );
   const found = new Set(rows.map((row) => row.tableName));
   const missing = requiredTables.filter((name) => !found.has(name));
-  const columnPairs = Object.entries(requiredColumns).flatMap(([table, columns]) =>
-    columns.map((column) => [table, column]),
+  const columnPairs = Object.entries(requiredColumns).flatMap(
+    ([table, columns]) => columns.map((column) => [table, column]),
   );
   const [columnRows] = await pool.execute(
     `SELECT table_name tableName,column_name columnName FROM information_schema.columns
      WHERE table_schema=DATABASE() AND (${columnPairs.map(() => "(table_name=? AND column_name=?)").join(" OR ")})`,
     columnPairs.flat(),
   );
-  const foundColumns = new Set(columnRows.map((row) => `${row.tableName}.${row.columnName}`));
+  const foundColumns = new Set(
+    columnRows.map((row) => `${row.tableName}.${row.columnName}`),
+  );
   const missingColumns = columnPairs
     .map(([table, column]) => `${table}.${column}`)
     .filter((name) => !foundColumns.has(name));
@@ -61,9 +74,14 @@ export async function validateSchema() {
     "SELECT migration_name migrationName,applied_at appliedAt FROM schema_migrations ORDER BY migration_name",
   );
   const applied = new Set(migrations.map((row) => row.migrationName));
-  const missingMigrations = requiredMigrations.filter((name) => !applied.has(name));
+  const missingMigrations = requiredMigrations.filter(
+    (name) => !applied.has(name),
+  );
   return {
-    valid: missing.length === 0 && missingColumns.length === 0 && missingMigrations.length === 0,
+    valid:
+      missing.length === 0 &&
+      missingColumns.length === 0 &&
+      missingMigrations.length === 0,
     missing,
     missingColumns,
     missingMigrations,

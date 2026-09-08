@@ -9,6 +9,17 @@ import { employeeAccrual } from "../controllers/salary.controller.js";
 const r = Router();
 r.get("/", p("employees.view_all"), asyncHandler(c.list));
 r.get("/:id", p("employees.view_all"), asyncHandler(c.get));
+r.get(
+  "/:id/permissions/mobile",
+  p("employees.view_all"),
+  asyncHandler(c.mobilePermission),
+);
+r.put(
+  "/:id/permissions/mobile",
+  p("permissions.employee_override.manage"),
+  validate(v.permissionOverrideSchema),
+  asyncHandler(c.setMobilePermission),
+);
 r.get("/:id/work-settings", p("shift.view"), asyncHandler(c.workSettings));
 r.get(
   "/:id/salary-accrual",
@@ -46,6 +57,11 @@ r.put(
   validate(v.assignRoleSchema),
   asyncHandler(c.role),
 );
-r.patch("/:id/reset-password", p("employees.reset_password"), validate(v.resetPasswordSchema), asyncHandler(c.resetPassword));
+r.patch(
+  "/:id/reset-password",
+  p("employees.reset_password"),
+  validate(v.resetPasswordSchema),
+  asyncHandler(c.resetPassword),
+);
 r.delete("/:id", p("employees.delete"), asyncHandler(c.remove));
 export default r;

@@ -388,6 +388,7 @@ export async function updateEmployee(id, data, actor) {
 
 export async function setEmployeeStatus(id, status, actor) {
   const employee = await getEmployee(id);
+  if(status==='INACTIVE'){const[[tasks]]=await pool.execute("SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",[id]);if(Number(tasks.total))throw new ApiError(409,`Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deactivation.`);}
 
   await pool.execute(
     `
@@ -434,6 +435,7 @@ export async function resetEmployeePassword(id, data, actor) {
 export async function deleteEmployee(id, actor) {
   const employee = await getEmployee(id);
   if (Number(actor.employee_id) === Number(id)) throw new ApiError(400, "You cannot delete your own account.");
+  const[[tasks]]=await pool.execute("SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",[id]);if(Number(tasks.total))throw new ApiError(409,`Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deletion.`);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

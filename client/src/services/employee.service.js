@@ -17,3 +17,5 @@ export const saveWorkSettings = (id, data) =>
   api.put(`/employees/${id}/work-settings`, data).then((r) => r.data.data);
 export const resetPassword = (id, data) => api.patch(`/employees/${id}/reset-password`, data).then((r) => r.data);
 export const deleteEmployee = (id) => api.delete(`/employees/${id}`).then((r) => r.data);
+export const getMobilePermission=id=>api.get(`/employees/${id}/permissions/mobile`).then(r=>r.data.data);
+export const setMobilePermission=(id,effect)=>api.put(`/employees/${id}/permissions/mobile`,{effect}).then(r=>r.data.data);

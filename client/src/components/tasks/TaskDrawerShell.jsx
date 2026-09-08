@@ -1,0 +1,571 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ImageOff, RotateCw, X } from "lucide-react";
+import {
+  addTaskComment,
+  getTask,
+  getTaskImageBlob,
+} from "../../services/task.service";
+import PriorityBadge from "./PriorityBadge";
+const date = (v) =>
+  v
+    ? new Intl.DateTimeFormat("en-PK", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(v))
+    : "—";
+const status = (v) => String(v || "").replaceAll("_", " ");
+const eventLabels = {
+  DRAFT_CREATED: "Draft created",
+  TASK_CREATED: "Task created",
+  TASK_UPDATED: "Task updated",
+  TASK_PUBLISHED: "Task published",
+  TASK_SCHEDULED: "Task scheduled",
+  TASK_RESCHEDULED: "Task rescheduled",
+  TASK_SCHEDULE_CANCELLED: "Schedule cancelled",
+  TASK_CLAIMED: "Task claimed",
+  TASK_IN_PROGRESS: "Work started or resumed",
+  TASK_SUBMITTED_FOR_REVIEW: "Submitted for review",
+  TASK_CHANGES_REQUIRED: "Changes required",
+  TASK_COMPLETED: "Task completed",
+  COMMENT_ADDED: "Comment added",
+  IMAGE_ADDED: "Image added",
+  TASK_REASSIGNED: "Task reassigned",
+  TASK_AUTO_PUBLISHED: "Task published automatically",
+};
+export default function TaskDrawerShell({
+  task,
+  onClose,
+  management,
+  onAction,
+  refreshKey = 0,
+}) {
+  const [data, setData] = useState(null),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState(""),
+    [comment, setComment] = useState(""),
+    [commenting, setCommenting] = useState(false),
+    [notice, setNotice] = useState(""),
+    [lightbox, setLightbox] = useState(null);
+  const load = useCallback(async () => {
+    if (!task) return;
+    setLoading(true);
+    setError("");
+    try {
+      setData(await getTask(task.id));
+    } catch (e) {
+      setError(e.response?.data?.message || "Unable to load task details.");
+    } finally {
+      setLoading(false);
+    }
+  }, [task]);
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+  if (!task) return null;
+  const add = async () => {
+    if (!comment.trim()) return;
+    setCommenting(true);
+    setNotice("");
+    try {
+      await addTaskComment(task.id, comment.trim());
+      setComment("");
+      setNotice("Comment added.");
+      await load();
+    } catch (e) {
+      setNotice(e.response?.data?.message || "Unable to add comment.");
+    } finally {
+      setCommenting(false);
+    }
+  };
+  return (
+    <>
+      <button
+        aria-label="Close task details"
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-overlay/40"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-drawer-title"
+        className="fixed inset-0 z-50 flex w-full flex-col border-l border-border bg-surface shadow-2xl sm:left-auto sm:w-[min(680px,96vw)]"
+      >
+        <header className="shrink-0 border-b border-border bg-surface p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {data && <PriorityBadge priority={data.priority} />}
+                <span className="rounded-full bg-surface-secondary px-2 py-1 text-[10px] font-black">
+                  {status(data?.status || task.status)}
+                </span>
+                {data?.overdue && (
+                  <span className="rounded-full bg-danger-soft px-2 py-1 text-[10px] font-black text-danger">
+                    OVERDUE
+                  </span>
+                )}
+              </div>
+              <h2
+                id="task-drawer-title"
+                className="break-words text-xl font-black"
+              >
+                {data?.title || task.title}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {data?.assignment_type === "OPEN"
+                  ? "Open Task"
+                  : "Direct Assignment"}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 hover:bg-surface-secondary"
+            >
+              <X />
+            </button>
+          </div>
+        </header>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <DrawerSkeleton />
+          ) : error ? (
+            <div className="p-8 text-center">
+              <p className="text-sm text-danger">{error}</p>
+              <button
+                onClick={load}
+                className="mt-3 inline-flex items-center gap-2 text-sm font-bold"
+              >
+                <RotateCw size={14} />
+                Retry
+              </button>
+            </div>
+          ) : data ? (
+            <div className="space-y-6 p-5 sm:p-6">
+              <Info data={data} />
+              <Dates data={data} />
+              {data.status === "CHANGES_REQUIRED" && data.changeRequest && (
+                <ChangeRequest value={data.changeRequest} />
+              )}
+              <Gallery
+                title="Reference Images"
+                images={data.images.filter(
+                  (x) => x.context === "TASK_REFERENCE",
+                )}
+                taskId={data.id}
+                onOpen={setLightbox}
+              />
+              <Gallery
+                title="Submission Images"
+                images={data.images.filter((x) => x.context === "SUBMISSION")}
+                taskId={data.id}
+                onOpen={setLightbox}
+              />
+              <Gallery
+                title="Changes Required References"
+                images={data.images.filter(
+                  (x) => x.context === "CHANGES_REQUIRED",
+                )}
+                taskId={data.id}
+                onOpen={setLightbox}
+              />
+              <Comments
+                items={data.comments}
+                value={comment}
+                setValue={setComment}
+                add={add}
+                busy={commenting}
+                notice={notice}
+              />
+              <Activity items={data.activities} />
+            </div>
+          ) : null}
+        </div>
+        {data && (
+          <DrawerActions
+            task={data}
+            management={management}
+            onAction={onAction}
+          />
+        )}
+      </aside>
+      {lightbox && (
+        <Lightbox
+          group={lightbox.group}
+          index={lightbox.index}
+          taskId={data.id}
+          close={() => setLightbox(null)}
+          setIndex={(index) => setLightbox((x) => ({ ...x, index }))}
+        />
+      )}
+    </>
+  );
+}
+function Block({ title, children }) {
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-muted-foreground">
+        {title}
+      </h3>
+      <div className="rounded-2xl border border-border bg-surface p-4">
+        {children}
+      </div>
+    </section>
+  );
+}
+function Info({ data }) {
+  return (
+    <Block title="Task Information">
+      <div className="space-y-4 text-sm">
+        <div>
+          <b>Description</b>
+          <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+            {data.description || "No description provided."}
+          </p>
+        </div>
+        <div>
+          <b>Instructions / Notes</b>
+          <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+            {data.instructions || "No instructions provided."}
+          </p>
+        </div>
+        <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+          {[
+            ["Assigned Employee", data.assigneeName || "Not assigned yet"],
+            ["Created By", data.creatorName || "System"],
+            ["Assignment Type", data.assignment_type],
+            ["Priority", data.priority],
+            ["Review Required", data.review_required ? "Yes" : "No"],
+            [
+              "Completion Image Required",
+              data.completion_image_required ? "Yes" : "No",
+            ],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <span className="block text-xs text-muted-foreground">{k}</span>
+              <b>{v}</b>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Block>
+  );
+}
+function Dates({ data }) {
+  const rows = [
+    ["Created", data.created_at],
+    ["Published", data.published_at],
+    ["Start Date", data.start_at],
+    ["Due Date", data.due_at],
+    ["Scheduled Publish", data.scheduled_publish_at],
+    ["Submitted", data.submitted_at],
+    ["Completed", data.completed_at],
+    ["Archived", data.archived_at],
+  ].filter(([, v]) => v);
+  return (
+    <Block title="Dates">
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <span className="block text-xs text-muted-foreground">{k}</span>
+            <b
+              className={k === "Due Date" && data.overdue ? "text-danger" : ""}
+            >
+              {date(v)}
+            </b>
+          </div>
+        ))}
+      </div>
+    </Block>
+  );
+}
+function ChangeRequest({ value }) {
+  return (
+    <section className="rounded-2xl border border-warning-border bg-warning-soft p-4 text-warning">
+      <h3 className="font-black">Action Required</h3>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+        {value.reason}
+      </p>
+      <div className="mt-3 text-xs">
+        <p>
+          Requested by <b>{value.requestedBy || "Management"}</b> ·{" "}
+          {date(value.requestedAt)}
+        </p>
+        {value.revisionDueAt && (
+          <p className="mt-1">
+            Revision deadline: <b>{date(value.revisionDueAt)}</b>
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+function Gallery({ title, images, taskId, onOpen }) {
+  if (!images.length) return null;
+  return (
+    <Block title={title}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {images.map((image, index) => (
+          <ProtectedImage
+            key={image.id}
+            taskId={taskId}
+            image={image}
+            onClick={() => onOpen({ group: images, index })}
+          />
+        ))}
+      </div>
+    </Block>
+  );
+}
+function ProtectedImage({ taskId, image, onClick }) {
+  const [src, setSrc] = useState(""),
+    [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true,
+      url;
+    getTaskImageBlob(taskId, image.id)
+      .then((x) => {
+        url = x;
+        if (active) setSrc(x);
+      })
+      .catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [taskId, image.id]);
+  return (
+    <button
+      onClick={onClick}
+      disabled={!src}
+      className="overflow-hidden rounded-xl border border-border text-left"
+    >
+      {failed ? (
+        <div className="flex h-28 items-center justify-center text-muted-foreground">
+          <ImageOff />
+        </div>
+      ) : src ? (
+        <img
+          src={src}
+          alt={image.originalFilename}
+          className="h-28 w-full object-cover"
+        />
+      ) : (
+        <div className="h-28 animate-pulse bg-surface-secondary" />
+      )}
+      <div className="p-2">
+        <p className="truncate text-[11px] font-bold">
+          {image.originalFilename}
+        </p>
+        <p className="truncate text-[10px] text-muted-foreground">
+          {image.uploadedBy || "User"} · {date(image.createdAt)}
+        </p>
+      </div>
+    </button>
+  );
+}
+function Comments({ items, value, setValue, add, busy, notice }) {
+  return (
+    <Block title="Comments">
+      <div className="max-h-64 space-y-3 overflow-y-auto">
+        {items.length ? (
+          items.map((x) => (
+            <div key={x.id} className="rounded-xl bg-surface-secondary p-3">
+              <div className="flex justify-between gap-2 text-xs">
+                <b>{x.author || "User"}</b>
+                <span className="text-muted-foreground">
+                  {date(x.createdAt)}
+                </span>
+              </div>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                {x.content}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No comments yet.</p>
+        )}
+      </div>
+      <div className="mt-4">
+        <textarea
+          rows="2"
+          maxLength="1000"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="input"
+          placeholder="Add a short task note…"
+        />
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {value.length}/1000
+          </span>
+          <button
+            disabled={busy || !value.trim()}
+            onClick={add}
+            className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "Adding…" : "Add Comment"}
+          </button>
+        </div>
+        {notice && (
+          <p className="mt-2 text-xs text-muted-foreground">{notice}</p>
+        )}
+      </div>
+    </Block>
+  );
+}
+function Activity({ items }) {
+  return (
+    <Block title="Activity">
+      <div className="space-y-0">
+        {items.length ? (
+          items.map((x, i) => (
+            <div key={x.id} className="relative flex gap-3 pb-4 last:pb-0">
+              <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+              {i < items.length - 1 && (
+                <span className="absolute left-[4px] top-4 h-[calc(100%-12px)] w-px bg-border" />
+              )}
+              <div>
+                <p className="text-sm font-bold">
+                  {eventLabels[x.event_type] || status(x.event_type)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {x.actor || "System"} · {date(x.created_at)}
+                </p>
+                {activityDetail(x) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {activityDetail(x)}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No activity recorded yet.
+          </p>
+        )}
+      </div>
+    </Block>
+  );
+}
+function activityDetail(item) {
+  let m = item.metadata;
+  try {
+    if (typeof m === "string") m = JSON.parse(m);
+  } catch {
+    return "";
+  }
+  if (!m) return "";
+  if (m.reason) return `Reason: ${m.reason}`;
+  if (m.scheduledPublishAt)
+    return `Scheduled for ${date(m.scheduledPublishAt)}`;
+  if (m.previousEmployeeId || m.newEmployeeId)
+    return "Task assignment changed.";
+  return "";
+}
+function DrawerActions({ task, management, onAction }) {
+  let actions = [];
+  if (management && task.status === "SUBMITTED_FOR_REVIEW")
+    actions = [
+      ["complete", "Complete"],
+      ["changes", "Changes Required"],
+    ];
+  else if (
+    management &&
+    task.status === "COMPLETED" &&
+    task.assignee_employee_id
+  )
+    actions = [["changes", "Reopen Task"]];
+  else if (!management && task.status === "OPEN")
+    actions = [["claim", "Assign to Me"]];
+  else if (!management && task.status === "TO_DO")
+    actions = [["start", "Start Task"]];
+  else if (!management && task.status === "IN_PROGRESS")
+    actions = [
+      [
+        task.review_required ? "submit" : "complete",
+        task.review_required ? "Submit for Review" : "Complete Task",
+      ],
+    ];
+  else if (!management && task.status === "CHANGES_REQUIRED")
+    actions = [["resume", "Resume Work"]];
+  if (!actions.length) return null;
+  return (
+    <footer className="sticky bottom-0 flex shrink-0 justify-end gap-2 border-t border-border bg-surface p-4">
+      {actions.map(([type, label]) => (
+        <button
+          key={type}
+          onClick={() => onAction(type, task)}
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold ${type === "changes" ? "bg-warning-soft text-warning" : "bg-primary text-primary-foreground"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </footer>
+  );
+}
+function DrawerSkeleton() {
+  return (
+    <div className="space-y-5 p-6">
+      {[1, 2, 3, 4].map((x) => (
+        <div
+          key={x}
+          className="h-32 animate-pulse rounded-2xl bg-surface-secondary"
+        />
+      ))}
+    </div>
+  );
+}
+function Lightbox({ group, index, taskId, close, setIndex }) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4">
+      <button
+        onClick={close}
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white"
+      >
+        <X />
+      </button>
+      {group.length > 1 && (
+        <button
+          onClick={() => setIndex((index - 1 + group.length) % group.length)}
+          className="absolute left-3 rounded-full bg-white/10 p-2 text-white"
+        >
+          <ChevronLeft />
+        </button>
+      )}
+      <div className="max-h-[90vh] max-w-[90vw]">
+        <ProtectedFullImage taskId={taskId} image={group[index]} />
+        <p className="mt-2 text-center text-sm text-white">
+          {group[index].originalFilename}
+        </p>
+      </div>
+      {group.length > 1 && (
+        <button
+          onClick={() => setIndex((index + 1) % group.length)}
+          className="absolute right-3 rounded-full bg-white/10 p-2 text-white"
+        >
+          <ChevronRight />
+        </button>
+      )}
+    </div>
+  );
+}
+function ProtectedFullImage({ taskId, image }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let url;
+    getTaskImageBlob(taskId, image.id).then((x) => {
+      url = x;
+      setSrc(x);
+    });
+    return () => url && URL.revokeObjectURL(url);
+  }, [taskId, image.id]);
+  return src ? (
+    <img
+      src={src}
+      alt={image.originalFilename}
+      className="max-h-[82vh] max-w-[86vw] object-contain"
+    />
+  ) : (
+    <div className="h-64 w-64 animate-pulse rounded-xl bg-white/10" />
+  );
+}

@@ -7,6 +7,7 @@ import { applicableShift } from "./shift.service.js";
 import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
 import { current as currentPolicy } from "./attendancePolicy.service.js";
 import { classifyArrival } from "../utils/attendancePolicy.js";
+import { pauseActiveTask, resumeTaskAfterBreak } from "./taskTime.service.js";
 
 const attendanceSelect = `
   SELECT ar.id, ar.employee_id AS employeeId, ar.work_date AS workDate,ar.attendance_date AS attendanceDate,
@@ -148,7 +149,11 @@ export async function clockIn(user) {
         settings?.breakAllowanceMinutes ?? null,
         settings ? (decision.status === "LATE" ? "LATE" : "ON_TIME") : null,
         Number(snapshot.lateMinutes || 0),
-        decision.status, policy.id, JSON.stringify(policy), Number(snapshot.lateMinutes || 0), decision.chargeableMinutes,
+        decision.status,
+        policy.id,
+        JSON.stringify(policy),
+        Number(snapshot.lateMinutes || 0),
+        decision.chargeableMinutes,
       ],
     );
     const [[record]] = await conn.execute(
@@ -170,15 +175,19 @@ export async function clockIn(user) {
       lateMinutes: Number(snapshot.lateMinutes || 0),
     };
   });
-  await notifyByPolicy(outcome.lateMinutes ? "LATE_ARRIVAL" : "CLOCK_IN", user, {
-    title: outcome.lateMinutes ? "Late Arrival" : "Employee Clocked In",
-    message: outcome.lateMinutes
-      ? `${outcome.name} clocked in ${outcome.lateMinutes} minutes late.`
-      : `${outcome.name} clocked in at ${formatAuditTime(outcome.at)}.`,
-    referenceType: "ATTENDANCE",
-    referenceId: outcome.recordId,
-    actionUrl: "/attendance",
-  });
+  await notifyByPolicy(
+    outcome.lateMinutes ? "LATE_ARRIVAL" : "CLOCK_IN",
+    user,
+    {
+      title: outcome.lateMinutes ? "Late Arrival" : "Employee Clocked In",
+      message: outcome.lateMinutes
+        ? `${outcome.name} clocked in ${outcome.lateMinutes} minutes late.`
+        : `${outcome.name} clocked in at ${formatAuditTime(outcome.at)}.`,
+      referenceType: "ATTENDANCE",
+      referenceId: outcome.recordId,
+      actionUrl: "/attendance",
+    },
+  );
   return outcome.data;
 }
 
@@ -205,6 +214,7 @@ export async function startBreak(user) {
       `UPDATE attendance_records SET status = 'ON_BREAK' WHERE id = ?`,
       [record.id],
     );
+    await pauseActiveTask(conn, user.employee_id, "BREAK");
     const [[entry]] = await conn.execute(
       "SELECT break_start_at FROM attendance_breaks WHERE id = ?",
       [result.insertId],
@@ -261,6 +271,7 @@ export async function endBreak(user) {
        ) WHERE id = ?`,
       [record.id, record.id],
     );
+    await resumeTaskAfterBreak(conn, user.employee_id);
     const [[entry]] = await conn.execute(
       "SELECT break_end_at,duration_minutes FROM attendance_breaks WHERE id = ?",
       [active.id],
@@ -317,6 +328,7 @@ export async function clockOut(user) {
        WHERE id = ?`,
       [record.id, record.id, record.id, record.id, record.id, record.id],
     );
+    await pauseActiveTask(conn, user.employee_id, "CLOCK_OUT");
     const [[entry]] = await conn.execute(
       "SELECT clock_out_at FROM attendance_records WHERE id = ?",
       [record.id],
@@ -488,20 +500,24 @@ export async function getLiveOffice() {
     openShifts: 0,
   };
   for (const e of employees) {
-    if (!["NOT_CLOCKED_IN", "ON_LEAVE"].includes(e.status)) stats.presentToday += 1;
+    if (!["NOT_CLOCKED_IN", "ON_LEAVE"].includes(e.status))
+      stats.presentToday += 1;
     if (e.status === "WORKING") stats.workingNow += 1;
     if (e.status === "ON_BREAK") stats.onBreak += 1;
     if (e.status === "CLOCKED_OUT") stats.clockedOut += 1;
     if (e.status === "NOT_CLOCKED_IN") stats.notClockedIn += 1;
     if (e.status === "ON_LEAVE") stats.onLeave += 1;
-    if (e.attendanceStatus === "LATE" || e.arrivalStatus === "LATE") stats.late += 1;
+    if (e.attendanceStatus === "LATE" || e.arrivalStatus === "LATE")
+      stats.late += 1;
     if (e.attendanceStatus === "HALF_DAY") stats.halfDay += 1;
     if (e.reconciliationStatus === "OPEN_SHIFT") stats.openShifts += 1;
   }
   return { stats, employees, serverTime: new Date().toISOString() };
 }
 export async function getTeamLeave() {
-  const [rows] = await pool.execute(`SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,e.department,e.job_title jobTitle,lr.leave_type leaveType,ld.leave_date leaveDate,lr.end_date returnDate FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id AND lr.status='APPROVED' JOIN employees e ON e.id=ld.employee_id WHERE ld.leave_date BETWEEN CURRENT_DATE AND DATE_ADD(CURRENT_DATE,INTERVAL 30 DAY) ORDER BY ld.leave_date,e.first_name`);
+  const [rows] = await pool.execute(
+    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,e.department,e.job_title jobTitle,lr.leave_type leaveType,ld.leave_date leaveDate,lr.end_date returnDate FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id AND lr.status='APPROVED' JOIN employees e ON e.id=ld.employee_id WHERE ld.leave_date BETWEEN CURRENT_DATE AND DATE_ADD(CURRENT_DATE,INTERVAL 30 DAY) ORDER BY ld.leave_date,e.first_name`,
+  );
   return rows;
 }
 

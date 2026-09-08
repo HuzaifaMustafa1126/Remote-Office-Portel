@@ -15,6 +15,8 @@ const optionalCategory = z.preprocess(
       "permissions",
       "leave",
       "calendar",
+      "payroll",
+      "tasks",
     ])
     .optional(),
 );

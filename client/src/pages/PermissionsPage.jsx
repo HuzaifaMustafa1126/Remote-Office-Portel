@@ -12,7 +12,7 @@ import { listRoles } from "../services/role.service";
 import { errorMessage } from "../utils/helpers";
 import { PERMISSIONS as P } from "../utils/permissions";
 const friendly = {
-  "portal.access_mobile": ["Access Portal on Mobile", "Allows this role to access the Remote Office Portal from mobile devices."],
+  "portal.access_mobile": ["Access Portal on Mobile", "Allows this role to access the Remote Office Portal from mobile devices. Individual employee overrides can be configured from Employee Details."],
   "dashboard.view": ["View Dashboard", "Can view the organization dashboard"],
   "attendance.clock": [
     "Clock Attendance",

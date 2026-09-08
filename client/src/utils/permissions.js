@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   ROLES_MANAGE: "roles.manage",
   PERMISSIONS_VIEW: "permissions.view",
   PERMISSIONS_MANAGE: "permissions.manage",
+  EMPLOYEE_PERMISSION_OVERRIDE_MANAGE: "permissions.employee_override.manage",
   AUDIT_VIEW: "audit.view",
   ATTENDANCE_CLOCK: "attendance.clock",
   ATTENDANCE_OWN: "attendance.view_own",
@@ -47,4 +48,8 @@ export const PERMISSIONS = {
   PAYROLL_ADJUST: "payroll.adjust",
   REPORTS_VIEW: "reports.view",
   REPORTS_EXPORT: "reports.export",
+  TASK_VIEW_OWN: "task.view_own",
+  TASK_VIEW_ALL: "task.view_all",
+  TASK_CREATE: "task.create",
+  TASK_EDIT: "task.edit",
 };

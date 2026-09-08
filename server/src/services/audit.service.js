@@ -21,14 +21,28 @@ export async function getAuditLogs(limit = 100) {
 }
 
 const categories = {
-  authentication: ["LOGIN_SUCCESS", "LOGIN_FAILED", "USER_LOGIN", "USER_LOGOUT", "SESSION_EXPIRED"],
+  authentication: [
+    "LOGIN_SUCCESS",
+    "LOGIN_FAILED",
+    "USER_LOGIN",
+    "USER_LOGOUT",
+    "SESSION_EXPIRED",
+  ],
   attendance: [
     "ATTENDANCE_CLOCK_IN",
     "ATTENDANCE_CLOCK_OUT",
     "ATTENDANCE_UPDATED",
   ],
   breaks: ["BREAK_STARTED", "BREAK_ENDED"],
-  employees: ["EMPLOYEE_CREATED", "EMPLOYEE_UPDATED", "EMPLOYEE_ACTIVATED", "EMPLOYEE_DEACTIVATED", "EMPLOYEE_PASSWORD_RESET", "EMPLOYEE_DELETED", "PASSWORD_CHANGED"],
+  employees: [
+    "EMPLOYEE_CREATED",
+    "EMPLOYEE_UPDATED",
+    "EMPLOYEE_ACTIVATED",
+    "EMPLOYEE_DEACTIVATED",
+    "EMPLOYEE_PASSWORD_RESET",
+    "EMPLOYEE_DELETED",
+    "PASSWORD_CHANGED",
+  ],
   roles: ["ROLE_UPDATED", "ROLE_ASSIGNED"],
   permissions: ["PERMISSION_UPDATED"],
   leave: [
@@ -62,6 +76,13 @@ const categories = {
     "PAYROLL_ADJUSTMENT_ADDED",
     "PAYROLL_ADJUSTMENT_UPDATED",
     "PAYROLL_ADJUSTMENT_REMOVED",
+  ],
+  tasks: [
+    "TASK_CREATED",
+    "TASK_CLAIMED",
+    "TASK_STATUS_CHANGED",
+    "TASK_DELETED",
+    "TASK_SETTINGS_UPDATED",
   ],
 };
 export async function searchAuditLogs(filters = {}) {

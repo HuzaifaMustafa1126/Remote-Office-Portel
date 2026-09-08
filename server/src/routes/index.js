@@ -1,6 +1,9 @@
 import { requireDeviceAccess } from "../middleware/deviceAccess.middleware.js";
 import { Router } from "express";
-import { authenticate, requirePasswordChanged } from "../middleware/auth.middleware.js";
+import {
+  authenticate,
+  requirePasswordChanged,
+} from "../middleware/auth.middleware.js";
 import auth from "./auth.routes.js";
 import employees from "./employee.routes.js";
 import roles from "./role.routes.js";
@@ -17,6 +20,7 @@ import salaries from "./salary.routes.js";
 import reports from "./report.routes.js";
 import attendancePolicies from "./attendancePolicy.routes.js";
 import notificationPolicies from "./notificationPolicy.routes.js";
+import tasks from "./task.routes.js";
 import pool from "../config/database.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { validateSchema } from "../services/schema.service.js";
@@ -26,16 +30,14 @@ r.get(
   asyncHandler(async (req, res) => {
     await pool.query("SELECT 1");
     const schema = await validateSchema();
-    res
-      .status(schema.valid ? 200 : 503)
-      .json({
-        success: schema.valid,
-        database: "connected",
-        status: schema.valid ? "healthy" : "schema_outdated",
-        missingTables: schema.missing,
-        missingColumns: schema.missingColumns,
-        missingMigrations: schema.missingMigrations,
-      });
+    res.status(schema.valid ? 200 : 503).json({
+      success: schema.valid,
+      database: "connected",
+      status: schema.valid ? "healthy" : "schema_outdated",
+      missingTables: schema.missing,
+      missingColumns: schema.missingColumns,
+      missingMigrations: schema.missingMigrations,
+    });
   }),
 );
 r.use("/auth", auth);
@@ -46,13 +48,14 @@ r.use("/dashboard", dashboard);
 r.use("/attendance", attendance);
 r.use("/attendance-policies", attendancePolicies);
 r.use("/notification-policies", notificationPolicies);
+r.use("/tasks", tasks);
 r.use("/leaves", leaves);
 r.use("/company-calendar", calendar);
 r.use("/notifications", notifications);
 r.use("/shifts", shifts);
 r.use("/payroll", payroll);
 r.use("/salaries", salaries);
-r.use("/reports",reports);
+r.use("/reports", reports);
 r.use("/employees", employees);
 r.use("/roles", roles);
 r.use("/permissions", permissions);

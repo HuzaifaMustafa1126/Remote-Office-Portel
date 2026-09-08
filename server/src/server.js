@@ -4,6 +4,7 @@ import { verifyDatabase } from "./config/database.js";
 import { createServer } from "node:http";
 import { initializeNotifications } from "./sockets/notification.socket.js";
 import { validateSchema } from "./services/schema.service.js";
+import { publishDueScheduled } from "./services/task.service.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -35,6 +36,8 @@ async function start() {
     }
     const server = createServer(app);
     initializeNotifications(server);
+    const publishTimer=setInterval(()=>publishDueScheduled().catch(error=>console.error("Scheduled task publication failed:",error.message)),30000);
+    publishTimer.unref();
     server.listen(PORT, "0.0.0.0", () =>
       console.log(`API listening on port ${PORT}`),
     );

@@ -1,6 +1,6 @@
 import { Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import PageHeader from "../components/common/PageHeader";
@@ -21,18 +21,24 @@ export default function EmployeesPage() {
     [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
+    [blockedEmployee, setBlockedEmployee] = useState(null),
     [resetting, setResetting] = useState(null),
     [deleting, setDeleting] = useState(null),
-    [password, setPassword] = useState({ newPassword: "", confirmPassword: "" }),
+    [password, setPassword] = useState({
+      newPassword: "",
+      confirmPassword: "",
+    }),
     [params] = useSearchParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canCreate = usePermission(P.EMPLOYEES_CREATE),
     canEdit = usePermission(P.EMPLOYEES_UPDATE),
     canDeactivate = usePermission(P.EMPLOYEES_DEACTIVATE),
     canResetPassword = usePermission(P.EMPLOYEES_RESET_PASSWORD),
     canDelete = usePermission(P.EMPLOYEES_DELETE);
   async function load() {
-    const r = await emp.listEmployees({ search: query }); setRows(r.data);
+    const r = await emp.listEmployees({ search: query });
+    setRows(r.data);
   }
   useEffect(() => {
     load();
@@ -75,19 +81,49 @@ export default function EmployeesPage() {
       load();
     } catch (x) {
       setNotice(errorMessage(x));
+      if (/unfinished task/i.test(errorMessage(x))) setBlockedEmployee(e.id);
     }
   }
   async function resetPassword(e) {
-    e.preventDefault(); setBusy(true); setNotice("");
-    if (password.newPassword.length < 8) { setNotice("Password must contain at least 8 characters."); setBusy(false); return; }
-    if (password.newPassword !== password.confirmPassword) { setNotice("Passwords do not match."); setBusy(false); return; }
-    try { const r = await emp.resetPassword(resetting.id, password); setNotice(r.message); setResetting(null); setPassword({ newPassword: "", confirmPassword: "" }); }
-    catch (x) { setNotice(errorMessage(x)); } finally { setBusy(false); }
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    if (password.newPassword.length < 8) {
+      setNotice("Password must contain at least 8 characters.");
+      setBusy(false);
+      return;
+    }
+    if (password.newPassword !== password.confirmPassword) {
+      setNotice("Passwords do not match.");
+      setBusy(false);
+      return;
+    }
+    try {
+      const r = await emp.resetPassword(resetting.id, password);
+      setNotice(r.message);
+      setResetting(null);
+      setPassword({ newPassword: "", confirmPassword: "" });
+    } catch (x) {
+      setNotice(errorMessage(x));
+      if (/unfinished task/i.test(errorMessage(x)))
+        setBlockedEmployee(deleting.id);
+    } finally {
+      setBusy(false);
+    }
   }
   async function removeEmployee() {
-    setBusy(true); setNotice("");
-    try { const r = await emp.deleteEmployee(deleting.id); setNotice(r.message); setDeleting(null); await load(); }
-    catch (x) { setNotice(errorMessage(x)); } finally { setBusy(false); }
+    setBusy(true);
+    setNotice("");
+    try {
+      const r = await emp.deleteEmployee(deleting.id);
+      setNotice(r.message);
+      setDeleting(null);
+      await load();
+    } catch (x) {
+      setNotice(errorMessage(x));
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <>
@@ -113,19 +149,30 @@ export default function EmployeesPage() {
       {notice && (
         <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm text-primary-text">
           {notice}
+          {blockedEmployee && (
+            <button
+              onClick={() => navigate(`/tasks?employeeId=${blockedEmployee}`)}
+              className="ml-3 font-bold underline"
+            >
+              View Tasks
+            </button>
+          )}
         </div>
       )}
       <div className="rounded-2xl border border-border bg-surface shadow-sm">
         <div className="p-4">
-        <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search employees…"
-            className="w-full rounded-xl border border-border py-2.5 pl-10 pr-3 outline-none focus:border-primary-border"
-          />
-        </div>
+          <div className="relative max-w-md">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={18}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search employees…"
+              className="w-full rounded-xl border border-border py-2.5 pl-10 pr-3 outline-none focus:border-primary-border"
+            />
+          </div>
         </div>
         <EmployeeTable
           employees={rows}
@@ -139,7 +186,11 @@ export default function EmployeesPage() {
           }}
           onStatus={status}
           onResetPassword={setResetting}
-          onDelete={(e) => { if (Number(user.employeeId) === Number(e.id)) setNotice("You cannot delete your own account."); else setDeleting(e); }}
+          onDelete={(e) => {
+            if (Number(user.employeeId) === Number(e.id))
+              setNotice("You cannot delete your own account.");
+            else setDeleting(e);
+          }}
         />
       </div>
       <Modal
@@ -154,16 +205,90 @@ export default function EmployeesPage() {
           busy={busy}
         />
       </Modal>
-      <Modal open={Boolean(resetting)} title="Reset Password" onClose={() => !busy && setResetting(null)}>
-        {resetting && <form className="space-y-4" onSubmit={resetPassword}>
-          <div className="rounded-xl bg-surface-secondary p-3"><p className="font-semibold">{resetting.firstName} {resetting.lastName}</p><p className="text-sm text-muted-foreground">{resetting.email}</p></div>
-          <PasswordInput required minLength={8} maxLength={72} autoComplete="new-password" label="New Password *" value={password.newPassword} onChange={(e) => setPassword({...password,newPassword:e.target.value})}/>
-          <PasswordInput required minLength={8} maxLength={72} autoComplete="new-password" label="Confirm Password *" value={password.confirmPassword} onChange={(e) => setPassword({...password,confirmPassword:e.target.value})}/>
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => setResetting(null)}>Cancel</Button><Button disabled={busy}>{busy ? "Resetting…" : "Reset Password"}</Button></div>
-        </form>}
+      <Modal
+        open={Boolean(resetting)}
+        title="Reset Password"
+        onClose={() => !busy && setResetting(null)}
+      >
+        {resetting && (
+          <form className="space-y-4" onSubmit={resetPassword}>
+            <div className="rounded-xl bg-surface-secondary p-3">
+              <p className="font-semibold">
+                {resetting.firstName} {resetting.lastName}
+              </p>
+              <p className="text-sm text-muted-foreground">{resetting.email}</p>
+            </div>
+            <PasswordInput
+              required
+              minLength={8}
+              maxLength={72}
+              autoComplete="new-password"
+              label="New Password *"
+              value={password.newPassword}
+              onChange={(e) =>
+                setPassword({ ...password, newPassword: e.target.value })
+              }
+            />
+            <PasswordInput
+              required
+              minLength={8}
+              maxLength={72}
+              autoComplete="new-password"
+              label="Confirm Password *"
+              value={password.confirmPassword}
+              onChange={(e) =>
+                setPassword({ ...password, confirmPassword: e.target.value })
+              }
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setResetting(null)}
+              >
+                Cancel
+              </Button>
+              <Button disabled={busy}>
+                {busy ? "Resetting…" : "Reset Password"}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
-      <Modal open={Boolean(deleting)} title="Permanently Delete Employee?" onClose={() => !busy && setDeleting(null)}>
-        {deleting && <div><p className="text-foreground">You are about to permanently delete <b>{deleting.firstName} {deleting.lastName}</b>.</p><p className="mt-3 text-sm font-medium text-danger">Their account and all attendance, salary, leave, shift, payroll, and related records will be permanently removed. This cannot be undone.</p><div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={removeEmployee}>{busy ? "Deleting…" : "Delete Permanently"}</Button></div></div>}
+      <Modal
+        open={Boolean(deleting)}
+        title="Permanently Delete Employee?"
+        onClose={() => !busy && setDeleting(null)}
+      >
+        {deleting && (
+          <div>
+            <p className="text-foreground">
+              You are about to permanently delete{" "}
+              <b>
+                {deleting.firstName} {deleting.lastName}
+              </b>
+              .
+            </p>
+            <p className="mt-3 text-sm font-medium text-danger">
+              Their account and all attendance, salary, leave, shift, payroll,
+              and related records will be permanently removed. This cannot be
+              undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setDeleting(null)}
+              >
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={busy} onClick={removeEmployee}>
+                {busy ? "Deleting…" : "Delete Permanently"}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </>
   );

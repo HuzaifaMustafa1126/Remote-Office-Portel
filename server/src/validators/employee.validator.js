@@ -34,3 +34,4 @@ export const resetPasswordSchema = z
     message: "Passwords do not match.",
     path: ["confirmPassword"],
   });
+export const permissionOverrideSchema=z.object({effect:z.enum(['INHERIT','ALLOW','DENY'])}).strict();

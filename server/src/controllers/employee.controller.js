@@ -1,5 +1,6 @@
 import * as s from "../services/employee.service.js";
 import * as work from "../services/workSettings.service.js";
+import * as permissions from "../services/permission.service.js";
 export async function list(req, res) {
   res.json({ success: true, data: await s.listEmployees(req.query, req.user) });
 }
@@ -55,3 +56,5 @@ export async function remove(req, res) {
   await s.deleteEmployee(req.params.id, req.user);
   res.json({ success: true, message: "Employee deleted successfully." });
 }
+export async function mobilePermission(req,res){res.json({success:true,data:await permissions.getEmployeePermission(req.params.id,'portal.access_mobile')});}
+export async function setMobilePermission(req,res){res.json({success:true,data:await permissions.setEmployeePermission(req.params.id,'portal.access_mobile',req.body.effect,req.user)});}
