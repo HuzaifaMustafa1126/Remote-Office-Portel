@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { notifyUser } from "./notification.service.js";
 const select = `SELECT t.*,CONCAT(a.first_name,' ',a.last_name) assigneeName,CONCAT(c.first_name,' ',c.last_name) creatorName,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id) imageCount,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id AND ti.image_context='SUBMISSION') submissionImageCount,(SELECT reason FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) changeReason,(SELECT revision_due_at FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) revisionDueAt,(SELECT COALESCE(SUM(COALESCE(tws.duration_seconds,TIMESTAMPDIFF(SECOND,tws.started_at,CURRENT_TIMESTAMP))),0) FROM task_work_sessions tws WHERE tws.task_id=t.id) timeSpentSeconds FROM tasks t LEFT JOIN employees a ON a.id=t.assignee_employee_id JOIN users cu ON cu.id=t.created_by LEFT JOIN employees c ON c.id=cu.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
@@ -179,7 +180,7 @@ export async function list(filters, user) {
     `${select}${where.length ? " WHERE " + where.join(" AND ") : ""} ORDER BY FIELD(t.priority,'URGENT','HIGH','MEDIUM','LOW'),t.due_at IS NULL,t.due_at,t.id DESC`,
     params,
   );
-  return rows.map((x) => ({
+  return addUnread(rows.map((x) => ({
     ...x,
     overdue: isOverdue({
       status: x.status,
@@ -187,8 +188,9 @@ export async function list(filters, user) {
       submittedAt: x.submitted_at,
       completedAt: x.completed_at,
     }),
-  }));
+  })),user.id);
 }
+async function addUnread(rows,userId){if(!rows.length)return rows;const ids=rows.map(x=>Number(x.id)),marks=ids.map(()=>"?").join(","),[counts]=await pool.execute(`SELECT a.task_id taskId,COUNT(*) unreadCount FROM task_activities a LEFT JOIN task_read_states r ON r.task_id=a.task_id AND r.user_id=? WHERE a.task_id IN(${marks}) AND COALESCE(a.actor_user_id,0)<>? AND a.created_at>COALESCE(r.last_read_at,'1970-01-01') GROUP BY a.task_id`,[userId,...ids,userId]);const byId=new Map(counts.map(x=>[Number(x.taskId),Number(x.unreadCount)]));return rows.map(x=>({...x,unreadCount:byId.get(Number(x.id))||0}));}
 export async function get(id, user) {
   const [[task]] = await pool.execute(`${select} WHERE t.id=?`, [id]);
   if (!task) throw new ApiError(404, "Task not found");
@@ -205,7 +207,7 @@ export async function get(id, user) {
     [id],
   );
   const [comments] = await pool.execute(
-    "SELECT tc.id,tc.content,tc.created_at createdAt,CONCAT(e.first_name,' ',e.last_name) author FROM task_comments tc JOIN users u ON u.id=tc.author_user_id LEFT JOIN employees e ON e.id=u.employee_id WHERE tc.task_id=? ORDER BY tc.created_at",
+    "SELECT tc.id,tc.parent_comment_id parentCommentId,tc.author_user_id authorUserId,IF(tc.deleted_at IS NULL,tc.content,'Comment deleted') content,tc.created_at createdAt,tc.updated_at updatedAt,tc.deleted_at deletedAt,CONCAT(e.first_name,' ',e.last_name) author,e.job_title authorTitle FROM task_comments tc JOIN users u ON u.id=tc.author_user_id LEFT JOIN employees e ON e.id=u.employee_id WHERE tc.task_id=? ORDER BY tc.created_at,tc.id",
     [id],
   );
   const [images] = await pool.execute(
@@ -214,6 +216,10 @@ export async function get(id, user) {
   );
   const [[changeRequest]] = await pool.execute(
     "SELECT cr.id,cr.reason,cr.previous_due_at previousDueAt,cr.revision_due_at revisionDueAt,cr.created_at requestedAt,CONCAT(e.first_name,' ',e.last_name) requestedBy FROM task_change_requests cr JOIN users u ON u.id=cr.requested_by LEFT JOIN employees e ON e.id=u.employee_id WHERE cr.task_id=? ORDER BY cr.id DESC LIMIT 1",
+    [id],
+  );
+  const [attachments] = await pool.execute(
+    "SELECT a.id,a.original_filename originalFilename,a.mime_type mimeType,a.size_bytes sizeBytes,a.created_at createdAt,a.uploaded_by uploadedByUserId,CONCAT(e.first_name,' ',e.last_name) uploadedBy FROM task_attachments a JOIN users u ON u.id=a.uploaded_by LEFT JOIN employees e ON e.id=u.employee_id WHERE a.task_id=? AND a.deleted_at IS NULL ORDER BY a.created_at DESC,a.id DESC",
     [id],
   );
   return {
@@ -227,6 +233,7 @@ export async function get(id, user) {
     activities,
     comments,
     images,
+    attachments,
     changeRequest: changeRequest || null,
   };
 }
@@ -389,6 +396,7 @@ export async function transition(id, data, user) {
       {
         reason: data.reason || null,
         revisionDueAt: data.revisionDueAt || null,
+        note: data.note || null,
       },
     );
     await audit(
@@ -402,8 +410,8 @@ export async function transition(id, data, user) {
     return { id: Number(id), status: data.status };
   });
 }
-export async function addComment(id, content, user) {
-  return tx(async (c) => {
+export async function addComment(id, data, user) {
+  const result=await tx(async (c) => {
     const [[task]] = await c.execute(
       "SELECT * FROM tasks WHERE id=? FOR UPDATE",
       [id],
@@ -415,16 +423,34 @@ export async function addComment(id, content, user) {
       Number(task.assignee_employee_id) !== Number(user.employee_id)
     )
       throw new ApiError(403, "You cannot comment on this task");
+    if(data.parentCommentId){const [[parent]]=await c.execute("SELECT id,parent_comment_id FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL",[data.parentCommentId,id]);if(!parent)throw new ApiError(404,"Comment not found");if(parent.parent_comment_id)throw new ApiError(400,"Replies can only be nested one level");}
     const [r] = await c.execute(
-      "INSERT INTO task_comments(task_id,author_user_id,content)VALUES(?,?,?)",
-      [id, user.id, content],
+      "INSERT INTO task_comments(task_id,author_user_id,parent_comment_id,content)VALUES(?,?,?,?)",
+      [id, user.id, data.parentCommentId||null, data.content],
     );
     await activity(c, id, "COMMENT_ADDED", user, task.status, task.status, {
-      commentId: r.insertId,
+      commentId: r.insertId,parentCommentId:data.parentCommentId||null,
     });
-    return { id: r.insertId };
+    const recipients=new Set(data.mentionUserIds||[]);
+    if(task.created_by!==user.id)recipients.add(Number(task.created_by));
+    if(task.assignee_employee_id){const [[assignee]]=await c.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[task.assignee_employee_id]);if(assignee?.id!==user.id)recipients.add(Number(assignee.id));}
+    if(data.parentCommentId){const [[parent]]=await c.execute("SELECT author_user_id id FROM task_comments WHERE id=?",[data.parentCommentId]);if(parent?.id!==user.id)recipients.add(Number(parent.id));}
+    const allowed=[];for(const recipient of recipients){if(!recipient||recipient===user.id)continue;const [[candidate]]=await c.execute("SELECT u.id FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id AND p.name='task.view_all' AND up.granted=TRUE) OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) LIMIT 1",[recipient,task.created_by,task.assignee_employee_id]);if(candidate)allowed.push(recipient);}
+    return {id:r.insertId,taskTitle:task.title,recipients:allowed,parentCommentId:data.parentCommentId||null,mentions:new Set(data.mentionUserIds||[])};
   });
+  await Promise.allSettled(result.recipients.map(userId=>notifyUser({userId,type:result.mentions.has(userId)?"TASK_MENTION":result.parentCommentId?"TASK_REPLY":"TASK_COMMENT",title:result.mentions.has(userId)?"You were mentioned":result.parentCommentId?"New task reply":"New task comment",message:`${user.employee_name||"Someone"} commented on “${result.taskTitle}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_COMMENT:${result.id}:${userId}`,delivery:{desktop:true,sound:false}})));
+  return {id:result.id};
 }
+
+export async function editComment(taskId,commentId,content,user){return tx(async c=>{await assertTaskAccess(c,taskId,user);const [[row]]=await c.execute("SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[commentId,taskId]);if(!row)throw new ApiError(404,"Comment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(row.author_user_id)!==Number(user.id))throw new ApiError(403,"You cannot edit this comment");await c.execute("UPDATE task_comments SET content=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[content,commentId]);await activity(c,taskId,"COMMENT_EDITED",user,null,null,{commentId:Number(commentId)});return{id:Number(commentId)};});}
+export async function deleteComment(taskId,commentId,user){return tx(async c=>{await assertTaskAccess(c,taskId,user);const [[row]]=await c.execute("SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[commentId,taskId]);if(!row)throw new ApiError(404,"Comment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(row.author_user_id)!==Number(user.id))throw new ApiError(403,"You cannot delete this comment");await c.execute("UPDATE task_comments SET content='',deleted_at=CURRENT_TIMESTAMP WHERE id=?",[commentId]);await activity(c,taskId,"COMMENT_DELETED",user,null,null,{commentId:Number(commentId)});return{id:Number(commentId)};});}
+
+async function assertTaskAccess(c,id,user){const [[task]]=await c.execute("SELECT * FROM tasks WHERE id=?",[id]);if(!task)throw new ApiError(404,"Task not found");const all=await getEffectivePermission(user.id,"task.view_all",c);if(!all&&Number(task.assignee_employee_id)!==Number(user.employee_id)&&!(task.assignment_type==='OPEN'&&task.status==='OPEN'))throw new ApiError(403,"You cannot view this task");return task;}
+export async function mentionableUsers(id,search,user){const c=await pool.getConnection();try{const task=await assertTaskAccess(c,id,user),params=[task.created_by,task.assignee_employee_id,`%${search}%`,`%${search}%`];const [rows]=await c.execute("SELECT DISTINCT u.id,CONCAT(e.first_name,' ',e.last_name) name,e.job_title jobTitle FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) AND (CONCAT(e.first_name,' ',e.last_name) LIKE ? OR e.job_title LIKE ?) ORDER BY name LIMIT 10",params);return rows;}finally{c.release();}}
+export async function markTaskRead(id,user){return tx(async c=>{await assertTaskAccess(c,id,user);await c.execute("INSERT INTO task_read_states(task_id,user_id,last_read_at)VALUES(?,?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE last_read_at=CURRENT_TIMESTAMP",[id,user.id]);return{id:Number(id),read:true};});}
+export async function uploadAttachment(id,file,buffer,user){const task=await tx(async c=>{const current=await assertTaskAccess(c,id,user);const folder=path.resolve(new URL(`../../uploads/tasks/${id}/attachments`,import.meta.url).pathname);await mkdir(folder,{recursive:true});const key=path.join(folder,`${randomUUID()}.${file.extension}`);await writeFile(key,buffer,{flag:"wx"});try{const[r]=await c.execute("INSERT INTO task_attachments(task_id,uploaded_by,storage_key,original_filename,mime_type,size_bytes)VALUES(?,?,?,?,?,?)",[id,user.id,key,file.originalFilename,file.mimeType,file.sizeBytes]);await activity(c,id,"ATTACHMENT_ADDED",user,current.status,current.status,{attachmentId:r.insertId,filename:file.originalFilename});return{id:r.insertId,title:current.title,creatorId:current.created_by,assigneeEmployeeId:current.assignee_employee_id};}catch(error){await unlink(key).catch(()=>{});throw error;}});const recipients=new Set([Number(task.creatorId)]);if(task.assigneeEmployeeId){const[[u]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE'",[task.assigneeEmployeeId]);if(u)recipients.add(Number(u.id));}recipients.delete(Number(user.id));await Promise.allSettled([...recipients].map(userId=>notifyUser({userId,type:"TASK_ATTACHMENT_ADDED",title:"Task attachment added",message:`${file.originalFilename} was added to “${task.title}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_ATTACHMENT:${task.id}:${userId}`,delivery:{desktop:false,sound:false}})));return{id:task.id};}
+export async function getAttachmentContent(taskId,attachmentId,user){const c=await pool.getConnection();try{await assertTaskAccess(c,taskId,user);const[[file]]=await c.execute("SELECT storage_key,original_filename originalFilename,mime_type mimeType FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL",[attachmentId,taskId]);if(!file)throw new ApiError(404,"Attachment not found");return{...file,buffer:await readFile(file.storage_key)};}finally{c.release();}}
+export async function deleteAttachment(taskId,attachmentId,user){let key;await tx(async c=>{await assertTaskAccess(c,taskId,user);const[[file]]=await c.execute("SELECT * FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[attachmentId,taskId]);if(!file)throw new ApiError(404,"Attachment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(file.uploaded_by)!==Number(user.id))throw new ApiError(403,"You cannot delete this attachment");key=file.storage_key;await c.execute("UPDATE task_attachments SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",[attachmentId]);await activity(c,taskId,"ATTACHMENT_DELETED",user,null,null,{attachmentId:Number(attachmentId),filename:file.original_filename});});try{await unlink(key);}catch(error){await pool.execute("UPDATE task_attachments SET deleted_at=NULL WHERE id=?",[attachmentId]);throw new ApiError(500,"Unable to delete attachment safely");}return{id:Number(attachmentId)};}
 export async function addImage(id, data, user) {
   return tx(async (c) => {
     const [[task]] = await c.execute(
@@ -478,7 +504,7 @@ export async function updateSettings(data, user) {
 }
 export async function employeeAvailability(id) {
   const [[e]] = await pool.execute(
-    `SELECT e.id,e.status,EXISTS(SELECT 1 FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id WHERE ld.employee_id=e.id AND ld.leave_date=CURRENT_DATE AND lr.status='APPROVED') onLeave,EXISTS(SELECT 1 FROM attendance_records ar WHERE ar.employee_id=e.id AND ar.status IN('WORKING','ON_BREAK')) online,EXISTS(SELECT 1 FROM attendance_records ar WHERE ar.employee_id=e.id AND ar.status='ON_BREAK') onBreak,CASE WHEN ws.id IS NULL THEN TRUE WHEN ws.end_time>ws.start_time THEN CURRENT_TIME BETWEEN ws.start_time AND ws.end_time ELSE CURRENT_TIME>=ws.start_time OR CURRENT_TIME<=ws.end_time END withinShift FROM employees e LEFT JOIN employee_shift_assignments esa ON esa.employee_id=e.id AND esa.status='ACTIVE' AND esa.effective_from<=CURRENT_DATE AND(esa.effective_to IS NULL OR esa.effective_to>=CURRENT_DATE) LEFT JOIN work_shifts ws ON ws.id=esa.shift_id WHERE e.id=? ORDER BY esa.effective_from DESC LIMIT 1`,
+    `SELECT e.id,e.status,EXISTS(SELECT 1 FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id WHERE ld.employee_id=e.id AND ld.leave_date=CURRENT_DATE AND lr.status='APPROVED') onLeave,EXISTS(SELECT 1 FROM attendance_records ar WHERE ar.employee_id=e.id AND ar.status IN('WORKING','ON_BREAK')) online,EXISTS(SELECT 1 FROM attendance_records ar WHERE ar.employee_id=e.id AND ar.status='ON_BREAK') onBreak,EXISTS(SELECT 1 FROM task_work_sessions tws WHERE tws.employee_id=e.id AND tws.state='ACTIVE') hasActiveTask,(SELECT COUNT(*) FROM tasks t WHERE t.assignee_employee_id=e.id AND t.status='TO_DO') todoWorkload,(SELECT COUNT(*) FROM tasks t WHERE t.assignee_employee_id=e.id AND t.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')) activeTaskCount,(SELECT COUNT(*) FROM tasks t WHERE t.assignee_employee_id=e.id AND t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED') AND NOT(t.status='SUBMITTED_FOR_REVIEW' AND t.submitted_at<=t.due_at)) overdueTaskCount,CASE WHEN ws.id IS NULL THEN TRUE WHEN ws.end_time>ws.start_time THEN CURRENT_TIME BETWEEN ws.start_time AND ws.end_time ELSE CURRENT_TIME>=ws.start_time OR CURRENT_TIME<=ws.end_time END withinShift FROM employees e LEFT JOIN employee_shift_assignments esa ON esa.employee_id=e.id AND esa.status='ACTIVE' AND esa.effective_from<=CURRENT_DATE AND(esa.effective_to IS NULL OR esa.effective_to>=CURRENT_DATE) LEFT JOIN work_shifts ws ON ws.id=esa.shift_id WHERE e.id=? ORDER BY esa.effective_from DESC LIMIT 1`,
     [id],
   );
   if (!e) throw new ApiError(404, "Employee not found");
@@ -487,6 +513,10 @@ export async function employeeAvailability(id) {
     onLeave: Boolean(e.onLeave),
     online: Boolean(e.online),
     onBreak: Boolean(e.onBreak),
+    hasActiveTask: Boolean(e.hasActiveTask),
+    todoWorkload: Number(e.todoWorkload),
+    activeTaskCount: Number(e.activeTaskCount),
+    overdueTaskCount: Number(e.overdueTaskCount),
     withinShift: Boolean(e.withinShift),
   };
 }
@@ -968,7 +998,7 @@ export async function publishDueScheduled() {
     return rows.length;
   });
 }
-export async function listManagement(filters) {
+export async function listManagement(filters,user) {
   const where = [],
     params = [];
   if (filters.search) {
@@ -1010,7 +1040,7 @@ export async function listManagement(filters) {
     [...params, filters.limit, offset],
   );
   return {
-    items: items.map((x) => ({
+    items: await addUnread(items.map((x) => ({
       ...x,
       overdue: isOverdue({
         status: x.status,
@@ -1018,7 +1048,7 @@ export async function listManagement(filters) {
         submittedAt: x.submitted_at,
         completedAt: x.completed_at,
       }),
-    })),
+    })),user.id),
     pagination: {
       page: filters.page,
       limit: filters.limit,
@@ -1107,4 +1137,58 @@ export async function bulk(data, user) {
     skipped: results.filter((x) => !x.success).length,
     results,
   };
+}
+function analyticsDates(filters){
+  const now=new Date(),local=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  if(filters.range==="CUSTOM")return {start:filters.startDate,end:filters.endDate};
+  let start=new Date(now),end=new Date(now);
+  if(filters.range==="7_DAYS")start.setDate(start.getDate()-6);
+  else if(filters.range==="30_DAYS")start.setDate(start.getDate()-29);
+  else if(filters.range==="3_MONTHS")start.setMonth(start.getMonth()-3);
+  else if(filters.range==="6_MONTHS")start.setMonth(start.getMonth()-6);
+  else if(filters.range==="12_MONTHS")start.setFullYear(start.getFullYear()-1);
+  else if(filters.range==="THIS_WEEK")start.setDate(start.getDate()-((start.getDay()+6)%7));
+  else if(filters.range==="THIS_MONTH")start=new Date(now.getFullYear(),now.getMonth(),1);
+  else if(filters.range==="LAST_MONTH"){start=new Date(now.getFullYear(),now.getMonth()-1,1);end=new Date(now.getFullYear(),now.getMonth(),0)}
+  else if(filters.range==="THIS_YEAR")start=new Date(now.getFullYear(),0,1);
+  return {start:local(start),end:local(end)};
+}
+export async function analytics(filters,user){
+  const all=await getEffectivePermission(user.id,"task.view_all");
+  if(!all&&filters.employeeId&&Number(filters.employeeId)!==Number(user.employee_id))throw new ApiError(403,"You cannot view another employee's analytics");
+  const period=analyticsDates(filters),employeeId=all?filters.employeeId:user.employee_id,scope=employeeId?" AND t.assignee_employee_id=?":"",params=[period.start,period.end,...(employeeId?[employeeId]:[])],eligible="t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')",overdue="t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED')",bucket=(new Date(period.end)-new Date(period.start)>100*86400000)?"DATE_FORMAT(%s,'%Y-%m-01')":"DATE(%s)";
+  const startDate=new Date(period.start+"T00:00:00"),endDate=new Date(period.end+"T00:00:00"),days=Math.round((endDate-startDate)/86400000)+1,previousEnd=new Date(startDate.getTime()-86400000),previousStart=new Date(previousEnd.getTime()-(days-1)*86400000),local=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,previous={start:local(previousStart),end:local(previousEnd)};
+  const summarySql=`SELECT COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status IN('OPEN','TO_DO','CHANGES_REQUIRED')) pending,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${overdue}) overdue,SUM(t.due_at>CURRENT_TIMESTAMP AND t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 7 DAY) AND ${eligible}) upcoming,SUM(DATE(t.due_at)=CURRENT_DATE AND ${eligible}) dueToday,SUM(DATE(t.due_at)=DATE_ADD(CURRENT_DATE,INTERVAL 1 DAY) AND ${eligible}) dueTomorrow,SUM(t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND ${eligible}) dueThisWeek,SUM(t.due_at>=DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 15 DAY) AND ${eligible}) dueNextWeek,SUM(${eligible}) eligible FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope}`;
+  const prioritySql=`SELECT t.priority,COUNT(*) total FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.priority`;
+  const employeeSql=`SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) name,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')) active,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND DATE(ca.due_at)=CURRENT_DATE) dueToday,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND ca.due_at>=CURRENT_TIMESTAMP AND ca.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) completionRate,ROUND(100*SUM(t.status='COMPLETED' AND(t.due_at IS NULL OR t.completed_at<=t.due_at))/NULLIF(SUM(t.status='COMPLETED'),0)) onTimeRate FROM tasks t JOIN employees e ON e.id=t.assignee_employee_id WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY e.id,e.first_name,e.last_name ORDER BY assigned DESC LIMIT 10`;
+  const projectSql=`SELECT IF(t.assignment_type='OPEN','Open Assignments','Direct Assignments') name,COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) progress FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.assignment_type ORDER BY total DESC`;
+  const createdSql=`SELECT ${bucket.replace("%s","t.created_at")} date,COUNT(*) value FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`;
+  const completedParams=[period.start,period.end,...(employeeId?[employeeId]:[])],completedSql=`SELECT ${bucket.replace("%s","t.completed_at")} date,COUNT(*) value FROM tasks t WHERE t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`,overdueSql=`SELECT ${bucket.replace("%s","t.due_at")} date,COUNT(*) value FROM tasks t WHERE t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)${scope} GROUP BY date ORDER BY date`;
+  const previousSql=`SELECT SUM(t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)) created,SUM(t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)) completed,SUM(t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)) overdue FROM tasks t WHERE 1=1${scope}`,previousParams=[previous.start,previous.end,previous.start,previous.end,previous.start,previous.end,...(employeeId?[employeeId]:[])];
+  const [[summary],[priorities],[employees],[projects],[created],[completed],[late],[previousRows]]=await Promise.all([pool.execute(summarySql,params),pool.execute(prioritySql,params),pool.execute(employeeSql,params),pool.execute(projectSql,params),pool.execute(createdSql,params),pool.execute(completedSql,completedParams),pool.execute(overdueSql,completedParams),pool.execute(previousSql,previousParams)]);
+  const points=new Map(),put=(rows,key)=>rows.forEach(x=>{const d=String(x.date).slice(0,10),v=points.get(d)||{date:d,created:0,completed:0,overdue:0};v[key]=Number(x.value);points.set(d,v)});put(created,"created");put(completed,"completed");put(late,"overdue");
+  const s=summary[0]||{},priority=Object.fromEntries(["URGENT","HIGH","MEDIUM","LOW"].map(x=>[x.toLowerCase(),Number(priorities.find(p=>p.priority===x)?.total||0)]));
+  const totals={created:created.reduce((n,x)=>n+Number(x.value),0),completed:completed.reduce((n,x)=>n+Number(x.value),0),overdue:late.reduce((n,x)=>n+Number(x.value),0)},prev=previousRows[0]||{},trend=(current,before)=>Number(before)?Math.round((current-Number(before))*1000/Number(before))/10:null;
+  return {period,scope:all?"TEAM":"PERSONAL",summary:{total:Number(s.total||0),completed:Number(s.completed||0),inProgress:Number(s.inProgress||0),pending:Number(s.pending||0),pendingApproval:Number(s.pendingApproval||0),overdue:Number(s.overdue||0),upcoming:Number(s.upcoming||0),dueToday:Number(s.dueToday||0),dueTomorrow:Number(s.dueTomorrow||0),dueThisWeek:Number(s.dueThisWeek||0),dueNextWeek:Number(s.dueNextWeek||0),completionRate:Number(s.eligible)?Math.round(100*Number(s.completed||0)/Number(s.eligible)):0},trends:{created:trend(totals.created,prev.created),completed:trend(totals.completed,prev.completed),overdue:trend(totals.overdue,prev.overdue)},activity:[...points.values()].sort((a,b)=>a.date.localeCompare(b.date)),priorities:priority,employees:all?employees.map(x=>({...x,assigned:Number(x.assigned),active:Number(x.active),dueToday:Number(x.dueToday),dueThisWeek:Number(x.dueThisWeek),workload:Number(x.active)<=3?'Low':Number(x.active)<=7?'Normal':Number(x.active)<=12?'High':'Heavy',completed:Number(x.completed),inProgress:Number(x.inProgress),overdue:Number(x.overdue),completionRate:Number(x.completionRate||0),onTimeRate:Number(x.onTimeRate||0)})):[],projects:projects.map(x=>({...x,total:Number(x.total),completed:Number(x.completed),inProgress:Number(x.inProgress),overdue:Number(x.overdue),progress:Number(x.progress||0) }))};
+}
+export async function employeePerformance(employeeId,filters,user){
+  const id=Number(employeeId),all=await getEffectivePermission(user.id,"task.view_all");
+  if(!all&&id!==Number(user.employee_id))throw new ApiError(403,"You can only view your own task performance");
+  const [[employee]]=await pool.execute(`SELECT e.id,CONCAT(e.first_name,' ',e.last_name) name,e.department,e.job_title jobTitle,e.employee_code employeeCode,GROUP_CONCAT(DISTINCT r.name ORDER BY r.name) roles FROM employees e LEFT JOIN users u ON u.employee_id=e.id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE e.id=? GROUP BY e.id`,[id]);
+  if(!employee)throw new ApiError(404,"Employee not found");
+  const period=analyticsDates(filters),range=[period.start,period.end,id],active="t.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",late="t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED') AND NOT(t.status='SUBMITTED_FOR_REVIEW' AND t.submitted_at<=t.due_at)",effective="COALESCE(t.submitted_at,t.completed_at)";
+  const summarySql=`SELECT COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${late}) overdue,SUM(t.status='CHANGES_REQUIRED') needsRevision,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}<=t.due_at) onTime,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}>t.due_at) completedLate,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL) timedCompleted FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND t.assignee_employee_id=? AND t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')`;
+  const workloadSql=`SELECT SUM(${active}) active,SUM(${active} AND t.priority='URGENT') urgent,SUM(${active} AND t.priority='HIGH') high,SUM(${active} AND DATE(t.due_at)=CURRENT_DATE) dueToday,SUM(${active} AND t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,SUM(${late}) overdue FROM tasks t WHERE t.assignee_employee_id=?`;
+  const listBase=`SELECT t.id,t.title,t.description,t.priority,t.status,t.assignment_type,t.due_at,t.completed_at,t.submitted_at,t.created_at,(SELECT MAX(h.created_at) FROM task_assignment_history h WHERE h.task_id=t.id AND h.new_employee_id=?) assignedAt FROM tasks t WHERE t.assignee_employee_id=?`;
+  const [summaryRows,workloadRows,activeRows,overdueRows,completedRows,atRiskRows,analyticsData,timelinessRows]=await Promise.all([
+    pool.execute(summarySql,range),pool.execute(workloadSql,[id]),
+    pool.execute(`${listBase} AND ${active} ORDER BY t.due_at IS NULL,t.due_at LIMIT 50`,[id,id]),
+    pool.execute(`${listBase} AND ${late} ORDER BY t.due_at LIMIT 50`,[id,id]),
+    pool.execute(`${listBase} AND t.status='COMPLETED' AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY) ORDER BY t.completed_at DESC LIMIT 50`,[id,id,period.start,period.end]),
+    pool.execute(`${listBase} AND ${active} AND(${late} OR(t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 48 HOUR) AND t.priority IN('URGENT','HIGH'))) ORDER BY t.due_at LIMIT 20`,[id,id]),
+    analytics({...filters,employeeId:id},user),
+    pool.execute(`SELECT SUM(DATE(${effective})<DATE(t.due_at)) early,SUM(DATE(${effective})=DATE(t.due_at)) onDueDate,SUM(${effective}>t.due_at) late FROM tasks t WHERE t.assignee_employee_id=? AND t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective} IS NOT NULL AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)`,[id,period.start,period.end])
+  ]);
+  const s=summaryRows[0][0]||{},w=workloadRows[0][0]||{},activeCount=Number(w.active||0),level=activeCount<=3?"Low":activeCount<=7?"Normal":activeCount<=12?"High":"Heavy",map=x=>({...x,overdue:isOverdue({status:x.status,dueAt:x.due_at,submittedAt:x.submitted_at,completedAt:x.completed_at}),progress:{TO_DO:10,IN_PROGRESS:55,SUBMITTED_FOR_REVIEW:85,CHANGES_REQUIRED:65,COMPLETED:100}[x.status]||0});
+  return {employee:{...employee,roles:String(employee.roles||"").split(",").filter(Boolean)},period,summary:{assigned:Number(s.assigned||0),completed:Number(s.completed||0),inProgress:Number(s.inProgress||0),pendingApproval:Number(s.pendingApproval||0),overdue:Number(s.overdue||0),needsRevision:Number(s.needsRevision||0),completionRate:Number(s.assigned)?Math.round(Number(s.completed||0)*1000/Number(s.assigned))/10:0,onTimeRate:Number(s.timedCompleted)?Math.round(Number(s.onTime||0)*1000/Number(s.timedCompleted))/10:0,onTime:Number(s.onTime||0),late:Number(s.completedLate||0)},workload:{active:activeCount,urgent:Number(w.urgent||0),high:Number(w.high||0),dueToday:Number(w.dueToday||0),dueThisWeek:Number(w.dueThisWeek||0),overdue:Number(w.overdue||0),level},activeTasks:activeRows[0].map(map),overdueTasks:overdueRows[0].map(map),completionHistory:completedRows[0].map(map),atRisk:atRiskRows[0].map(map),timeliness:Object.fromEntries(Object.entries(timelinessRows[0][0]||{}).map(([k,v])=>[k,Number(v||0)])),analytics:analyticsData};
 }

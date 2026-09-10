@@ -33,6 +33,7 @@ function setup(t, { valid = true, employeeId = 7, notificationFails = false, com
       id: 2, employeeId, name: "Ali Khan", email: "employee@example.com",
     }]];
     if (sql.startsWith("SELECT r.name")) return [[{ name: "EMPLOYEE" }]];
+    if (sql.startsWith("SELECT p.name,upo.effect")) return [[]];
     if (sql.startsWith("SELECT DISTINCT p.name")) return [[]];
     if (sql.startsWith("SELECT DISTINCT u.id")) {
       assert.equal(committed, true, "Notify only after the login commits");
@@ -41,7 +42,7 @@ function setup(t, { valid = true, employeeId = 7, notificationFails = false, com
       if (notificationFails) throw new Error("Notifications unavailable");
       return [[{ id: 10 }, { id: 11 }]];
     }
-    if (sql.includes("INSERT INTO notifications")) {
+    if (sql.includes("INTO notifications")) {
       notifications.push(params);
       return [{ insertId: params[0] }];
     }
@@ -61,6 +62,7 @@ test("successful employee login persists a named notification for each administr
     assert.deepEqual(values, [
       10 + index, "ATTENDANCE_PORTAL_LOGIN", "Employee logged in",
       "Ali Khan logged in to the portal.", "EMPLOYEE", 7, "/employees/7",
+      null, true, true,
     ]);
   }
 });

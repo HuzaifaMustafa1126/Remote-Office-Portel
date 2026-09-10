@@ -1,5 +1,6 @@
 import { CalendarClock, Image, ShieldCheck, Users } from "lucide-react";
 import PriorityBadge from "./PriorityBadge";
+import TaskStatusBadge from "./TaskStatusBadge";
 const due = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -21,6 +22,17 @@ export default function TaskCard({
   onDragEnd,
 }) {
   const assigned = task.assigneeName || task.assignee_name,
+    progress =
+      {
+        DRAFT: 0,
+        SCHEDULED: 0,
+        OPEN: 0,
+        TO_DO: 10,
+        IN_PROGRESS: 55,
+        SUBMITTED_FOR_REVIEW: 85,
+        CHANGES_REQUIRED: 65,
+        COMPLETED: 100,
+      }[task.status] || 0,
     editable = management && ["DRAFT", "SCHEDULED"].includes(task.status),
     reviewable = management && task.status === "SUBMITTED_FOR_REVIEW",
     blockedActive = Boolean(
@@ -66,6 +78,24 @@ export default function TaskCard({
             {task.title}
           </h3>
           <PriorityBadge priority={task.priority} />
+        </div>
+        {Number(task.unreadCount) > 0 && (
+          <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-primary">
+            <i className="h-2 w-2 rounded-full bg-primary" />
+            {task.unreadCount} new{" "}
+            {Number(task.unreadCount) === 1 ? "update" : "updates"}
+          </span>
+        )}
+        {task.description && (
+          <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+            {task.description}
+          </p>
+        )}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            General
+          </span>
+          <TaskStatusBadge status={task.status} overdue={task.overdue} />
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
           {task.overdue && (
@@ -132,6 +162,18 @@ export default function TaskCard({
               {task.imageCount}
             </span>
           )}
+        </div>
+        <div className="mt-3">
+          <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+            <span>Progress</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-surface-secondary">
+            <div
+              className="h-full rounded-full bg-foreground"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       </button>
       {editable && (

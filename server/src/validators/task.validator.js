@@ -118,6 +118,7 @@ export const transitionSchema = z
       "ARCHIVED",
     ]),
     reason: z.string().trim().max(1000).optional(),
+    note: z.string().trim().max(1000).optional(),
     revisionDueAt: datetime.optional().nullable(),
   })
   .strict()
@@ -181,9 +182,26 @@ export const managementListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
+export const analyticsSchema=z.object({
+  range:z.enum(["7_DAYS","30_DAYS","3_MONTHS","6_MONTHS","12_MONTHS","THIS_WEEK","THIS_MONTH","LAST_MONTH","THIS_YEAR","CUSTOM"]).default("30_DAYS"),
+  startDate:z.string().date().optional(),
+  endDate:z.string().date().optional(),
+  employeeId:z.coerce.number().int().positive().optional(),
+}).superRefine((x,c)=>{if(x.range==="CUSTOM"&&(!x.startDate||!x.endDate))c.addIssue({code:"custom",message:"Start and end dates are required",path:["startDate"]});if(x.startDate&&x.endDate&&x.startDate>x.endDate)c.addIssue({code:"custom",message:"Start date must be before end date",path:["endDate"]})});
 export const deadlineSchema = z
   .object({ dueAt: datetime, reason: z.string().trim().max(1000).optional() })
   .strict();
+export const collaborationCommentSchema = z.object({
+  content: z.string().trim().min(1).max(1000),
+  parentCommentId: z.number().int().positive().nullable().optional(),
+  mentionUserIds: z.array(z.number().int().positive()).max(20).default([]),
+}).strict();
+export const editCommentSchema = z.object({
+  content: z.string().trim().min(1).max(1000),
+}).strict();
+export const mentionSearchSchema = z.object({
+  search: z.string().trim().max(80).default(""),
+});
 export const bulkSchema = z
   .object({
     taskIds: z.array(z.number().int().positive()).min(1).max(100),

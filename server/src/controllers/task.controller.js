@@ -24,9 +24,16 @@ export async function comment(req, res) {
     .status(201)
     .json({
       success: true,
-      data: await s.addComment(req.params.id, req.body.content, req.user),
+      data: await s.addComment(req.params.id, req.body, req.user),
     });
 }
+export async function editComment(req,res){res.json({success:true,data:await s.editComment(req.params.id,req.params.commentId,req.body.content,req.user)})}
+export async function deleteComment(req,res){res.json({success:true,data:await s.deleteComment(req.params.id,req.params.commentId,req.user)})}
+export async function mentionableUsers(req,res){res.json({success:true,data:await s.mentionableUsers(req.params.id,req.validatedQuery.search,req.user)})}
+export async function markRead(req,res){res.json({success:true,data:await s.markTaskRead(req.params.id,req.user)})}
+export async function uploadAttachment(req,res){res.status(201).json({success:true,data:await s.uploadAttachment(req.params.id,req.fileInfo,req.body,req.user)})}
+export async function attachmentContent(req,res){const file=await s.getAttachmentContent(req.params.id,req.params.attachmentId,req.user);res.type(file.mimeType).set("Content-Disposition",`${req.query.download==='1'?'attachment':'inline'}; filename*=UTF-8''${encodeURIComponent(file.originalFilename)}`).send(file.buffer)}
+export async function deleteAttachment(req,res){res.json({success:true,data:await s.deleteAttachment(req.params.id,req.params.attachmentId,req.user)})}
 export async function image(req, res) {
   res
     .status(201)
@@ -155,7 +162,7 @@ export async function imageContent(req, res) {
     .send(image.buffer);
 }
 export async function managementList(req, res) {
-  res.json({ success: true, data: await s.listManagement(req.validatedQuery) });
+  res.json({ success: true, data: await s.listManagement(req.validatedQuery,req.user) });
 }
 export async function deadline(req, res) {
   res.json({
@@ -166,3 +173,5 @@ export async function deadline(req, res) {
 export async function bulk(req, res) {
   res.json({ success: true, data: await s.bulk(req.body, req.user) });
 }
+export async function analytics(req,res){res.json({success:true,data:await s.analytics(req.validatedQuery,req.user)})}
+export async function employeePerformance(req,res){res.json({success:true,data:await s.employeePerformance(req.params.employeeId,req.validatedQuery,req.user)})}

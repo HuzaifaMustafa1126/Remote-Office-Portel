@@ -11,6 +11,7 @@ import {
   transitionTask,
 } from "../../services/task.service";
 import PriorityBadge from "./PriorityBadge";
+import TaskStatusBadge from "./TaskStatusBadge";
 const statuses = [
     "DRAFT",
     "SCHEDULED",
@@ -32,18 +33,34 @@ const statuses = [
   duration = (s) =>
     s ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : "—",
   err = (e) => e.response?.data?.message || "Unable to complete this action.";
+const filterKey = "task-management-filters";
+function initialFilters() {
+  const defaults = {
+    search: "",
+    priority: "",
+    status: "",
+    employeeId: "",
+    due: "ALL",
+    from: "",
+    to: "",
+    page: 1,
+  };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(filterKey) || "{}");
+    const linkedEmployee = new URLSearchParams(window.location.search).get(
+      "employeeId",
+    );
+    return {
+      ...defaults,
+      ...saved,
+      employeeId: linkedEmployee || saved.employeeId || "",
+    };
+  } catch {
+    return defaults;
+  }
+}
 export default function TaskManagementList({ onView, onEdit, onChanged }) {
-  const [filters, setFilters] = useState({
-      search: "",
-      priority: "",
-      status: "",
-      employeeId:
-        new URLSearchParams(window.location.search).get("employeeId") || "",
-      due: "ALL",
-      from: "",
-      to: "",
-      page: 1,
-    }),
+  const [filters, setFilters] = useState(initialFilters),
     [query, setQuery] = useState(""),
     [data, setData] = useState({
       items: [],
@@ -59,6 +76,9 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
     const timer = setTimeout(() => setQuery(filters.search), 350);
     return () => clearTimeout(timer);
   }, [filters.search]);
+  useEffect(() => {
+    sessionStorage.setItem(filterKey, JSON.stringify(filters));
+  }, [filters]);
   const params = useMemo(
     () => buildParams({ ...filters, search: query }),
     [filters, query],
@@ -79,6 +99,7 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
   useEffect(() => {
     listTaskAssignees().then(setEmployees);
   }, []);
+  useEffect(()=>{if(!menu)return;const close=e=>{if(e.key==="Escape")setMenu(null)},outside=()=>setMenu(null);document.addEventListener("keydown",close);document.addEventListener("click",outside);return()=>{document.removeEventListener("keydown",close);document.removeEventListener("click",outside)}},[menu]);
   const set = (key, value) => {
     setFilters((x) => ({ ...x, [key]: value, page: 1 }));
     setSelected([]);
@@ -115,20 +136,24 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
     else setDialog({ type, task });
   };
   const bulk = async (action, value) => {
-    const result = await bulkTasks({ taskIds: selected, action, ...value });
-    setNotice(
-      `${result.updated} updated • ${result.skipped} skipped${
-        result.skipped
-          ? `: ${result.results
-              .filter((x) => !x.success)
-              .map((x) => `Task ${x.id} — ${x.reason}`)
-              .join("; ")}`
-          : ""
-      }`,
-    );
-    setSelected([]);
-    await load();
-    onChanged?.();
+    try {
+      const result = await bulkTasks({ taskIds: selected, action, ...value });
+      setNotice(
+        `${result.updated} updated • ${result.skipped} skipped${
+          result.skipped
+            ? `: ${result.results
+                .filter((x) => !x.success)
+                .map((x) => `Task ${x.id} — ${x.reason}`)
+                .join("; ")}`
+            : ""
+        }`,
+      );
+      setSelected([]);
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setNotice(err(e));
+    }
   };
   const all =
     data.items.length && data.items.every((x) => selected.includes(x.id));
@@ -150,7 +175,7 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
       )}
       <div className="overflow-visible rounded-2xl border border-border bg-surface shadow-sm">
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="bg-surface-secondary text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="p-4">
@@ -163,12 +188,13 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
                   />
                 </th>
                 <th>Task Title</th>
+                <th>Project</th>
                 <th>Assignee</th>
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Type</th>
                 <th>Due Date</th>
-                <th>Time Spent</th>
+                <th>Progress</th>
                 <th className="pr-4">Actions</th>
               </tr>
             </thead>
@@ -194,33 +220,42 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
                   </td>
                   <td className="max-w-64 py-3 pr-3 font-bold">
                     <span className="line-clamp-2">{task.title}</span>
+                    {Number(task.unreadCount) > 0 && (
+                      <small className="mt-1 block text-primary">
+                        ● {task.unreadCount} new
+                      </small>
+                    )}
                   </td>
+                  <td className="text-xs text-muted-foreground">General</td>
                   <td>{task.assigneeName || "Unassigned"}</td>
                   <td>
                     <PriorityBadge priority={task.priority} />
                   </td>
                   <td>
-                    <span className="text-xs font-bold">
-                      {task.status.replaceAll("_", " ")}
-                    </span>
+                    <TaskStatusBadge
+                      status={task.status}
+                      overdue={task.overdue}
+                    />
                   </td>
                   <td>{task.assignment_type}</td>
                   <td className={task.overdue ? "font-bold text-danger" : ""}>
                     {date(task.due_at)}
                   </td>
-                  <td>{duration(Number(task.timeSpentSeconds))}</td>
+                  <td>
+                    <Progress status={task.status} />
+                  </td>
                   <td
                     className="relative pr-4"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
-                      onClick={() => setMenu(menu === task.id ? null : task.id)}
+                      onClick={(e) => {e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setMenu(menu?.id === task.id ? null : {id:task.id,top:r.bottom+6,left:Math.max(8,r.right-192)})}}
                       className="rounded-lg p-2 hover:bg-surface-secondary"
                     >
                       <MoreHorizontal />
                     </button>
-                    {menu === task.id && (
-                      <Menu task={task} choose={(type) => action(type, task)} />
+                    {menu?.id === task.id && (
+                      <Menu position={menu} task={task} choose={(type) => action(type, task)} />
                     )}
                   </td>
                 </tr>
@@ -248,6 +283,11 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
                   className="min-w-0 flex-1 text-left"
                 >
                   <b className="break-words">{task.title}</b>
+                  {Number(task.unreadCount) > 0 && (
+                    <span className="ml-2 text-[10px] font-bold text-primary">
+                      ● {task.unreadCount} new
+                    </span>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {task.assigneeName || "Unassigned"} ·{" "}
                     {task.status.replaceAll("_", " ")}
@@ -259,14 +299,14 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
                   </p>
                 </button>
                 <button
-                  onClick={() => setMenu(menu === task.id ? null : task.id)}
+                  onClick={(e) => {e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setMenu(menu?.id===task.id?null:{id:task.id,top:r.bottom+6,left:Math.max(8,r.right-192)})}}
                 >
                   <MoreHorizontal />
                 </button>
               </div>
-              {menu === task.id && (
+              {menu?.id === task.id && (
                 <div className="relative">
-                  <Menu task={task} choose={(type) => action(type, task)} />
+                  <Menu position={menu} task={task} choose={(type) => action(type, task)} />
                 </div>
               )}
             </div>
@@ -318,7 +358,8 @@ function buildParams(f) {
   for (const k of ["search", "priority", "status", "employeeId"])
     if (f[k]) p[k] = f[k];
   const now = new Date(),
-    day = (d) => d.toISOString().slice(0, 10);
+    day = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   if (f.due === "TODAY") p.from = p.to = day(now);
   if (f.due === "TOMORROW") {
     const d = new Date(now);
@@ -343,21 +384,21 @@ function Filters({ value, set, employees }) {
     Object.entries(value).some(([k, v]) => !["page", "due"].includes(k) && v) ||
     value.due !== "ALL";
   return (
-    <div className="mb-4 grid gap-2 rounded-2xl border border-border bg-surface p-3 sm:grid-cols-2 xl:grid-cols-6">
-      <label className="relative sm:col-span-2">
+    <div className="mb-4 grid gap-2 rounded-xl border border-border bg-surface p-3 shadow-sm sm:grid-cols-2 xl:grid-cols-[minmax(260px,2fr)_repeat(4,minmax(135px,1fr))]">
+      <label className="relative sm:col-span-2 xl:col-span-1">
         <Search
           className="absolute left-3 top-3 text-muted-foreground"
           size={16}
         />
         <input
-          className="input !mt-0 pl-9"
+          className="input !mt-0 h-10 pl-10"
           placeholder="Search tasks"
           value={value.search}
           onChange={(e) => set("search", e.target.value)}
         />
       </label>
       <select
-        className="input !mt-0"
+        className="input !mt-0 h-10"
         value={value.priority}
         onChange={(e) => set("priority", e.target.value)}
       >
@@ -367,7 +408,7 @@ function Filters({ value, set, employees }) {
         ))}
       </select>
       <select
-        className="input !mt-0"
+        className="input !mt-0 h-10"
         value={value.status}
         onChange={(e) => set("status", e.target.value)}
       >
@@ -377,7 +418,7 @@ function Filters({ value, set, employees }) {
         ))}
       </select>
       <select
-        className="input !mt-0"
+        className="input !mt-0 h-10"
         value={value.employeeId}
         onChange={(e) => set("employeeId", e.target.value)}
       >
@@ -390,7 +431,7 @@ function Filters({ value, set, employees }) {
       </select>
       <div className="flex gap-2">
         <select
-          className="input !mt-0"
+        className="input !mt-0 h-10"
           value={value.due}
           onChange={(e) => set("due", e.target.value)}
         >
@@ -426,7 +467,7 @@ function Filters({ value, set, employees }) {
         <div className="flex gap-2 sm:col-span-2">
           <input
             type="date"
-            className="input !mt-0"
+          className="input !mt-0 h-10"
             value={value.from}
             onChange={(e) => set("from", e.target.value)}
           />
@@ -441,7 +482,29 @@ function Filters({ value, set, employees }) {
     </div>
   );
 }
-function Menu({ task, choose }) {
+function Progress({ status }) {
+  const value =
+    {
+      DRAFT: 0,
+      SCHEDULED: 0,
+      OPEN: 0,
+      TO_DO: 10,
+      IN_PROGRESS: 55,
+      SUBMITTED_FOR_REVIEW: 85,
+      CHANGES_REQUIRED: 65,
+      COMPLETED: 100,
+      ARCHIVED: 100,
+    }[status] || 0;
+  return (
+    <div className="w-20">
+      <div className="mb-1 text-[10px] text-muted-foreground">{value}%</div>
+      <div className="h-1 overflow-hidden rounded-full bg-surface-secondary">
+        <div className="h-full bg-foreground" style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}
+function Menu({ task, choose,position }) {
   const editable = ["DRAFT", "SCHEDULED", "OPEN", "TO_DO"].includes(
       task.status,
     ),
@@ -466,7 +529,7 @@ function Menu({ task, choose }) {
     ],
   ].filter(Boolean);
   return (
-    <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-xl">
+    <div onClick={e=>e.stopPropagation()} style={{top:position.top,left:position.left}} className="fixed z-[80] w-48 rounded-xl border border-border bg-surface p-1 shadow-xl">
       {actions.map(([k, v]) => (
         <button
           key={k}
@@ -511,6 +574,7 @@ function Bulk({ count, employees, run, clear }) {
         {employees.map((x) => (
           <option key={x.id} value={x.id}>
             {x.name}
+            {availability(x)}
           </option>
         ))}
       </select>
@@ -604,6 +668,7 @@ function AdminDialog({ value, employees, close, save }) {
                 {employees.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.name}
+                    {availability(x)}
                   </option>
                 ))}
               </select>
@@ -673,6 +738,20 @@ function AdminDialog({ value, employees, close, save }) {
       </div>
     </>
   );
+}
+function availability(employee) {
+  const a = employee.availability;
+  if (!a) return "";
+  const warnings = [];
+  if (a.onLeave) warnings.push("on leave");
+  if (!a.online) warnings.push("offline");
+  if (!a.withinShift) warnings.push("outside shift");
+  if (a.hasActiveTask) warnings.push("active task");
+  warnings.push(
+    `${a.activeTaskCount || 0} active`,
+    `${a.overdueTaskCount || 0} overdue`,
+  );
+  return ` — ${warnings.join(", ")}`;
 }
 function Pagination({ value, setPage }) {
   if (value.pages <= 1) return null;

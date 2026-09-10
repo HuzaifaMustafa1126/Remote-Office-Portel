@@ -28,6 +28,7 @@ import AccountSettingsPage from "../pages/AccountSettingsPage";
 import AttendancePolicyPage from "../pages/AttendancePolicyPage";
 import NotificationPermissionsPage from "../pages/NotificationPermissionsPage";
 import TaskManagementPage from "../pages/TaskManagementPage";
+import EmployeeTaskPerformancePage from "../pages/EmployeeTaskPerformancePage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -44,15 +45,46 @@ export default function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <DeviceAccessGuard><AppLayout /></DeviceAccessGuard>
+            <DeviceAccessGuard>
+              <AppLayout />
+            </DeviceAccessGuard>
           </ProtectedRoute>
         }
       >
         <Route path="settings/appearance" element={<AppearancePage />} />
         <Route path="account-settings" element={<AccountSettingsPage />} />
-        <Route path="settings/attendance-policy" element={<Gate permission={P.ATTENDANCE_POLICY_VIEW}><AttendancePolicyPage /></Gate>} />
-        <Route path="settings/notification-permissions" element={<Gate permission={P.NOTIFICATION_POLICY_VIEW}><NotificationPermissionsPage /></Gate>} />
-        <Route path="tasks" element={<Gate permission={P.TASK_VIEW_OWN}><TaskManagementPage /></Gate>} />
+        <Route
+          path="settings/attendance-policy"
+          element={
+            <Gate permission={P.ATTENDANCE_POLICY_VIEW}>
+              <AttendancePolicyPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="settings/notification-permissions"
+          element={
+            <Gate permission={P.NOTIFICATION_POLICY_VIEW}>
+              <NotificationPermissionsPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="tasks"
+          element={
+            <Gate permission={P.TASK_VIEW_OWN}>
+              <TaskManagementPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="tasks/employees/:employeeId"
+          element={
+            <Gate permission={P.TASK_VIEW_OWN}>
+              <EmployeeTaskPerformancePage />
+            </Gate>
+          }
+        />
         <Route
           index
           element={

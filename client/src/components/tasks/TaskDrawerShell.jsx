@@ -1,11 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ImageOff, RotateCw, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileText,
+  ImageOff,
+  Paperclip,
+  RotateCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   addTaskComment,
+  deleteTaskAttachment,
+  deleteTaskComment,
+  editTaskComment,
+  getMentionableUsers,
   getTask,
+  getTaskAttachmentBlob,
   getTaskImageBlob,
+  markTaskRead,
+  uploadTaskAttachment,
 } from "../../services/task.service";
+import useAuth from "../../hooks/useAuth";
 import PriorityBadge from "./PriorityBadge";
+import TaskStatusBadge from "./TaskStatusBadge";
 const date = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -28,6 +47,10 @@ const eventLabels = {
   TASK_CHANGES_REQUIRED: "Changes required",
   TASK_COMPLETED: "Task completed",
   COMMENT_ADDED: "Comment added",
+  COMMENT_EDITED: "Comment edited",
+  COMMENT_DELETED: "Comment deleted",
+  ATTACHMENT_ADDED: "Attachment uploaded",
+  ATTACHMENT_DELETED: "Attachment deleted",
   IMAGE_ADDED: "Image added",
   TASK_REASSIGNED: "Task reassigned",
   TASK_AUTO_PUBLISHED: "Task published automatically",
@@ -39,19 +62,26 @@ export default function TaskDrawerShell({
   onAction,
   refreshKey = 0,
 }) {
+  const { user } = useAuth();
   const [data, setData] = useState(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
     [comment, setComment] = useState(""),
     [commenting, setCommenting] = useState(false),
     [notice, setNotice] = useState(""),
-    [lightbox, setLightbox] = useState(null);
+    [lightbox, setLightbox] = useState(null),
+    [replyTo, setReplyTo] = useState(null),
+    [mentionIds, setMentionIds] = useState([]),
+    [mentionable, setMentionable] = useState([]),
+    [uploading, setUploading] = useState(0);
   const load = useCallback(async () => {
     if (!task) return;
     setLoading(true);
     setError("");
     try {
-      setData(await getTask(task.id));
+      const detail = await getTask(task.id);
+      setData(detail);
+      markTaskRead(task.id).catch(() => {});
     } catch (e) {
       setError(e.response?.data?.message || "Unable to load task details.");
     } finally {
@@ -67,14 +97,84 @@ export default function TaskDrawerShell({
     setCommenting(true);
     setNotice("");
     try {
-      await addTaskComment(task.id, comment.trim());
+      await addTaskComment(
+        task.id,
+        comment.trim(),
+        replyTo?.id || null,
+        mentionIds,
+      );
       setComment("");
+      setReplyTo(null);
+      setMentionIds([]);
+      setMentionable([]);
       setNotice("Comment added.");
       await load();
     } catch (e) {
       setNotice(e.response?.data?.message || "Unable to add comment.");
     } finally {
       setCommenting(false);
+    }
+  };
+  const commentChange = async (value) => {
+    setComment(value);
+    const match = value.match(/(?:^|\s)@([^@\n]{1,40})$/);
+    if (!match) {
+      setMentionable([]);
+      return;
+    }
+    try {
+      setMentionable(await getMentionableUsers(task.id, match[1].trim()));
+    } catch {
+      setMentionable([]);
+    }
+  };
+  const chooseMention = (person) => {
+    setComment((x) =>
+      x.replace(
+        /(?:^|\s)@([^@\n]{0,40})$/,
+        (m) => `${m.startsWith(" ") ? " " : ""}@${person.name} `,
+      ),
+    );
+    setMentionIds((x) => [...new Set([...x, person.id])]);
+    setMentionable([]);
+  };
+  const refreshComment = async (fn) => {
+    try {
+      await fn();
+      setNotice("Discussion updated.");
+      await load();
+    } catch (e) {
+      setNotice(e.response?.data?.message || "Unable to update comment.");
+    }
+  };
+  const upload = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    for (const file of files) {
+      setUploading(1);
+      try {
+        await uploadTaskAttachment(task.id, file, (p) =>
+          setUploading(Math.round((p.loaded * 100) / (p.total || file.size))),
+        );
+        setNotice("Attachment uploaded.");
+        await load();
+      } catch (error) {
+        setNotice(
+          error.response?.data?.message || "Upload failed. Please try again.",
+        );
+      } finally {
+        setUploading(0);
+      }
+    }
+  };
+  const removeAttachment = async (file) => {
+    if (!confirm(`Delete ${file.originalFilename}?`)) return;
+    try {
+      await deleteTaskAttachment(task.id, file.id);
+      setNotice("Attachment deleted.");
+      await load();
+    } catch (e) {
+      setNotice(e.response?.data?.message || "Unable to delete attachment.");
     }
   };
   return (
@@ -95,9 +195,7 @@ export default function TaskDrawerShell({
             <div className="min-w-0">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 {data && <PriorityBadge priority={data.priority} />}
-                <span className="rounded-full bg-surface-secondary px-2 py-1 text-[10px] font-black">
-                  {status(data?.status || task.status)}
-                </span>
+                <TaskStatusBadge status={data?.status || task.status} />
                 {data?.overdue && (
                   <span className="rounded-full bg-danger-soft px-2 py-1 text-[10px] font-black text-danger">
                     OVERDUE
@@ -167,13 +265,36 @@ export default function TaskDrawerShell({
                 taskId={data.id}
                 onOpen={setLightbox}
               />
+              <Attachments
+                taskId={data.id}
+                items={data.attachments || []}
+                upload={upload}
+                uploading={uploading}
+                remove={removeAttachment}
+                userId={user?.id}
+                management={management}
+              />
               <Comments
                 items={data.comments}
                 value={comment}
-                setValue={setComment}
+                setValue={commentChange}
                 add={add}
                 busy={commenting}
                 notice={notice}
+                replyTo={replyTo}
+                setReplyTo={setReplyTo}
+                mentionable={mentionable}
+                chooseMention={chooseMention}
+                userId={user?.id}
+                management={management}
+                edit={(item, content) =>
+                  refreshComment(() =>
+                    editTaskComment(task.id, item.id, content),
+                  )
+                }
+                remove={(item) =>
+                  refreshComment(() => deleteTaskComment(task.id, item.id))
+                }
               />
               <Activity items={data.activities} />
             </div>
@@ -229,6 +350,7 @@ function Info({ data }) {
         </div>
         <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
           {[
+            ["Project", "General"],
             ["Assigned Employee", data.assigneeName || "Not assigned yet"],
             ["Created By", data.creatorName || "System"],
             ["Assignment Type", data.assignment_type],
@@ -245,10 +367,34 @@ function Info({ data }) {
             </div>
           ))}
         </div>
+        <div className="border-t border-border pt-4">
+          <div className="mb-2 flex justify-between text-xs">
+            <span className="text-muted-foreground">Progress</span>
+            <b>{taskProgress(data.status)}%</b>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-secondary">
+            <div
+              className="h-full bg-foreground"
+              style={{ width: `${taskProgress(data.status)}%` }}
+            />
+          </div>
+        </div>
       </div>
     </Block>
   );
 }
+const taskProgress = (status) =>
+  ({
+    DRAFT: 0,
+    SCHEDULED: 0,
+    OPEN: 0,
+    TO_DO: 10,
+    IN_PROGRESS: 55,
+    SUBMITTED_FOR_REVIEW: 85,
+    CHANGES_REQUIRED: 65,
+    COMPLETED: 100,
+    ARCHIVED: 100,
+  })[status] || 0;
 function Dates({ data }) {
   const rows = [
     ["Created", data.created_at],
@@ -362,29 +508,133 @@ function ProtectedImage({ taskId, image, onClick }) {
     </button>
   );
 }
-function Comments({ items, value, setValue, add, busy, notice }) {
+function Attachments({
+  taskId,
+  items,
+  upload,
+  uploading,
+  remove,
+  userId,
+  management,
+}) {
+  const open = async (file) => {
+    const url = await getTaskAttachmentBlob(taskId, file.id);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
   return (
-    <Block title="Comments">
-      <div className="max-h-64 space-y-3 overflow-y-auto">
+    <Block title="Attachments">
+      <div className="space-y-2">
         {items.length ? (
-          items.map((x) => (
-            <div key={x.id} className="rounded-xl bg-surface-secondary p-3">
-              <div className="flex justify-between gap-2 text-xs">
-                <b>{x.author || "User"}</b>
-                <span className="text-muted-foreground">
-                  {date(x.createdAt)}
-                </span>
+          items.map((file) => (
+            <div
+              key={file.id}
+              className="flex items-center gap-3 rounded-xl bg-surface-secondary p-3"
+            >
+              <FileText className="shrink-0" size={20} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">
+                  {file.originalFilename}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {size(file.sizeBytes)} · {file.uploadedBy || "User"} ·{" "}
+                  {date(file.createdAt)}
+                </p>
               </div>
-              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-                {x.content}
-              </p>
+              <button
+                aria-label={`Open ${file.originalFilename}`}
+                onClick={() => open(file)}
+                className="rounded-lg p-2 hover:bg-surface"
+              >
+                <Download size={16} />
+              </button>
+              {(management ||
+                Number(file.uploadedByUserId) === Number(userId)) && (
+                <button
+                  aria-label={`Delete ${file.originalFilename}`}
+                  onClick={() => remove(file)}
+                  className="rounded-lg p-2 text-danger hover:bg-danger-soft"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))
         ) : (
-          <p className="text-sm text-muted-foreground">No comments yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No attachments added yet.
+          </p>
+        )}
+      </div>
+      <label
+        className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold ${uploading ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <Paperclip size={14} />
+        {uploading ? `Uploading ${uploading}%` : "Add File"}
+        <input
+          aria-label="Upload task attachment"
+          type="file"
+          multiple
+          className="hidden"
+          accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.txt,.doc,.docx,.xls,.xlsx,.csv,.zip"
+          onChange={upload}
+        />
+      </label>
+    </Block>
+  );
+}
+const size = (n) =>
+  n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
+function Comments({
+  items,
+  value,
+  setValue,
+  add,
+  busy,
+  notice,
+  replyTo,
+  setReplyTo,
+  mentionable,
+  chooseMention,
+  userId,
+  management,
+  edit,
+  remove,
+}) {
+  const roots = items.filter((x) => !x.parentCommentId),
+    children = (id) =>
+      items.filter((x) => Number(x.parentCommentId) === Number(id));
+  return (
+    <Block title="Comments">
+      <div className="max-h-64 space-y-3 overflow-y-auto">
+        {roots.length ? (
+          roots.map((x) => (
+            <Comment
+              key={x.id}
+              item={x}
+              replies={children(x.id)}
+              userId={userId}
+              management={management}
+              reply={setReplyTo}
+              edit={edit}
+              remove={remove}
+            />
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No comments yet. Start the discussion about this task.
+          </p>
         )}
       </div>
       <div className="mt-4">
+        {replyTo && (
+          <div className="mb-2 flex justify-between rounded-lg bg-primary-soft px-3 py-2 text-xs">
+            <span>
+              Replying to <b>{replyTo.author}</b>
+            </span>
+            <button onClick={() => setReplyTo(null)}>Cancel</button>
+          </div>
+        )}
         <textarea
           rows="2"
           maxLength="1000"
@@ -393,6 +643,27 @@ function Comments({ items, value, setValue, add, busy, notice }) {
           className="input"
           placeholder="Add a short task note…"
         />
+        {mentionable.length > 0 && (
+          <div className="mt-1 rounded-xl border border-border bg-surface p-1 shadow-lg">
+            {mentionable.map((x) => (
+              <button
+                key={x.id}
+                onClick={() => chooseMention(x)}
+                className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-surface-secondary"
+              >
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-foreground text-[10px] font-bold text-background">
+                  {initials(x.name)}
+                </span>
+                <span>
+                  <b className="block text-xs">{x.name}</b>
+                  <small className="text-muted-foreground">
+                    {x.jobTitle || "Task participant"}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="mt-2 flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
             {value.length}/1000
@@ -402,7 +673,7 @@ function Comments({ items, value, setValue, add, busy, notice }) {
             onClick={add}
             className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
           >
-            {busy ? "Adding…" : "Add Comment"}
+            {busy ? "Adding…" : replyTo ? "Add Reply" : "Add Comment"}
           </button>
         </div>
         {notice && (
@@ -412,6 +683,114 @@ function Comments({ items, value, setValue, add, busy, notice }) {
     </Block>
   );
 }
+function Comment({ item, replies, userId, management, reply, edit, remove }) {
+  const [editing, setEditing] = useState(false),
+    [text, setText] = useState(item.content),
+    own = Number(item.authorUserId) === Number(userId),
+    deleted = Boolean(item.deletedAt);
+  return (
+    <div>
+      <div className="rounded-xl bg-surface-secondary p-3">
+        <div className="flex justify-between gap-2 text-xs">
+          <span className="flex items-center gap-2">
+            <i className="grid h-7 w-7 place-items-center rounded-full bg-foreground not-italic font-bold text-background">
+              {initials(item.author || "U")}
+            </i>
+            <span>
+              <b>{item.author || "User"}</b>
+              {item.authorTitle && (
+                <small className="block text-muted-foreground">
+                  {item.authorTitle}
+                </small>
+              )}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            {date(item.createdAt)}
+            {item.updatedAt && " · Edited"}
+          </span>
+        </div>
+        {editing ? (
+          <div className="mt-2">
+            <textarea
+              className="input"
+              maxLength="1000"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <div className="mt-1 flex justify-end gap-2">
+              <button onClick={() => setEditing(false)} className="text-xs">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  edit(item, text);
+                  setEditing(false);
+                }}
+                className="text-xs font-bold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p
+            className={`mt-1 whitespace-pre-wrap break-words text-sm ${deleted ? "italic text-muted-foreground" : ""}`}
+          >
+            {item.content}
+          </p>
+        )}
+        {!deleted && (
+          <div className="mt-2 flex gap-3 text-[11px] font-bold text-muted-foreground">
+            <button
+              aria-label={`Reply to ${item.author}`}
+              onClick={() => reply(item)}
+            >
+              Reply
+            </button>
+            {(own || management) && (
+              <>
+                <button
+                  aria-label="Edit comment"
+                  onClick={() => setEditing(true)}
+                >
+                  Edit
+                </button>
+                <button
+                  aria-label="Delete comment"
+                  onClick={() => remove(item)}
+                  className="text-danger"
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {replies.map((x) => (
+        <div key={x.id} className="ml-7 mt-2 border-l border-border pl-3">
+          <Comment
+            item={x}
+            replies={[]}
+            userId={userId}
+            management={management}
+            reply={() => {}}
+            edit={edit}
+            remove={remove}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+const initials = (name) =>
+  String(name)
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((x) => x[0])
+    .join("")
+    .toUpperCase();
 function Activity({ items }) {
   return (
     <Block title="Activity">
@@ -456,6 +835,10 @@ function activityDetail(item) {
   }
   if (!m) return "";
   if (m.reason) return `Reason: ${m.reason}`;
+  if (m.note) return `Note: ${m.note}`;
+  if (m.filename) return m.filename;
+  if (m.previousDueAt || m.newDueAt)
+    return `${date(m.previousDueAt)} → ${date(m.newDueAt)}`;
   if (m.scheduledPublishAt)
     return `Scheduled for ${date(m.scheduledPublishAt)}`;
   if (m.previousEmployeeId || m.newEmployeeId)

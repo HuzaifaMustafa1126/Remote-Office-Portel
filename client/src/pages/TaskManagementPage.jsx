@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Columns3, List, Plus, RotateCw } from "lucide-react";
+import { Columns3, LayoutDashboard, List, Plus, RotateCw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/common/PageHeader";
 import TaskBoard from "../components/tasks/TaskBoard";
 import TaskDrawerShell from "../components/tasks/TaskDrawerShell";
 import TaskFormDrawer from "../components/tasks/TaskFormDrawer";
 import TaskWorkflowDialog from "../components/tasks/TaskWorkflowDialog";
 import TaskManagementList from "../components/tasks/TaskManagementList";
+import TaskDashboard from "../components/tasks/TaskDashboard";
+import TaskDashboardErrorBoundary from "../components/tasks/TaskDashboardErrorBoundary";
 import usePermission from "../hooks/usePermission";
 import { PERMISSIONS as P } from "../utils/permissions";
 import {
@@ -31,11 +34,13 @@ const labels = {
 };
 const priority = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 export default function TaskManagementPage() {
+  const navigate = useNavigate();
   const management = usePermission(P.TASK_VIEW_ALL),
     canCreate = usePermission(P.TASK_CREATE),
     [tasks, setTasks] = useState([]),
     [tab, setTab] = useState("ALL"),
-    [view, setView] = useState("BOARD"),
+    [view, setView] = useState("DASHBOARD"),
+    [summaryFocus, setSummaryFocus] = useState(""),
     [selected, setSelected] = useState(null),
     [editing, setEditing] = useState(null),
     [workflow, setWorkflow] = useState(null),
@@ -67,6 +72,13 @@ export default function TaskManagementPage() {
     const timer = setInterval(() => load(true), 30000);
     return () => clearInterval(timer);
   }, [load]);
+  useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("task"));
+    if (id && !selected) {
+      const found = tasks.find((x) => Number(x.id) === id);
+      if (found) setSelected(found);
+    }
+  }, [tasks, selected]);
   const tabs = Object.keys(labels).filter(
     (x) => management || !["DRAFT", "SCHEDULED"].includes(x),
   );
@@ -80,6 +92,76 @@ export default function TaskManagementPage() {
       ),
     [tasks],
   );
+  const boardTasks = useMemo(
+    () =>
+      summaryFocus === "OVERDUE"
+        ? sorted.filter((x) => x.overdue)
+        : summaryFocus === "UPCOMING"
+          ? sorted.filter(
+              (x) =>
+                x.due_at &&
+                new Date(x.due_at) > new Date() &&
+                new Date(x.due_at) <= new Date(Date.now() + 7 * 86400000),
+            )
+          : summaryFocus.startsWith("PRIORITY_")
+            ? sorted.filter(
+                (x) => x.priority === summaryFocus.replace("PRIORITY_", ""),
+              )
+            : sorted,
+    [sorted, summaryFocus],
+  );
+  const summaryClick = (value) => {
+    if (typeof value === "object") {
+      if (value.employeePerformance) {
+        navigate(`/tasks/employees/${value.employeePerformance}`);
+        return;
+      }
+      if (management) {
+        const next = (days) => {
+            const d = new Date();
+            d.setDate(d.getDate() + days);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          },
+          nextWeek = value.due === "NEXT_WEEK",
+          stored = {
+            search: "",
+            priority: value.priority || "",
+            status: value.status || "",
+            employeeId: value.employeeId || "",
+            due: nextWeek
+              ? "CUSTOM"
+              : value.due || value.overdue
+                ? value.due || "OVERDUE"
+                : value.upcoming
+                  ? "WEEK"
+                  : "ALL",
+            from: nextWeek ? next(8) : "",
+            to: nextWeek ? next(14) : "",
+            page: 1,
+          };
+        sessionStorage.setItem(
+          "task-management-filters",
+          JSON.stringify(stored),
+        );
+        setView("LIST");
+        return;
+      }
+      const key = value.overdue
+        ? "OVERDUE"
+        : value.upcoming
+          ? "UPCOMING"
+          : value.priority
+            ? `PRIORITY_${value.priority}`
+            : value.status || "ALL";
+      setSummaryFocus(key);
+      setTab(value.status || "ALL");
+      setView("BOARD");
+      return;
+    }
+    setSummaryFocus(value);
+    setTab(["OVERDUE", "UPCOMING", "ALL"].includes(value) ? "ALL" : value);
+    setView("BOARD");
+  };
   const counts = Object.fromEntries(
     Object.keys(labels).map((k) => [
       k,
@@ -151,22 +233,24 @@ export default function TaskManagementPage() {
     ? null
     : tasks.find((x) => x.status === "IN_PROGRESS");
   return (
-    <main className="min-w-0">
-      <PageHeader
+    <main className={`task-management-canvas mx-auto min-w-0 max-w-[1740px] px-0 pb-8 ${view === "DASHBOARD" ? "task-dashboard-view" : ""}`}>
+      <div className="task-page-header relative">
+        <PageHeader
         title="Task Management"
-        description="Manage and track team work"
+        description="Manage team tasks, deadlines and project progress efficiently."
         action={
           canCreate ? (
             <button
               onClick={() => setCreating(true)}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground"
+              className="task-create-button flex h-11 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-bold text-background shadow-sm transition"
             >
               <Plus size={17} />
               Create Task
             </button>
           ) : null
         }
-      />
+        />
+      </div>
       {!management && claimStatus && (
         <p className="mb-3 text-xs font-semibold text-muted-foreground">
           Open Tasks Claimed: {claimStatus.claimed} / {claimStatus.limit}
@@ -180,27 +264,39 @@ export default function TaskManagementPage() {
           {notice}
         </div>
       )}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1">
-          {tabs.map((x) => (
-            <button
-              key={x}
-              onClick={() => setTab(x)}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${tab === x ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-surface-secondary"}`}
-            >
-              {labels[x]} <span className="ml-1 opacity-70">{counts[x]}</span>
-            </button>
-          ))}
-        </div>
-        {management && (
-          <div className="flex rounded-xl border border-border bg-surface p-1">
-            <button
-              onClick={() => setView("BOARD")}
-              className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${view === "BOARD" ? "bg-primary text-primary-foreground" : ""}`}
-            >
-              <Columns3 size={14} />
-              Board View
-            </button>
+      <div className="task-view-controls mb-5 flex flex-wrap items-center justify-between gap-3">
+        {view !== "DASHBOARD" && (
+          <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1">
+            {tabs.map((x) => (
+              <button
+                key={x}
+                onClick={() => {
+                  setTab(x);
+                  setSummaryFocus("");
+                }}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold ${tab === x ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-surface-secondary"}`}
+              >
+                {labels[x]} <span className="ml-1 opacity-70">{counts[x]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex rounded-xl border border-border bg-surface p-1">
+          <button
+            onClick={() => setView("DASHBOARD")}
+            className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${view === "DASHBOARD" ? "bg-primary text-primary-foreground" : ""}`}
+          >
+            <LayoutDashboard size={14} />
+            Dashboard
+          </button>
+          <button
+            onClick={() => setView("BOARD")}
+            className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${view === "BOARD" ? "bg-primary text-primary-foreground" : ""}`}
+          >
+            <Columns3 size={14} />
+            Board View
+          </button>
+          {management && (
             <button
               onClick={() => setView("LIST")}
               className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${view === "LIST" ? "bg-primary text-primary-foreground" : ""}`}
@@ -208,15 +304,21 @@ export default function TaskManagementPage() {
               <List size={14} />
               List View
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {loading ? (
-        <div className="flex gap-3 overflow-hidden">
-          {[1, 2, 3].map((x) => (
+        <div
+          className={
+            view === "DASHBOARD"
+              ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+              : "flex gap-3 overflow-hidden"
+          }
+        >
+          {(view === "DASHBOARD" ? [1, 2, 3, 4] : [1, 2, 3]).map((x) => (
             <div
               key={x}
-              className="h-72 w-[285px] shrink-0 animate-pulse rounded-2xl bg-surface-secondary"
+              className={`${view === "DASHBOARD" ? "h-32" : "h-72 w-[285px] shrink-0"} animate-pulse rounded-xl bg-surface-secondary`}
             />
           ))}
         </div>
@@ -231,9 +333,19 @@ export default function TaskManagementPage() {
             Retry
           </button>
         </div>
+      ) : view === "DASHBOARD" ? (
+        <TaskDashboardErrorBoundary resetKey={detailVersion}>
+          <TaskDashboard
+            tasks={sorted}
+            management={management}
+            onSelect={select}
+            onSummary={summaryClick}
+            refreshKey={detailVersion}
+          />
+        </TaskDashboardErrorBoundary>
       ) : view === "BOARD" ? (
         <TaskBoard
-          tasks={sorted}
+          tasks={boardTasks}
           management={management}
           activeTab={tab}
           onSelect={select}

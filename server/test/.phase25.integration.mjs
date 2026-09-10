@@ -24,7 +24,7 @@ try {
   await tasks.update(a.id, { title:"P25 Alpha edited", priority:"HIGH" }, actor);
   await tasks.changeDeadline(a.id, { dueAt:"2026-09-21T14:00:00+05:00", reason:"Customer timing" }, actor);
   const [[deadlineActivity]] = await pool.execute("SELECT metadata FROM task_activities WHERE task_id=? AND event_type='TASK_DEADLINE_CHANGED' ORDER BY id DESC LIMIT 1", [a.id]);
-  const deadlineMeta = JSON.parse(deadlineActivity.metadata);
+  const deadlineMeta = typeof deadlineActivity.metadata === "string" ? JSON.parse(deadlineActivity.metadata) : deadlineActivity.metadata;
   assert(deadlineMeta.previousDueAt && deadlineMeta.newDueAt);
 
   await tasks.assign(a.id, { employeeId:people[1].id }, actor);

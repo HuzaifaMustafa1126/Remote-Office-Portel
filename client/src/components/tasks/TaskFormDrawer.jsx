@@ -287,8 +287,8 @@ export default function TaskFormDrawer({ task, onClose, onSaved }) {
                   <option value="">Select an active employee</option>
                   {employees.map((x) => (
                     <option key={x.id} value={x.id}>
-                      {x.name}
-                      {x.department ? ` — ${x.department}` : ""}
+                      {x.name} — {x.availability?.activeTaskCount || 0} active ·{" "}
+                      {x.availability?.overdueTaskCount || 0} overdue
                     </option>
                   ))}
                 </select>
@@ -525,20 +525,32 @@ function Availability({ value }) {
     !value?.online && "This employee is currently offline.",
     value?.withinShift === false &&
       "This employee is currently outside their assigned shift.",
+    value?.hasActiveTask &&
+      "This employee is currently working on another task.",
+    value?.activeTaskCount >= 13 &&
+      `Heavy workload: ${value.activeTaskCount} active tasks.`,
   ].filter(Boolean);
-  return warnings.length ? (
-    <div className="mt-2 space-y-1 rounded-xl bg-warning-soft p-3 text-xs font-normal text-warning">
-      {warnings.map((x) => (
-        <p key={x} className="flex gap-2">
-          <AlertTriangle size={14} />
-          {x}
+  return (
+    <div className="mt-2 space-y-1 text-xs font-normal">
+      <p className="text-muted-foreground">
+        {value?.activeTaskCount || 0} active · {value?.overdueTaskCount || 0}{" "}
+        overdue
+      </p>
+      {warnings.length ? (
+        <div className="space-y-1 rounded-xl bg-warning-soft p-3 text-warning">
+          {warnings.map((x) => (
+            <p key={x} className="flex gap-2">
+              <AlertTriangle size={14} />
+              {x}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="text-success">
+          Available{value?.onBreak ? " · On break" : " · Clocked in"}
         </p>
-      ))}
+      )}
     </div>
-  ) : (
-    <p className="mt-2 text-xs font-normal text-success">
-      Available{value?.onBreak ? " · On break" : " · Clocked in"}
-    </p>
   );
 }
 function ExistingPreview({ taskId, image, remove }) {

@@ -146,7 +146,7 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <div>
               <p className="font-bold">Abdali Marketing</p>
-              <p className="text-xs text-sidebar-muted">Portel</p>
+              <p className="text-xs text-sidebar-muted">Portal</p>
             </div>
           </div>
           <button
@@ -198,6 +198,7 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
       </aside>
+      §
     </>
   );
 }

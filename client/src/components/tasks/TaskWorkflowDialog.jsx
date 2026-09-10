@@ -8,6 +8,7 @@ import {
 const msg = (e) => e.response?.data?.message || "Unable to update this task.";
 export default function TaskWorkflowDialog({ action, task, onClose, onDone }) {
   const [reason, setReason] = useState(""),
+    [note, setNote] = useState(""),
     [revision, setRevision] = useState(""),
     [files, setFiles] = useState([]),
     [error, setError] = useState(""),
@@ -61,7 +62,10 @@ export default function TaskWorkflowDialog({ action, task, onClose, onDone }) {
               reason: reason.trim(),
               revisionDueAt: revision ? new Date(revision).toISOString() : null,
             }
-          : { status: review ? "SUBMITTED_FOR_REVIEW" : "COMPLETED" },
+          : {
+              status: review ? "SUBMITTED_FOR_REVIEW" : "COMPLETED",
+              note: note.trim() || undefined,
+            },
       );
       onDone(
         changes
@@ -141,6 +145,22 @@ export default function TaskWorkflowDialog({ action, task, onClose, onDone }) {
                 ? "Submit this task for CEO/Admin review?"
                 : "Complete this task?"}
             </p>
+            <label className="mt-4 block text-sm font-bold">
+              {review ? "Submission Note" : "Approval / Completion Note"}{" "}
+              (optional)
+              <textarea
+                rows="3"
+                maxLength="1000"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="input"
+                placeholder={
+                  review
+                    ? "Tell the reviewer what was completed"
+                    : "Add a note for the employee"
+                }
+              />
+            </label>
             <ImagePicker files={files} setFiles={setFiles} add={add} />
             {task.completion_image_required ? (
               <p className="mt-2 text-xs font-bold text-warning">

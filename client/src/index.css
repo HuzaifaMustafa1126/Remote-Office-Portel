@@ -237,6 +237,75 @@ button:disabled {
   outline-offset: 3px;
 }
 
+.workload-group { transition: opacity 180ms ease; }
+.task-workload-chart:hover .workload-group { opacity: 0.38; }
+.task-workload-chart .workload-group:hover { opacity: 1; }
+.activity-point { transition: r 160ms ease, filter 160ms ease; }
+.activity-point:hover { r: 6px; filter: drop-shadow(0 2px 4px rgb(15 23 42 / 0.25)); }
+.task-summary-card,
+.task-insight-strip,
+.task-analytics-card,
+.recent-task-row {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+@keyframes task-row-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.recent-task-row { animation: task-row-enter 300ms ease-out both; }
+.recent-task-row:nth-child(2) { animation-delay: 40ms; }
+.recent-task-row:nth-child(3) { animation-delay: 80ms; }
+.recent-task-row:nth-child(4) { animation-delay: 120ms; }
+.recent-task-row:nth-child(5) { animation-delay: 160ms; }
+.task-management-canvas { position: relative; width: 100%; }
+.analytics-grid > * { min-width: 0; height: 100%; }
+.task-workload-chart svg { display: block; max-width: 100%; }
+@media (min-width: 1180px) and (max-width: 1399px) {
+  .analytics-grid { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
+}
+.task-dashboard-view::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -28px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 16% 4%, color-mix(in srgb, var(--info) 7%, transparent), transparent 27%),
+    radial-gradient(circle at 84% 28%, color-mix(in srgb, var(--primary) 6%, transparent), transparent 26%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-secondary) 78%, transparent), transparent 65%);
+}
+.task-dashboard-view .page-header { margin-bottom: 1.25rem; }
+.task-dashboard-view .page-header h1 { font-size: clamp(1.75rem, 2vw, 2rem); line-height: 1.1; letter-spacing: -.035em; }
+.task-dashboard-view .page-header p { margin-top: .45rem; font-size: .9rem; }
+.task-page-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: .45rem;
+  width: 92px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--info) 45%, transparent), transparent);
+}
+.task-create-button:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -14px rgb(15 23 42 / .75); }
+.task-create-button:hover svg { transform: rotate(90deg); }
+.task-create-button:active { transform: scale(.97); }
+.task-create-button svg { transition: transform 200ms ease; }
+.task-analytics-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--primary) 24%, var(--border)); box-shadow: 0 24px 58px -35px color-mix(in srgb, var(--primary) 45%, transparent); }
+.dashboard-control { transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.dashboard-control:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--foreground) 28%, var(--border)); }
+@media (prefers-reduced-motion: reduce) {
+  .task-summary-card, .workload-group, .activity-point, .project-progress, .task-progress {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (max-width: 767px) {
+  .task-dashboard-view::before { inset: -12px; border-radius: 18px; }
+  .task-insight-strip { margin-inline: -2px; }
+}
+
 /* Shared responsive layout rules keep wide data inside its own scroll region. */
 .portal-content :where(.grid, .flex) > * {
   min-width: 0;
