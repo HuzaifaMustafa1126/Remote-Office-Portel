@@ -15,6 +15,12 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().min(1).default("8h"),
   FRONTEND_URL: z.string().url().optional(),
   CORS_ORIGIN: z.string().optional(),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(10000),
+  DB_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
+  DB_QUEUE_LIMIT: z.coerce.number().int().min(1).max(10000).default(100),
+  STARTUP_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
 });
 
 const requiredProductionVariables = [

@@ -59,7 +59,12 @@ function initialFilters() {
     return defaults;
   }
 }
-export default function TaskManagementList({ onView, onEdit, onChanged }) {
+export default function TaskManagementList({
+  onView,
+  onEdit,
+  onChanged,
+  refreshKey = 0,
+}) {
   const [filters, setFilters] = useState(initialFilters),
     [query, setQuery] = useState(""),
     [data, setData] = useState({
@@ -95,7 +100,7 @@ export default function TaskManagementList({ onView, onEdit, onChanged }) {
   };
   useEffect(() => {
     load();
-  }, [params]);
+  }, [params, refreshKey]);
   useEffect(() => {
     listTaskAssignees().then(setEmployees);
   }, []);

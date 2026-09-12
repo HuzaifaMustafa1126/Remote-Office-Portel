@@ -1,6 +1,10 @@
-import { Bell, CalendarCheck, ClipboardCheck, Coffee } from "lucide-react";
-const icon = (type) =>
-  type.startsWith("LEAVE")
+import { Bell, CalendarCheck, ClipboardCheck, Coffee, DollarSign, ShieldCheck, Users } from "lucide-react";
+const icon = (type,category) =>
+  category==="CALENDAR" ? CalendarCheck
+    : category==="PAYROLL" ? DollarSign
+    : category==="SECURITY" ? ShieldCheck
+    : ["EMPLOYEE","SHIFT"].includes(category) ? Users
+    : type.startsWith("LEAVE")
     ? CalendarCheck
     : type.startsWith("BREAK")
       ? Coffee
@@ -8,7 +12,7 @@ const icon = (type) =>
         ? ClipboardCheck
         : Bell;
 export default function NotificationItem({ item, onClick, compact = false }) {
-  const Icon = icon(item.type);
+  const Icon = icon(item.type,item.category);
   return (
     <button
       onClick={() => onClick(item)}
@@ -27,7 +31,7 @@ export default function NotificationItem({ item, onClick, compact = false }) {
         <span className="mt-1 block text-sm text-muted-foreground">
           {item.message}
         </span>
-        <span className="mt-1 block text-xs text-muted-foreground">
+        <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><span>{item.category}</span><span>•</span><span>
           {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
             Math.min(
               0,
@@ -35,7 +39,7 @@ export default function NotificationItem({ item, onClick, compact = false }) {
             ),
             "minute",
           )}
-        </span>
+        </span></span>
       </span>
     </button>
   );

@@ -25,6 +25,7 @@ import {
 import useAuth from "../../hooks/useAuth";
 import PriorityBadge from "./PriorityBadge";
 import TaskStatusBadge from "./TaskStatusBadge";
+import TaskWorkTimer, { formatDuration } from "./TaskWorkTimer";
 const date = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -43,6 +44,8 @@ const eventLabels = {
   TASK_SCHEDULE_CANCELLED: "Schedule cancelled",
   TASK_CLAIMED: "Task claimed",
   TASK_IN_PROGRESS: "Work started or resumed",
+  WORK_SESSION_PAUSED: "Task work paused",
+  WORK_SESSION_RESUMED: "Task work resumed",
   TASK_SUBMITTED_FOR_REVIEW: "Submitted for review",
   TASK_CHANGES_REQUIRED: "Changes required",
   TASK_COMPLETED: "Task completed",
@@ -61,6 +64,7 @@ export default function TaskDrawerShell({
   management,
   onAction,
   refreshKey = 0,
+  busy = false,
 }) {
   const { user } = useAuth();
   const [data, setData] = useState(null),
@@ -240,6 +244,7 @@ export default function TaskDrawerShell({
             <div className="space-y-6 p-5 sm:p-6">
               <Info data={data} />
               <Dates data={data} />
+              <TimeTracking value={data.timeTracking} management={management} />
               {data.status === "CHANGES_REQUIRED" && data.changeRequest && (
                 <ChangeRequest value={data.changeRequest} />
               )}
@@ -305,6 +310,7 @@ export default function TaskDrawerShell({
             task={data}
             management={management}
             onAction={onAction}
+            busy={busy}
           />
         )}
       </aside>
@@ -420,6 +426,40 @@ function Dates({ data }) {
           </div>
         ))}
       </div>
+    </Block>
+  );
+}
+function TimeTracking({ value, management }) {
+  if (!value) return null;
+  return (
+    <Block title="Task Work Time">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <span className="block text-xs text-muted-foreground">{value.isRunning ? "Working" : "Total recorded time"}</span>
+          <TaskWorkTimer timeTracking={value} />
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${value.isRunning ? "bg-info-soft text-info" : "bg-surface-secondary text-muted-foreground"}`}>
+          {value.isRunning ? "RUNNING" : "STOPPED"}
+        </span>
+      </div>
+      {!value.isRunning && value.lastEndReason === "OFFLINE" && (
+        <p className="mt-3 rounded-lg bg-warning-soft p-3 text-xs font-semibold text-warning">
+          Work paused because app presence was lost. Resume the task manually when ready.
+        </p>
+      )}
+      {management && value.contributors?.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-2 text-xs font-bold text-muted-foreground">Contributions</p>
+          <div className="space-y-2 text-sm">
+            {value.contributors.map((person) => (
+              <div key={person.employeeId} className="flex justify-between gap-3">
+                <span>{person.name}</span>
+                <b className="font-mono tabular-nums">{formatDuration(person.totalSeconds)}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Block>
   );
 }
@@ -845,7 +885,7 @@ function activityDetail(item) {
     return "Task assignment changed.";
   return "";
 }
-function DrawerActions({ task, management, onAction }) {
+function DrawerActions({ task, management, onAction, busy }) {
   let actions = [];
   if (management && task.status === "SUBMITTED_FOR_REVIEW")
     actions = [
@@ -863,12 +903,14 @@ function DrawerActions({ task, management, onAction }) {
   else if (!management && task.status === "TO_DO")
     actions = [["start", "Start Task"]];
   else if (!management && task.status === "IN_PROGRESS")
-    actions = [
-      [
-        task.review_required ? "submit" : "complete",
-        task.review_required ? "Submit for Review" : "Complete Task",
-      ],
-    ];
+    actions = task.timeTracking?.isRunning
+      ? [
+          [
+            task.review_required ? "submit" : "complete",
+            task.review_required ? "Submit for Review" : "Complete Task",
+          ],
+        ]
+      : [["resume", "Resume Task"]];
   else if (!management && task.status === "CHANGES_REQUIRED")
     actions = [["resume", "Resume Work"]];
   if (!actions.length) return null;
@@ -877,10 +919,11 @@ function DrawerActions({ task, management, onAction }) {
       {actions.map(([type, label]) => (
         <button
           key={type}
+          disabled={busy}
           onClick={() => onAction(type, task)}
-          className={`rounded-xl px-4 py-2.5 text-sm font-bold ${type === "changes" ? "bg-warning-soft text-warning" : "bg-primary text-primary-foreground"}`}
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 ${type === "changes" ? "bg-warning-soft text-warning" : "bg-primary text-primary-foreground"}`}
         >
-          {label}
+          {busy ? "Working…" : label}
         </button>
       ))}
     </footer>

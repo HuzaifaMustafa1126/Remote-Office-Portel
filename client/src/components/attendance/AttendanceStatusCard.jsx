@@ -26,14 +26,20 @@ const scheduleTime = (value) =>
       })
     : "—";
 
-export default function AttendanceStatusCard({ data, busy, actions }) {
+export function AttendanceScheduleSummary({ data }) {
+  if (!data?.schedule) return null;
+  const record = data.record, status = data.status || "NOT_CLOCKED_IN";
+  return <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-primary-text">Today&apos;s Schedule</p><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><div><p className="text-xs text-muted-foreground">Shift</p><p className="font-semibold">{scheduleTime(data.schedule.clockInTime)} → {scheduleTime(data.schedule.clockOutTime)}</p></div><div><p className="text-xs text-muted-foreground">Grace</p><p className="font-semibold">{data.schedule.graceMinutes} min</p></div><div><p className="text-xs text-muted-foreground">Required</p><p className="font-semibold">{duration(data.schedule.requiredWorkMinutes)}</p></div><div><p className="text-xs text-muted-foreground">Break</p><p className="font-semibold">{duration(data.schedule.breakAllowanceMinutes)}</p></div></div>{record && <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4 text-xs"><span className="rounded-full bg-primary-soft px-3 py-1 font-semibold text-primary-text">Work date: {new Date(`${record.workDate}T00:00:00`).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</span><span className={`rounded-full px-3 py-1 font-bold ${record.arrivalStatus === "LATE" ? "bg-warning-soft text-warning" : "bg-success-soft text-success"}`}>{record.arrivalStatus === "LATE" ? `${record.lateMinutes}m late` : "On time"}</span>{record.reconciliationStatus === "OPEN_SHIFT" && <span className="rounded-full bg-danger-soft px-3 py-1 font-bold text-danger">Open shift · review required</span>}{status === "CLOCKED_OUT" && <><span className="rounded-full bg-surface-secondary px-3 py-1">Short: {record.shortMinutes}m</span><span className="rounded-full bg-surface-secondary px-3 py-1">Extra: {record.extraMinutes}m</span><span className="rounded-full bg-surface-secondary px-3 py-1">Break exceeded: {record.breakExceededMinutes}m</span></>}</div>}</section>;
+}
+
+export default function AttendanceStatusCard({ data, busy, actions, showSchedule = true }) {
   const status = data?.status || "NOT_CLOCKED_IN";
   const record = data?.record;
   const activeBreak = data?.breaks?.find((item) => item.status === "ACTIVE");
 
   const statusCard =
     data?.companyDay && !data.companyDay.isWorkingDay && !record ? (
-      <section className="rounded-3xl bg-gradient-to-br from-hero to-hero-end p-8 text-hero-foreground shadow-xl">
+      <section className={`rounded-3xl bg-gradient-to-br from-hero to-hero-end p-8 text-hero-foreground shadow-xl ${showSchedule ? "" : "min-h-[360px]"}`}>
         <p className="text-xs font-bold tracking-[.2em] text-hero-muted">
           OFFICE CLOSED TODAY
         </p>
@@ -44,7 +50,7 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
         </p>
       </section>
     ) : (
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-hero to-hero-end p-6 text-hero-foreground shadow-xl sm:p-8">
+      <section className={`overflow-hidden rounded-3xl bg-gradient-to-br from-hero to-hero-end p-6 text-hero-foreground shadow-xl sm:p-8 ${showSchedule ? "" : "min-h-[360px]"}`}>
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
             <p className="text-xs font-bold tracking-[.2em] text-hero-muted">
@@ -94,7 +100,7 @@ export default function AttendanceStatusCard({ data, busy, actions }) {
 
   return (
     <div className="space-y-5">
-      {data?.schedule && (
+      {showSchedule && data?.schedule && (
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-primary-text">
             Today's Schedule

@@ -8,7 +8,7 @@ const upcomingDate = (value) => new Intl.DateTimeFormat("en-PK", {
 }).format(new Date(`${String(value).slice(0, 10)}T00:00:00`));
 export default function UpcomingHolidays({ rows = [], loading = false, error = "" }) {
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
       <div className="flex justify-between">
         <div>
           <h2 className="font-bold">Upcoming Holidays</h2>
@@ -43,11 +43,7 @@ export default function UpcomingHolidays({ rows = [], loading = false, error = "
           </div>
         ))}
         {!loading && error && <p className="py-4 text-center text-xs text-danger">Unable to load upcoming holidays.</p>}
-        {!loading && !error && !rows.length && (
-          <p className="py-4 text-center text-xs text-muted-foreground">
-            No upcoming holidays.
-          </p>
-        )}
+        {!loading && !error && !rows.length && <div className="flex items-center gap-3 py-4"><span className="grid h-9 w-9 place-items-center rounded-full bg-surface-secondary text-muted-foreground"><CalendarDays size={16}/></span><div><p className="text-sm font-medium">No upcoming holidays</p><p className="text-xs text-muted-foreground">Your company calendar is clear.</p></div></div>}
       </div>
     </section>
   );

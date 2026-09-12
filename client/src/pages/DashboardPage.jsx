@@ -9,24 +9,34 @@ import {
   Users,
   CalendarPlus,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AttendanceBadge from "../components/attendance/AttendanceBadge";
-import AttendanceStatusCard from "../components/attendance/AttendanceStatusCard";
+import AttendanceStatusCard, { AttendanceScheduleSummary } from "../components/attendance/AttendanceStatusCard";
 import EmployeeDashboardSidebar from "../components/dashboard/EmployeeDashboardSidebar";
 import EmployeeSalaryOverview from "../components/dashboard/EmployeeSalaryOverview";
+import EmployeeMyTasks from "../components/dashboard/EmployeeMyTasks";
+import EmployeeTeamAvailability from "../components/dashboard/EmployeeTeamAvailability";
 import LiveActivityFeed from "../components/attendance/LiveActivityFeed";
 import LiveOfficeStatus from "../components/attendance/LiveOfficeStatus";
 import LiveWorkTimer from "../components/attendance/LiveWorkTimer";
-import AutoRefreshControl from "../components/common/AutoRefreshControl";
 import Loader from "../components/common/Loader";
+import AutoRefreshControl from "../components/common/AutoRefreshControl";
 import useAttendance from "../hooks/useAttendance";
 import useAuth from "../hooks/useAuth";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import usePermission from "../hooks/usePermission";
 import useNotifications from "../hooks/useNotifications";
 import * as attendance from "../services/attendance.service";
+import * as availability from "../services/availability.service";
+import { subscribePortalStateChanged } from "../utils/portalSync";
 import { myAccrual } from "../services/salary.service";
 import { PERMISSIONS as P } from "../utils/permissions";
+import ManagerDashboard from "../components/dashboard/ManagerDashboard";
+import TaskDrawerShell from "../components/tasks/TaskDrawerShell";
+import TaskFormDrawer from "../components/tasks/TaskFormDrawer";
+import { listTasks, transitionTask } from "../services/task.service";
+import { getUpcoming } from "../services/companyCalendar.service";
+import { getLeaves } from "../services/leave.service";
 const clock = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -34,9 +44,7 @@ const clock = (v) =>
         minute: "2-digit",
       }).format(new Date(v))
     : "—";
-const allowedIntervals = [0, 15000, 30000, 60000, 120000, 300000];
-if (localStorage.getItem("remoteOffice.autoRefreshInterval") === null)
-  localStorage.setItem("remoteOffice.autoRefreshInterval", "30000");
+const refreshIntervals = [0, 15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000];
 function CompactStat({ label, value, detail, icon: Icon, tone = "indigo" }) {
   const colors = {
     indigo: "bg-primary-soft text-primary-text",
@@ -56,7 +64,9 @@ function CompactStat({ label, value, detail, icon: Icon, tone = "indigo" }) {
           <Icon size={17} />
         </div>
       </div>
-      <p className="mt-2 truncate text-[11px] text-muted-foreground">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-muted-foreground">
+        {detail}
+      </p>
     </div>
   );
 }
@@ -97,7 +107,34 @@ function Overview({ stats }) {
     </section>
   );
 }
-function WorkforceOverview({stats}) { return <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Workforce today</p><div className="mt-3 flex items-end gap-3"><span className="text-5xl font-black">{stats.totalEmployees}</span><span className="pb-1 text-sm text-muted-foreground">Total employees</span></div><div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">{[["Present",stats.presentToday],["Working",stats.workingNow],["Clocked out",stats.clockedOut],["Not arrived",stats.notClockedIn]].map(([label,value])=><div key={label}><p className="text-xl font-black">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>)}</div></section> }
+function WorkforceOverview({ stats }) {
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        Workforce today
+      </p>
+      <div className="mt-3 flex items-end gap-3">
+        <span className="text-5xl font-black">{stats.totalEmployees}</span>
+        <span className="pb-1 text-sm text-muted-foreground">
+          Total employees
+        </span>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">
+        {[
+          ["Present", stats.presentToday],
+          ["Working", stats.workingNow],
+          ["Clocked out", stats.clockedOut],
+          ["Not arrived", stats.notClockedIn],
+        ].map(([label, value]) => (
+          <div key={label}>
+            <p className="text-xl font-black">{value}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 function EmployeeAttendance({ employees }) {
   return (
     <section className="rounded-2xl border border-border bg-surface shadow-sm">
@@ -135,9 +172,15 @@ function EmployeeAttendance({ employees }) {
                     {e.employeeCode} • {e.department}
                   </p>
                 </td>
-                <td className="px-3 py-3 text-muted-foreground">{e.jobTitle}</td>
+                <td className="px-3 py-3 text-muted-foreground">
+                  {e.jobTitle}
+                </td>
                 <td className="px-3 py-3">{clock(e.clockInAt)}</td>
-                <td className="px-3 py-3 text-muted-foreground">{Number(e.chargeableLateMinutes) ? `${e.chargeableLateMinutes} min` : "—"}</td>
+                <td className="px-3 py-3 text-muted-foreground">
+                  {Number(e.chargeableLateMinutes)
+                    ? `${e.chargeableLateMinutes} min`
+                    : "—"}
+                </td>
                 <td className="px-3 py-3 font-medium">
                   <LiveWorkTimer
                     seconds={e.workSeconds}
@@ -165,34 +208,165 @@ function EmployeeAttendance({ employees }) {
 }
 function TeamLeave({ rows = [] }) {
   const today = new Date().toISOString().slice(0, 10);
-  const current = rows.filter((x) => String(x.leaveDate).slice(0, 10) === today);
+  const current = rows.filter(
+    (x) => String(x.leaveDate).slice(0, 10) === today,
+  );
   const upcoming = rows.filter((x) => String(x.leaveDate).slice(0, 10) > today);
-  const block = (title, data) => <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm"><h2 className="font-bold">{title}</h2><div className="mt-3 space-y-2">{data.length ? data.slice(0,6).map((x)=><div key={`${x.employeeId}-${x.leaveDate}`} className="rounded-xl border border-border p-3"><p className="text-sm font-semibold">{x.employeeName}</p><p className="text-xs text-muted-foreground">{x.jobTitle || x.department} · {String(x.leaveType).replaceAll('_',' ')}</p><p className="mt-1 text-xs">{x.leaveDate}{x.returnDate !== x.leaveDate ? ` · Back after ${x.returnDate}` : " · Today only"}</p></div>) : <p className="text-sm text-muted-foreground">No approved leave.</p>}</div></section>;
-  return <div className="grid gap-4 md:grid-cols-2">{block("Who's On Leave Today",current)}{block("Upcoming Team Leave",upcoming)}</div>;
+  const block = (title, data) => (
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="font-bold">{title}</h2>
+      <div className="mt-3 space-y-2">
+        {data.length ? (
+          data.slice(0, 6).map((x) => (
+            <div
+              key={`${x.employeeId}-${x.leaveDate}`}
+              className="rounded-xl border border-border p-3"
+            >
+              <p className="text-sm font-semibold">{x.employeeName}</p>
+              <p className="text-xs text-muted-foreground">
+                {x.jobTitle || x.department} ·{" "}
+                {String(x.leaveType).replaceAll("_", " ")}
+              </p>
+              <p className="mt-1 text-xs">
+                {x.leaveDate}
+                {x.returnDate !== x.leaveDate
+                  ? ` · Back after ${x.returnDate}`
+                  : " · Today only"}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No approved leave.</p>
+        )}
+      </div>
+    </section>
+  );
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {block("Who's On Leave Today", current)}
+      {block("Upcoming Team Leave", upcoming)}
+    </div>
+  );
+}
+function LoginSecuritySummary({ data }) {
+  if (!data) return null;
+  const values = [
+    ["Active Sessions", data.stats.activeSessions],
+    ["Logins Today", data.stats.loginsToday],
+    ["New Login Signals", data.stats.newLoginSignals],
+    ["Failed Attempts", data.stats.failedAttempts],
+  ];
+  return (
+    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-bold">Login Security</h2>
+          <p className="text-xs text-muted-foreground">
+            Authentication activity only
+          </p>
+        </div>
+        <Link
+          to="/login-security"
+          className="text-xs font-semibold text-primary-text"
+        >
+          View Login Activity
+        </Link>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {values.map(([label, value]) => (
+          <div key={label} className="rounded-xl bg-surface-secondary p-3">
+            <p className="text-xl font-black">{value || 0}</p>
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 space-y-2">
+        {data.recent.slice(0, 4).map((row) => (
+          <div
+            key={row.sessionId}
+            className="flex items-center justify-between gap-3 border-t border-border pt-2 text-sm"
+          >
+            <div>
+              <p className="font-semibold">{row.employeeName}</p>
+              <p className="text-xs text-muted-foreground">
+                {row.operatingSystem} · {row.browser}
+              </p>
+            </div>
+            <span
+              className={`text-xs font-bold ${row.status === "ACTIVE" ? "text-success" : "text-muted-foreground"}`}
+            >
+              {row.status.replaceAll("_", " ")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 export default function DashboardPage() {
-  const {connected}=useNotifications();
+  const navigate = useNavigate();
+  const { connected } = useNotifications();
   const { user } = useAuth(),
     canClock = usePermission(P.ATTENDANCE_CLOCK),
     canViewAll = usePermission(P.ATTENDANCE_ALL),
     canViewSalary = usePermission(P.SALARY_VIEW_OWN);
-  const own = useAttendance(),
+  const canViewOwnTasks = usePermission(P.TASK_VIEW_OWN),
+    canViewAllTasks = usePermission(P.TASK_VIEW_ALL),
+    canCreateTask = usePermission(P.TASK_CREATE),
+    canViewCalendar = usePermission(P.CALENDAR_VIEW),
+    canViewLeaves = usePermission(P.LEAVE_ALL);
+  const own = useAttendance({ enabled: canClock }),
     [live, setLive] = useState(null),
+    [teamAvailability, setTeamAvailability] = useState(null),
     [activity, setActivity] = useState([]),
-    [teamLeave,setTeamLeave]=useState([]),
-    [salaryAccrual,setSalaryAccrual]=useState(null),
-    [interval, setIntervalPreference] = useState(() => {
-      const stored = Number(
-        localStorage.getItem("remoteOffice.autoRefreshInterval"),
-      );
-      return allowedIntervals.includes(stored) ? stored : 30000;
+    [teamLeave, setTeamLeave] = useState([]),
+    [salaryAccrual, setSalaryAccrual] = useState(null),
+    [dashboardTasks, setDashboardTasks] = useState([]),
+    [tasksLoading, setTasksLoading] = useState(false),
+    [holidays, setHolidays] = useState([]),
+    [holidaysLoading, setHolidaysLoading] = useState(false),
+    [holidaysError, setHolidaysError] = useState(""),
+    [pendingLeaves, setPendingLeaves] = useState(null),
+    [selectedTask, setSelectedTask] = useState(null),
+    [creatingTask, setCreatingTask] = useState(false),
+    [taskBusy, setTaskBusy] = useState(null),
+    [taskNotice, setTaskNotice] = useState(""),
+    [refreshInterval, setRefreshInterval] = useState(() => {
+      const stored = Number(localStorage.getItem(`remoteOffice.dashboardAutoRefreshInterval.${user.id}`));
+      return refreshIntervals.includes(stored) ? stored : 0;
     });
-  useEffect(()=>{if(canViewSalary)myAccrual().then(setSalaryAccrual).catch(()=>setSalaryAccrual(null))},[canViewSalary]);
+  useEffect(() => {
+    if (canViewSalary)
+      myAccrual()
+        .then(setSalaryAccrual)
+        .catch(() => setSalaryAccrual(null));
+  }, [canViewSalary]);
   const refreshDashboard = useCallback(async () => {
-    const tasks = [];
+    const tasks = [availability.getTeam().then(setTeamAvailability)];
     if (canClock) tasks.push(own.refresh());
     if (canClock) tasks.push(attendance.getTeamLeave().then(setTeamLeave));
     if (canViewSalary) tasks.push(myAccrual().then(setSalaryAccrual));
+    if (canViewOwnTasks || canViewAllTasks) {
+      setTasksLoading(true);
+      tasks.push(
+        listTasks({}).then(setDashboardTasks).finally(() => setTasksLoading(false)),
+      );
+    }
+    if (canViewCalendar) {
+      setHolidaysLoading(true);
+      setHolidaysError("");
+      tasks.push(
+        getUpcoming()
+          .then(setHolidays)
+          .catch((error) => {
+            setHolidaysError("Unable to load upcoming holidays.");
+            throw error;
+          })
+          .finally(() => setHolidaysLoading(false)),
+      );
+    }
+    if (canViewLeaves)
+      tasks.push(getLeaves({ status: "PENDING" }).then(setPendingLeaves));
     if (canViewAll)
       tasks.push(
         Promise.all([attendance.getLive(), attendance.getActivity()]).then(
@@ -205,17 +379,54 @@ export default function DashboardPage() {
     const results = await Promise.allSettled(tasks);
     if (results.length && results.every((r) => r.status === "rejected"))
       throw results[0].reason;
-  }, [canClock, canViewAll, canViewSalary, own.refresh]);
+  }, [canClock, canViewAll, canViewSalary, canViewOwnTasks, canViewAllTasks, canViewCalendar, canViewLeaves, own.refresh]);
   const auto = useAutoRefresh({
-    interval,
-    enabled: canClock || canViewAll,
+    interval: refreshInterval,
+    enabled: true,
     onRefresh: refreshDashboard,
   });
-  useEffect(()=>{const refresh=()=>refreshDashboard().catch(()=>{});window.addEventListener("office:activity",refresh);return()=>window.removeEventListener("office:activity",refresh)},[refreshDashboard]);
-  const changeInterval = (value) => {
-    localStorage.setItem("remoteOffice.autoRefreshInterval", String(value));
-    setIntervalPreference(value);
+  const changeRefreshInterval = (value) => {
+    if (!refreshIntervals.includes(value)) return;
+    localStorage.setItem(`remoteOffice.dashboardAutoRefreshInterval.${user.id}`, String(value));
+    setRefreshInterval(value);
   };
+  const startEmployeeTask = async (task) => {
+    if (taskBusy) return;
+    setTaskBusy(task.id);
+    setTaskNotice("");
+    try {
+      await transitionTask(task.id, { status: "IN_PROGRESS" });
+      setTaskNotice(task.status === "TO_DO" ? "Task started." : "Task resumed.");
+      await refreshDashboard();
+    } catch (error) {
+      setTaskNotice(error.response?.data?.message || "Unable to update the task.");
+      await refreshDashboard().catch(() => {});
+    } finally {
+      setTaskBusy(null);
+    }
+  };
+  useEffect(() => {
+    const refresh = () => refreshDashboard().catch(() => {});
+    window.addEventListener("office:activity", refresh);
+    return () => window.removeEventListener("office:activity", refresh);
+  }, [refreshDashboard]);
+  useEffect(
+    () =>
+      subscribePortalStateChanged((event) => {
+        if (
+          [
+            "AVAILABILITY_CHANGED",
+            "BREAK_CHANGED",
+            "CONNECTION_RESTORED",
+          ].includes(event?.type)
+        )
+          availability
+            .getTeam()
+            .then(setTeamAvailability)
+            .catch(() => {});
+      }),
+    [],
+  );
   if (canClock && own.loading && !own.data) return <Loader />;
   const date = new Intl.DateTimeFormat("en-PK", {
     weekday: "long",
@@ -225,27 +436,21 @@ export default function DashboardPage() {
   }).format(new Date());
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className={`mb-6 flex flex-wrap items-start justify-between gap-4 ${canViewAll ? "border-b border-border pb-4" : ""}`}>
         <div>
-          <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{date}</p>
+          <h1 className="text-2xl font-bold">{canViewAll ? "Dashboard Overview" : `Welcome back, ${user.name}`}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{canViewAll ? "Attendance, availability and security for your remote team — one clear view." : date}</p>
         </div>
-        <AutoRefreshControl
-          interval={interval}
-          onIntervalChange={changeInterval}
-          countdown={auto.countdown}
-          lastUpdated={auto.lastUpdated}
-          refreshing={auto.refreshing}
-          error={auto.error}
-          onRefresh={auto.refresh}
-        />
+        {!canViewAll && <AutoRefreshControl interval={refreshInterval} onIntervalChange={changeRefreshInterval} countdown={auto.countdown} lastUpdated={auto.lastUpdated} refreshing={auto.refreshing} error={auto.error} onRefresh={auto.refresh}/>}
       </div>
+      {auto.error && canViewAll && <div role="alert" className="mb-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{auto.error}</div>}
       {own.notice && (
         <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
           {own.notice}
         </div>
       )}
-      {own.error && !auto.error && (
+      {taskNotice && !canViewAll && <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">{taskNotice}</div>}
+      {canClock && own.error && !auto.error && (
         <div className="mb-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {own.error}
         </div>
@@ -264,11 +469,13 @@ export default function DashboardPage() {
         </div>
       )}
       {canClock && own.data && (
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(250px,1fr)]">
-          <main className="space-y-5">
+        <div className="space-y-5">
+          <AttendanceScheduleSummary data={own.data}/>
+          <div className="grid items-start gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.1fr)_minmax(300px,.9fr)]">
             <AttendanceStatusCard
               data={own.data}
               busy={own.busy}
+              showSchedule={false}
               actions={{
                 onClockIn: own.clockIn,
                 onStartBreak: own.startBreak,
@@ -276,21 +483,24 @@ export default function DashboardPage() {
                 onClockOut: own.clockOut,
               }}
             />
-            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
-          </main>
-          <aside>
-            <EmployeeDashboardSidebar items={own.data.timeline} />
-          </aside>
+            {canViewOwnTasks && <EmployeeMyTasks tasks={dashboardTasks} loading={tasksLoading} busy={Boolean(taskBusy)} onOpen={setSelectedTask} onStart={startEmployeeTask}/>}
+            {teamAvailability && <EmployeeTeamAvailability data={teamAvailability} connected={connected} activity={own.data.timeline}/>}
+          </div>
+          <div className={`grid items-start gap-5 ${canViewSalary ? "xl:grid-cols-[minmax(300px,.7fr)_minmax(0,1.3fr)]" : ""}`}>
+            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual}/>}
+            <EmployeeDashboardSidebar items={own.data.timeline} showRecent={false}/>
+          </div>
         </div>
       )}
-      {canClock && <div className="mt-5"><TeamLeave rows={teamLeave} /></div>}
-      {canViewAll && live && (
-        <div className="mt-5 space-y-4 min-w-0">
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(380px,.75fr)]"><WorkforceOverview stats={live.stats}/><div className="grid grid-cols-2 gap-4"><CompactStat label="Working Now" value={live.stats.workingNow} detail="Currently active" icon={BriefcaseBusiness}/><CompactStat label="Late Today" value={live.stats.late} detail="After configured grace" icon={UserMinus} tone="purple"/><CompactStat label="On Break" value={live.stats.onBreak} detail="Currently paused" icon={Coffee} tone="slate"/><CompactStat label="On Leave" value={live.stats.onLeave} detail="Approved leave today" icon={CalendarPlus} tone="slate"/></div></div>
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(340px,.75fr)_minmax(0,1.25fr)]"><Overview stats={live.stats}/><LiveOfficeStatus employees={live.employees} connected={connected} /></div>
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]"><EmployeeAttendance employees={live.employees}/><LiveActivityFeed items={activity}/></div>
+      {canClock && (
+        <div className="mt-5">
+          <TeamLeave rows={teamLeave} />
         </div>
       )}
+      {canViewAll && !live && <div className="grid min-h-[360px] place-items-center rounded-2xl border border-border bg-surface"><div className="text-center"><p className="text-sm font-semibold">Unable to load the management dashboard.</p><button onClick={auto.refresh} className="mt-3 text-sm font-bold text-primary-text">Retry</button></div></div>}
+      {canViewAll && live && <ManagerDashboard user={user} live={live} availability={teamAvailability} tasks={dashboardTasks} tasksLoading={tasksLoading} holidays={holidays} holidaysLoading={holidaysLoading} holidaysError={holidaysError} leaves={pendingLeaves} activity={activity} canCreateTask={canCreateTask} connected={connected} refreshing={auto.refreshing} lastUpdated={auto.lastUpdated} refreshInterval={refreshInterval} countdown={auto.countdown} onRefreshIntervalChange={changeRefreshInterval} onRefresh={auto.refresh} onCreateTask={() => setCreatingTask(true)} onTaskSelect={setSelectedTask}/>}
+      {selectedTask && <TaskDrawerShell task={selectedTask} management={canViewAll} onClose={() => setSelectedTask(null)} onAction={() => { setSelectedTask(null); navigate("/tasks"); }}/>}
+      {creatingTask && <TaskFormDrawer task={null} onClose={() => setCreatingTask(false)} onSaved={() => { setCreatingTask(false); refreshDashboard().catch(() => {}); }}/>}
     </>
   );
 }

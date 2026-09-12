@@ -6,7 +6,11 @@ const options = [
   [60000, "1 Minute"],
   [120000, "2 Minutes"],
   [300000, "5 Minutes"],
+  [600000, "10 Minutes"],
+  [900000, "15 Minutes"],
+  [1800000, "30 Minutes"],
 ];
+const remaining = (seconds) => seconds >= 60 ? `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s` : `${seconds}s`;
 const updated = (value) =>
   value
     ? new Intl.DateTimeFormat("en-PK", {
@@ -34,7 +38,7 @@ export default function AutoRefreshControl({
         </p>
         <p className="text-[10px] text-muted-foreground">
           {interval
-            ? `Next refresh in ${countdown}s`
+            ? `Next refresh in ${remaining(countdown)}`
             : "Automatic refresh is off"}
           {error && lastUpdated
             ? ` Last successful: ${updated(lastUpdated)}`

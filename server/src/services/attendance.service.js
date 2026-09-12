@@ -214,7 +214,29 @@ export async function startBreak(user) {
       `UPDATE attendance_records SET status = 'ON_BREAK' WHERE id = ?`,
       [record.id],
     );
-    await pauseActiveTask(conn, user.employee_id, "BREAK");
+    const pausedTaskId = await pauseActiveTask(
+      conn,
+      user.employee_id,
+      "BREAK",
+    );
+    if (pausedTaskId) {
+      await conn.execute(
+        "UPDATE attendance_breaks SET paused_task_id=? WHERE id=?",
+        [pausedTaskId, result.insertId],
+      );
+      await conn.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'TASK',?,?,?)`,
+        [
+          user.id,
+          user.employee_id,
+          "TASK_WORK_SESSION_PAUSED_BREAK",
+          pausedTaskId,
+          `${name}'s active task work session was paused by Break Start.`,
+          JSON.stringify({ reason: "BREAK", breakId: result.insertId }),
+        ],
+      );
+    }
     const [[entry]] = await conn.execute(
       "SELECT break_start_at FROM attendance_breaks WHERE id = ?",
       [result.insertId],
@@ -227,7 +249,11 @@ export async function startBreak(user) {
       description: `${name} started a break at ${formatAuditTime(entry.break_start_at)}.`,
     });
     return {
-      data: await getToday(user, conn),
+      data: {
+        ...(await getToday(user, conn)),
+        taskSessionPaused: Boolean(pausedTaskId),
+        pausedTaskId: pausedTaskId ? Number(pausedTaskId) : null,
+      },
       name,
       recordId: record.id,
       at: entry.break_start_at,
@@ -252,7 +278,7 @@ export async function endBreak(user) {
     if (record.status === "CLOCKED_OUT")
       throw new ApiError(409, "Your workday has already been completed");
     const [[active]] = await conn.execute(
-      `SELECT id FROM attendance_breaks WHERE attendance_id = ? AND status = 'ACTIVE' ORDER BY break_start_at DESC LIMIT 1 FOR UPDATE`,
+      `SELECT id,paused_task_id pausedTaskId FROM attendance_breaks WHERE attendance_id = ? AND status = 'ACTIVE' ORDER BY break_start_at DESC LIMIT 1 FOR UPDATE`,
       [record.id],
     );
     if (!active) throw new ApiError(409, "No active break was found");
@@ -271,7 +297,25 @@ export async function endBreak(user) {
        ) WHERE id = ?`,
       [record.id, record.id],
     );
-    await resumeTaskAfterBreak(conn, user.employee_id);
+    const resumedTaskId = await resumeTaskAfterBreak(conn, {
+      employeeId: user.employee_id,
+      taskId: active.pausedTaskId,
+      breakId: active.id,
+    });
+    if (resumedTaskId) {
+      await conn.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'TASK',?,?,?)`,
+        [
+          user.id,
+          user.employee_id,
+          "TASK_WORK_SESSION_RESUMED_BREAK_END",
+          resumedTaskId,
+          `${name}'s task work session resumed automatically after Break End.`,
+          JSON.stringify({ reason: "BREAK_ENDED", breakId: active.id }),
+        ],
+      );
+    }
     const [[entry]] = await conn.execute(
       "SELECT break_end_at,duration_minutes FROM attendance_breaks WHERE id = ?",
       [active.id],
@@ -284,7 +328,11 @@ export async function endBreak(user) {
       description: `${name} ended a break at ${formatAuditTime(entry.break_end_at)}.`,
     });
     return {
-      data: await getToday(user, conn),
+      data: {
+        ...(await getToday(user, conn)),
+        taskSessionResumed: Boolean(resumedTaskId),
+        resumedTaskId: resumedTaskId ? Number(resumedTaskId) : null,
+      },
       name,
       recordId: record.id,
       duration: Number(entry.duration_minutes || 0),
@@ -328,7 +376,25 @@ export async function clockOut(user) {
        WHERE id = ?`,
       [record.id, record.id, record.id, record.id, record.id, record.id],
     );
-    await pauseActiveTask(conn, user.employee_id, "CLOCK_OUT");
+    const pausedTaskId = await pauseActiveTask(
+      conn,
+      user.employee_id,
+      "CLOCK_OUT",
+    );
+    if (pausedTaskId) {
+      await conn.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'TASK',?,?,?)`,
+        [
+          user.id,
+          user.employee_id,
+          "TASK_WORK_SESSION_PAUSED_CLOCK_OUT",
+          pausedTaskId,
+          `${name}'s active task work session was paused by Clock Out.`,
+          JSON.stringify({ reason: "CLOCK_OUT", attendanceId: record.id }),
+        ],
+      );
+    }
     const [[entry]] = await conn.execute(
       "SELECT clock_out_at FROM attendance_records WHERE id = ?",
       [record.id],
@@ -341,7 +407,11 @@ export async function clockOut(user) {
       description: `${name} clocked out at ${formatAuditTime(entry.clock_out_at)}.`,
     });
     return {
-      data: await getToday(user, conn),
+      data: {
+        ...(await getToday(user, conn)),
+        taskSessionPaused: Boolean(pausedTaskId),
+        pausedTaskId: pausedTaskId ? Number(pausedTaskId) : null,
+      },
       name,
       recordId: record.id,
       at: entry.clock_out_at,

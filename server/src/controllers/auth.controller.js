@@ -1,11 +1,9 @@
 import * as service from "../services/auth.service.js";
+import { requestSecurityMeta } from "../utils/requestSecurity.js";
 export async function login(req, res) {
   res.json({
     success: true,
-    data: await service.loginUser(req.body.email, req.body.password, {
-      ip: req.ip,
-      userAgent: req.get("user-agent"),
-    }),
+    data: await service.loginUser(req.body.email, req.body.password, requestSecurityMeta(req)),
   });
 }
 export async function me(req, res) {

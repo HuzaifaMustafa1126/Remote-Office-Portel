@@ -52,4 +52,7 @@ export const PERMISSIONS = {
   TASK_VIEW_ALL: "task.view_all",
   TASK_CREATE: "task.create",
   TASK_EDIT: "task.edit",
+  TASK_SETTINGS: "task.settings",
+  SECURITY_LOGIN_VIEW: "security.login_activity.view",
+  SECURITY_REVOKE: "security.sessions.revoke",
 };

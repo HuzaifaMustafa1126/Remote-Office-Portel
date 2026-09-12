@@ -112,6 +112,10 @@ export const reassignTask = (id, data) =>
   api.put(`/tasks/${id}/assignee`, data).then((r) => r.data.data);
 export const bulkTasks = (data) =>
   api.post("/tasks/bulk", data).then((r) => r.data.data);
+export const getTaskSettings = () =>
+  api.get("/tasks/settings").then((r) => r.data.data);
+export const saveTaskSettings = (data) =>
+  api.put("/tasks/settings", data).then((r) => r.data.data);
 const analyticsRequests = new Map();
 export const getTaskAnalytics = (params, version = 0) => {
   const clean = Object.fromEntries(

@@ -11,19 +11,22 @@ const filters = [
   ["Leave", { category: "LEAVE" }],
   ["Attendance", { category: "ATTENDANCE" }],
   ["Breaks", { category: "BREAK" }],
+  ["Calendar", { category: "CALENDAR" }],
+  ["Payroll", { category: "PAYROLL" }],
+  ["Security", { category: "SECURITY" }],
 ];
 export default function NotificationsPage() {
   const [selected, setSelected] = useState("All"),
     [data, setData] = useState({ rows: [], pagination: {} }),
     [page, setPage] = useState(1),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),[search,setSearch]=useState(""),[debouncedSearch,setDebouncedSearch]=useState(""),[from,setFrom]=useState(""),[to,setTo]=useState("");
   const { markRead, markAll } = useNotifications();
   const nav = useNavigate();
   const load = async (replace = false) => {
     setLoading(true);
     try {
       const params = filters.find(([x]) => x === selected)[1];
-      const next = await service.list({ ...params, page, limit: 20 });
+      const next = await service.list({ ...params, search:debouncedSearch||undefined,from:from||undefined,to:to||undefined,page, limit: 20 });
       setData((old) => ({
         ...next,
         rows: replace ? next.rows : [...old.rows, ...next.rows],
@@ -35,9 +38,10 @@ export default function NotificationsPage() {
   useEffect(() => {
     setPage(1);
   }, [selected]);
+  useEffect(()=>{const timer=setTimeout(()=>{setDebouncedSearch(search);setPage(1);},300);return()=>clearTimeout(timer);},[search]);
   useEffect(() => {
     load(page === 1);
-  }, [selected, page]);
+  }, [selected, page, debouncedSearch, from, to]);
   const choose = async (item) => {
     if (!item.isRead) await markRead(item.id);
     if (item.actionUrl) nav(item.actionUrl);
@@ -72,6 +76,11 @@ export default function NotificationsPage() {
             {name}
           </button>
         ))}
+      </div>
+      <div className="mb-5 grid gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <input aria-label="Search notifications" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Search notifications…" value={search} onChange={e=>setSearch(e.target.value)}/>
+        <input aria-label="From date" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" type="date" value={from} onChange={e=>setFrom(e.target.value)}/>
+        <input aria-label="To date" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" type="date" min={from||undefined} value={to} onChange={e=>setTo(e.target.value)}/>
       </div>
       <div className="space-y-3">
         {data.rows.map((x) => (

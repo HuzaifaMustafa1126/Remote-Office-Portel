@@ -1,6 +1,7 @@
 import { CalendarClock, Image, ShieldCheck, Users } from "lucide-react";
 import PriorityBadge from "./PriorityBadge";
 import TaskStatusBadge from "./TaskStatusBadge";
+import TaskWorkTimer from "./TaskWorkTimer";
 const due = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -53,11 +54,13 @@ export default function TaskCard({
     workflow = ["start", "Start Task"];
     if (blockedActive)
       help = "Finish your current active task before starting another.";
-  } else if (!management && task.status === "IN_PROGRESS")
-    workflow = task.review_required
-      ? ["submit", "Submit for Review"]
-      : ["complete", "Complete Task"];
-  else if (!management && task.status === "CHANGES_REQUIRED") {
+  } else if (!management && task.status === "IN_PROGRESS") {
+    workflow = task.activeSessionStartedAt
+      ? task.review_required
+        ? ["submit", "Submit for Review"]
+        : ["complete", "Complete Task"]
+      : ["resume", "Resume Task"];
+  } else if (!management && task.status === "CHANGES_REQUIRED") {
     workflow = ["resume", "Resume Work"];
     if (blockedActive) help = "You already have another active task.";
   }
@@ -147,6 +150,19 @@ export default function TaskCard({
         {task.status === "COMPLETED" && task.completed_at && (
           <p className="mt-2 text-xs text-muted-foreground">
             Completed {due(task.completed_at)}
+          </p>
+        )}
+        {task.status === "IN_PROGRESS" && task.activeSessionStartedAt && (
+          <p className="mt-2 flex items-center justify-between rounded-lg bg-info-soft px-2.5 py-2 text-xs">
+            <span className="font-semibold text-info">Working</span>
+            <TaskWorkTimer compact timeTracking={task} />
+          </p>
+        )}
+        {task.status === "IN_PROGRESS" && !task.activeSessionStartedAt && (
+          <p className="mt-2 rounded-lg bg-warning-soft px-2.5 py-2 text-xs font-semibold text-warning">
+            {task.lastSessionEndReason === "OFFLINE"
+              ? "Work paused after connection was lost"
+              : "Work paused"}
           </p>
         )}
         <div

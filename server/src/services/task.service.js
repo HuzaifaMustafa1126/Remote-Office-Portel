@@ -13,7 +13,12 @@ import {
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { notifyUser } from "./notification.service.js";
-const select = `SELECT t.*,CONCAT(a.first_name,' ',a.last_name) assigneeName,CONCAT(c.first_name,' ',c.last_name) creatorName,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id) imageCount,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id AND ti.image_context='SUBMISSION') submissionImageCount,(SELECT reason FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) changeReason,(SELECT revision_due_at FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) revisionDueAt,(SELECT COALESCE(SUM(COALESCE(tws.duration_seconds,TIMESTAMPDIFF(SECOND,tws.started_at,CURRENT_TIMESTAMP))),0) FROM task_work_sessions tws WHERE tws.task_id=t.id) timeSpentSeconds FROM tasks t LEFT JOIN employees a ON a.id=t.assignee_employee_id JOIN users cu ON cu.id=t.created_by LEFT JOIN employees c ON c.id=cu.employee_id`;
+import {
+  endTaskSession,
+  getTaskTimeTracking,
+  startTaskSession,
+} from "./taskTime.service.js";
+const select = `SELECT t.*,CONCAT(a.first_name,' ',a.last_name) assigneeName,CONCAT(c.first_name,' ',c.last_name) creatorName,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id) imageCount,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id AND ti.image_context='SUBMISSION') submissionImageCount,(SELECT reason FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) changeReason,(SELECT revision_due_at FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) revisionDueAt,(SELECT COALESCE(SUM(CASE WHEN tws.state='ACTIVE' THEN GREATEST(0,TIMESTAMPDIFF(SECOND,tws.started_at,CURRENT_TIMESTAMP)) ELSE COALESCE(tws.duration_seconds,0) END),0) FROM task_work_sessions tws WHERE tws.task_id=t.id) timeSpentSeconds,(SELECT started_at FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ACTIVE' LIMIT 1) activeSessionStartedAt,(SELECT end_reason FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ENDED' ORDER BY tws.ended_at DESC,tws.id DESC LIMIT 1) lastSessionEndReason,CURRENT_TIMESTAMP serverTime FROM tasks t LEFT JOIN employees a ON a.id=t.assignee_employee_id JOIN users cu ON cu.id=t.created_by LEFT JOIN employees c ON c.id=cu.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
   try {
@@ -218,6 +223,9 @@ export async function get(id, user) {
     "SELECT cr.id,cr.reason,cr.previous_due_at previousDueAt,cr.revision_due_at revisionDueAt,cr.created_at requestedAt,CONCAT(e.first_name,' ',e.last_name) requestedBy FROM task_change_requests cr JOIN users u ON u.id=cr.requested_by LEFT JOIN employees e ON e.id=u.employee_id WHERE cr.task_id=? ORDER BY cr.id DESC LIMIT 1",
     [id],
   );
+  const timeTracking = await getTaskTimeTracking(pool, id);
+  timeTracking.lastEndReason = task.lastSessionEndReason || null;
+  if (!all) timeTracking.contributors = [];
   const [attachments] = await pool.execute(
     "SELECT a.id,a.original_filename originalFilename,a.mime_type mimeType,a.size_bytes sizeBytes,a.created_at createdAt,a.uploaded_by uploadedByUserId,CONCAT(e.first_name,' ',e.last_name) uploadedBy FROM task_attachments a JOIN users u ON u.id=a.uploaded_by LEFT JOIN employees e ON e.id=u.employee_id WHERE a.task_id=? AND a.deleted_at IS NULL ORDER BY a.created_at DESC,a.id DESC",
     [id],
@@ -235,6 +243,7 @@ export async function get(id, user) {
     images,
     attachments,
     changeRequest: changeRequest || null,
+    timeTracking,
   };
 }
 export async function claim(id, user) {
@@ -309,8 +318,16 @@ export async function transition(id, data, user) {
         403,
         "You do not have permission to update this task.",
       );
+    const ownedWorkAction =
+      Number(task.assignee_employee_id) === Number(user.employee_id) &&
+      data.status === "IN_PROGRESS" &&
+      ["TO_DO", "CHANGES_REQUIRED", "IN_PROGRESS"].includes(task.status);
+    const resumingWork =
+      ownedWorkAction && task.status !== "TO_DO";
+    const resumingPausedWork =
+      ownedWorkAction && task.status === "IN_PROGRESS";
     assertTransition(task.status, data.status, {
-      management: manage,
+      management: manage && !ownedWorkAction,
       reviewRequired: Boolean(task.review_required),
     });
     if (data.status === "CHANGES_REQUIRED" && !data.reason)
@@ -326,27 +343,25 @@ export async function transition(id, data, user) {
           "You cannot start a task while you are on approved leave.",
         );
       const [[attendance]] = await c.execute(
-        "SELECT id,status FROM attendance_records WHERE employee_id=? AND status='WORKING' ORDER BY id DESC LIMIT 1",
+        "SELECT id,status FROM attendance_records WHERE employee_id=? AND status IN('WORKING','ON_BREAK') ORDER BY id DESC LIMIT 1",
         [task.assignee_employee_id],
       );
-      if (!attendance)
-        throw new ApiError(409, "Clock in before starting this task.");
-      const [[active]] = await c.execute(
-        "SELECT task_id FROM task_work_sessions WHERE employee_id=? AND state='ACTIVE' AND task_id<>? LIMIT 1",
-        [task.assignee_employee_id, id],
-      );
-      if (active)
-        throw new ApiError(409, "You already have another active task.");
-      try {
-        await c.execute(
-          "INSERT INTO task_work_sessions(task_id,employee_id,started_at)VALUES(?,?,CURRENT_TIMESTAMP)",
-          [id, task.assignee_employee_id],
+      if (attendance?.status === "ON_BREAK")
+        throw new ApiError(
+          409,
+          "End your break before starting or resuming a task.",
         );
-      } catch (error) {
-        if (error.code === "ER_DUP_ENTRY")
-          throw new ApiError(409, "You already have another active task.");
-        throw error;
-      }
+      if (!attendance)
+        throw new ApiError(
+          409,
+          resumingWork
+            ? "Please clock in before resuming this task."
+            : "Please clock in before starting a task.",
+        );
+      await startTaskSession(c, {
+        taskId: id,
+        employeeId: task.assignee_employee_id,
+      });
     }
     if (
       !manage &&
@@ -363,11 +378,15 @@ export async function transition(id, data, user) {
           "At least one completion image is required for this task.",
         );
     }
-    if (task.status === "IN_PROGRESS")
-      await c.execute(
-        "UPDATE task_work_sessions SET state='ENDED',ended_at=CURRENT_TIMESTAMP,duration_seconds=TIMESTAMPDIFF(SECOND,started_at,CURRENT_TIMESTAMP),end_reason=? WHERE task_id=? AND state='ACTIVE'",
-        [data.status === "COMPLETED" ? "COMPLETED" : "SUBMITTED", id],
-      );
+    if (
+      task.status === "IN_PROGRESS" &&
+      ["COMPLETED", "SUBMITTED_FOR_REVIEW"].includes(data.status)
+    )
+      await endTaskSession(c, {
+        taskId: id,
+        employeeId: task.assignee_employee_id,
+        reason: data.status === "COMPLETED" ? "COMPLETED" : "SUBMITTED",
+      });
     if (data.status === "CHANGES_REQUIRED")
       await c.execute(
         "INSERT INTO task_change_requests(task_id,requested_by,reason,previous_due_at,revision_due_at)VALUES(?,?,?,?,?)",
@@ -389,7 +408,7 @@ export async function transition(id, data, user) {
     await activity(
       c,
       id,
-      `TASK_${data.status}`,
+      resumingPausedWork ? "WORK_SESSION_RESUMED" : `TASK_${data.status}`,
       user,
       task.status,
       data.status,
@@ -397,14 +416,17 @@ export async function transition(id, data, user) {
         reason: data.reason || null,
         revisionDueAt: data.revisionDueAt || null,
         note: data.note || null,
+        ...(resumingPausedWork ? { reason: "MANUAL_RESUME" } : {}),
       },
     );
     await audit(
       c,
       id,
-      "TASK_STATUS_CHANGED",
+      resumingPausedWork ? "TASK_WORK_RESUMED" : "TASK_STATUS_CHANGED",
       user,
-      `${task.title} changed from ${task.status} to ${data.status}.`,
+      resumingPausedWork
+        ? `${task.title} work was resumed manually.`
+        : `${task.title} changed from ${task.status} to ${data.status}.`,
       data,
     );
     return { id: Number(id), status: data.status };
@@ -593,10 +615,12 @@ export async function assign(id, data, user) {
         400,
         "A reassignment reason is required after work has started",
       );
-    await c.execute(
-      "UPDATE task_work_sessions SET state='ENDED',ended_at=CURRENT_TIMESTAMP,duration_seconds=TIMESTAMPDIFF(SECOND,started_at,CURRENT_TIMESTAMP),end_reason='REASSIGNED' WHERE task_id=? AND state='ACTIVE'",
-      [id],
-    );
+    await endTaskSession(c, {
+      taskId: id,
+      employeeId: task.assignee_employee_id,
+      reason: "REASSIGNED",
+      required: false,
+    });
     await c.execute(
       "UPDATE tasks SET assignee_employee_id=?,assignment_type='DIRECT',status='TO_DO',updated_by=? WHERE id=?",
       [data.employeeId, user.id, id],

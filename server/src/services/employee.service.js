@@ -426,7 +426,7 @@ export async function resetEmployeePassword(id, data, actor) {
   try {
     await conn.beginTransaction();
     await conn.execute("UPDATE users SET password_hash=?,password_changed_at=CURRENT_TIMESTAMP,must_change_password=TRUE WHERE id=?", [hash, user.id]);
-    await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND status='ACTIVE'", [user.id]);
+    await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'", [user.id]);
     await conn.commit();
   } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
   await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_PASSWORD_RESET", entityType: "EMPLOYEE", entityId: id, description: `Password was reset for ${employee.firstName} ${employee.lastName}; a password change is required at next login.` });
@@ -440,7 +440,7 @@ export async function deleteEmployee(id, actor) {
   try {
     await conn.beginTransaction();
     const [[user]] = await conn.execute("SELECT id FROM users WHERE employee_id=? LIMIT 1", [id]);
-    if (user) await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND status='ACTIVE'", [user.id]);
+    if (user) await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'", [user.id]);
     await conn.execute("DELETE FROM payroll_adjustments WHERE employee_id=?", [id]);
     await conn.execute("DELETE FROM payroll_items WHERE employee_id=?", [id]);
     await conn.execute("DELETE FROM leave_requests WHERE employee_id=?", [id]);

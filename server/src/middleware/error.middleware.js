@@ -15,8 +15,10 @@ export function errorHandler(err, req, res, next) {
   }
   if (status === 500)
     console.error({
+      timestamp: new Date().toISOString(),
       method: req.method,
       endpoint: req.originalUrl,
+      status,
       errorCode: err.code,
       sqlMessage: err.sqlMessage,
       message: err.message,

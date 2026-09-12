@@ -3,13 +3,23 @@ import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import NotificationToasts from "../components/notifications/NotificationToasts";
+import useAuth from "../hooks/useAuth";
 export default function AppLayout() {
+  const { connectionLost } = useAuth();
   const [open, setOpen] = useState(false),
     [refreshKey, setRefreshKey] = useState(0);
   return (
     <div>
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="min-h-screen min-w-0 lg:pl-64">
+        {connectionLost && (
+          <div
+            role="status"
+            className="bg-warning-soft px-4 py-2 text-center text-xs font-semibold text-warning"
+          >
+            Connection lost — attempting to reconnect
+          </div>
+        )}
         <NotificationToasts />
         <Header
           onMenu={() => setOpen(true)}

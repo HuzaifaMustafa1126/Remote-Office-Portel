@@ -1,11 +1,13 @@
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
 import * as auth from "../services/auth.service";
+import { publishPortalStateChanged } from "../utils/portalSync";
 export const AuthContext = createContext(null);
 const TOKEN = "rop_token";
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
     [sessionNotice, setSessionNotice] = useState(""),
+    [connectionLost, setConnectionLost] = useState(false),
     expiryTimer = useRef(null),
     heartbeatTimer = useRef(null),
     ending = useRef(false);
@@ -37,12 +39,20 @@ export function AuthProvider({ children }) {
         () => clear("Your session has expired. Please log in again."),
         remaining,
       );
-      heartbeatTimer.current = setInterval(
-        () => auth.heartbeat().then((data) => {
-          if (data?.user) setUser((current) => ({ ...data.user, expiresAt: current?.expiresAt || data.expiresAt }));
-        }).catch(() => {}),
-        3 * 60 * 1000,
-      );
+      const beat = () =>
+        auth
+          .heartbeat()
+          .then((data) => {
+            setConnectionLost(false);
+            if (data?.user)
+              setUser((current) => ({
+                ...data.user,
+                expiresAt: current?.expiresAt || data.expiresAt,
+              }));
+          })
+          .catch(() => setConnectionLost(true));
+      beat();
+      heartbeatTimer.current = setInterval(beat, 45 * 1000);
     },
     [clear, stop],
   );
@@ -79,8 +89,25 @@ export function AuthProvider({ children }) {
       });
     };
     addEventListener("auth:unauthorized", unauthorized);
+    const offline = () => setConnectionLost(true);
+    const online = () => {
+      setConnectionLost(false);
+      if (sessionStorage.getItem(TOKEN))
+        auth
+          .heartbeat()
+          .then(() =>
+            publishPortalStateChanged("CONNECTION_RESTORED", {
+              includeCurrent: true,
+            }),
+          )
+          .catch(() => setConnectionLost(true));
+    };
+    addEventListener("offline", offline);
+    addEventListener("online", online);
     return () => {
       removeEventListener("auth:unauthorized", unauthorized);
+      removeEventListener("offline", offline);
+      removeEventListener("online", online);
       stop();
     };
   }, [refresh, clear, stop]);
@@ -114,6 +141,7 @@ export function AuthProvider({ children }) {
         logout,
         refresh,
         sessionNotice,
+        connectionLost,
         clearSessionNotice: () => setSessionNotice(""),
       }}
     >

@@ -6,6 +6,7 @@ import { logAudit } from "./audit.service.js";
 import { randomUUID } from "node:crypto";
 import { notifyRoles } from "./notification.service.js";
 import { getEffectivePermissions } from "./effectivePermission.service.js";
+import { loginSignals, recordFailedLogin } from "./loginSecurity.service.js";
 export const MAX_SESSION_HOURS = 8;
 export async function getUserProfile(userId) {
   const [users] = await pool.execute(
@@ -35,6 +36,7 @@ export async function loginUser(email, password, meta = {}) {
     user.status !== "ACTIVE" ||
     !(await bcrypt.compare(password, user.password_hash))
   ) {
+    await recordFailedLogin(email, user, meta);
     await logAudit({
       userId: user?.id || null,
       employeeId: user?.employee_id || null,
@@ -49,18 +51,25 @@ export async function loginUser(email, password, meta = {}) {
     c = await pool.getConnection();
   try {
     await c.beginTransaction();
+    const signals = await loginSignals(user.id, meta, c);
     await c.execute(
       "UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?",
       [user.id],
     );
     await c.execute(
-      `INSERT INTO auth_sessions(id,user_id,expires_at,ip_address,user_agent) VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL ? HOUR),?,?)`,
+      `INSERT INTO auth_sessions(id,user_id,expires_at,ip_address,user_agent,browser,operating_system,device_type,is_new_ip,is_new_device)
+       VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL ? HOUR),?,?,?,?,?,?,?)`,
       [
         sessionId,
         user.id,
         MAX_SESSION_HOURS,
         meta.ip || null,
-        String(meta.userAgent || "").slice(0, 500) || null,
+        meta.userAgent || null,
+        meta.browser || "Unknown",
+        meta.operatingSystem || "Unknown",
+        meta.deviceType || "UNKNOWN",
+        signals.isNewIp,
+        signals.isNewDevice,
       ],
     );
     const [[session]] = await c.execute(
@@ -81,13 +90,24 @@ export async function loginUser(email, password, meta = {}) {
     if (user.employee_id) {
       try {
         await notifyRoles(["CEO", "ADMIN"], {
-          type: "ATTENDANCE_PORTAL_LOGIN",
+          type: "SECURITY_LOGIN",
           title: "Employee logged in",
           message: `${profile.name || profile.email} logged in to the portal.`,
           referenceType: "EMPLOYEE",
           referenceId: user.employee_id,
           actionUrl: `/employees/${user.employee_id}`,
+          eventKey: `SECURITY_LOGIN:${sessionId}`,
+          delivery: { desktop: false, sound: false },
         });
+        if (signals.isNewIp || signals.isNewDevice)
+          await notifyRoles(["CEO", "ADMIN"], {
+            type: signals.isNewDevice ? "SECURITY_NEW_DEVICE" : "SECURITY_NEW_IP",
+            title: signals.isNewDevice ? "New device detected" : "New IP detected",
+            message: `${profile.name || profile.email} signed in from a new ${signals.isNewDevice ? "device" : "network"}.`,
+            referenceType: "EMPLOYEE", referenceId: user.employee_id,
+            actionUrl: "/login-security", eventKey: `SECURITY_LOGIN_SIGNAL:${sessionId}`,
+            priority: "WARNING", delivery: { desktop: true, sound: true },
+          });
       } catch (error) {
         // A notification outage must not reject an already committed login.
         console.error("Failed to send employee login notification:", error);
@@ -153,17 +173,20 @@ export async function heartbeat(sessionId) {
       "SESSION_EXPIRED",
     );
   const [[row]] = await pool.execute(
-    "SELECT expires_at expiresAt FROM auth_sessions WHERE id=?",
+    `SELECT s.expires_at expiresAt,CURRENT_TIMESTAMP serverTime,
+      EXISTS(SELECT 1 FROM task_work_sessions tws JOIN users u ON u.employee_id=tws.employee_id
+        WHERE u.id=s.user_id AND tws.state='ACTIVE') activeTaskSession
+     FROM auth_sessions s WHERE s.id=?`,
     [sessionId],
   );
-  return row;
+  return { ...row, presenceRecorded: true, activeTaskSession: Boolean(row.activeTaskSession) };
 }
 export async function logoutSession(sessionId, user) {
   const c = await pool.getConnection();
   try {
     await c.beginTransaction();
     const [r] = await c.execute(
-      "UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=? AND status='ACTIVE'",
+      "UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,logout_at=CURRENT_TIMESTAMP,ended_reason='LOGOUT' WHERE id=? AND user_id=? AND status='ACTIVE'",
       [sessionId, user.id],
     );
     if (r.affectedRows)

@@ -1,30 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { refreshErrorMessage } from "../utils/refreshError.js";
 
-export default function useAutoRefresh({
-  interval = 30000,
-  enabled = true,
-  onRefresh,
-}) {
-  const callbackRef = useRef(onRefresh),
-    runningRef = useRef(false),
-    remainingRef = useRef(Math.ceil(interval / 1000));
-  const [refreshing, setRefreshing] = useState(false),
-    [lastUpdated, setLastUpdated] = useState(null),
-    [error, setError] = useState(""),
-    [countdown, setCountdown] = useState(remainingRef.current);
-  useEffect(() => {
-    callbackRef.current = onRefresh;
-  }, [onRefresh]);
+export default function useAutoRefresh({ interval = 0, enabled = true, onRefresh }) {
+  const callbackRef = useRef(onRefresh), runningRef = useRef(false), intervalRef = useRef(interval), deadlineRef = useRef(0);
+  const [refreshing, setRefreshing] = useState(false), [lastUpdated, setLastUpdated] = useState(null), [error, setError] = useState(""), [countdown, setCountdown] = useState(Math.ceil(interval / 1000));
+
+  useEffect(() => { callbackRef.current = onRefresh; }, [onRefresh]);
   const reset = useCallback(() => {
-    const seconds = Math.ceil(interval / 1000);
-    remainingRef.current = seconds;
+    const seconds = Math.ceil(intervalRef.current / 1000);
+    deadlineRef.current = intervalRef.current ? Date.now() + intervalRef.current : 0;
     setCountdown(seconds);
-  }, [interval]);
+  }, []);
   const refresh = useCallback(async () => {
     if (runningRef.current) return false;
     if (navigator.onLine === false) {
-      setError("You are offline. Refresh will resume when your connection returns.");
+      setError("You are offline. Dashboard data could not be refreshed.");
       return false;
     }
     runningRef.current = true;
@@ -33,10 +23,9 @@ export default function useAutoRefresh({
     try {
       await callbackRef.current();
       setLastUpdated(new Date());
-      reset();
       return true;
-    } catch (error) {
-      setError(refreshErrorMessage(error));
+    } catch (refreshError) {
+      setError(refreshErrorMessage(refreshError));
       return false;
     } finally {
       runningRef.current = false;
@@ -44,43 +33,34 @@ export default function useAutoRefresh({
       reset();
     }
   }, [reset]);
+
   useEffect(() => {
+    intervalRef.current = interval;
     reset();
-  }, [reset]);
+  }, [interval, reset]);
   useEffect(() => {
-    if (!enabled) return;
-    refresh();
+    if (enabled) refresh();
   }, [enabled, refresh]);
   useEffect(() => {
-    if (!enabled || interval === 0) return;
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "visible" || navigator.onLine === false) return;
-      remainingRef.current -= 1;
-      if (remainingRef.current <= 0) {
-        reset();
-        refresh();
-      } else setCountdown(remainingRef.current);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [enabled, interval, refresh, reset]);
-  useEffect(() => {
-    if (!enabled) return;
-    const online = () => refresh();
-    const offline = () => setError("You are offline. Refresh will resume when your connection returns.");
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
-    return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
+    if (!enabled || !interval) return;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      const remaining = Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining === 0) refresh();
     };
-  }, [enabled, refresh]);
-  useEffect(() => {
-    if (!enabled || interval === 0) return;
+    const timer = window.setInterval(tick, 1000);
     const visible = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState !== "visible") return;
+      if (deadlineRef.current && Date.now() >= deadlineRef.current) refresh();
+      else tick();
     };
     document.addEventListener("visibilitychange", visible);
-    return () => document.removeEventListener("visibilitychange", visible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
+    };
   }, [enabled, interval, refresh]);
+
   return { refresh, refreshing, lastUpdated, error, countdown };
 }

@@ -21,25 +21,21 @@ import reports from "./report.routes.js";
 import attendancePolicies from "./attendancePolicy.routes.js";
 import notificationPolicies from "./notificationPolicy.routes.js";
 import tasks from "./task.routes.js";
+import availability from "./availability.routes.js";
+import loginSecurity from "./loginSecurity.routes.js";
 import pool from "../config/database.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { validateSchema } from "../services/schema.service.js";
 const r = Router();
-r.get(
-  "/health",
-  asyncHandler(async (req, res) => {
-    await pool.query("SELECT 1");
-    const schema = await validateSchema();
-    res.status(schema.valid ? 200 : 503).json({
-      success: schema.valid,
-      database: "connected",
-      status: schema.valid ? "healthy" : "schema_outdated",
-      missingTables: schema.missing,
-      missingColumns: schema.missingColumns,
-      missingMigrations: schema.missingMigrations,
-    });
-  }),
-);
+r.get("/health", (req, res) => res.json({
+  success: true,
+  status: "ok",
+  timestamp: new Date().toISOString(),
+  uptime: process.uptime(),
+}));
+r.get("/health/database", asyncHandler(async (req, res) => {
+  await pool.query({ sql: "SELECT 1", timeout: 5000 });
+  res.json({ success: true, status: "ok", database: "connected" });
+}));
 r.use("/auth", auth);
 r.use(authenticate);
 r.use(requireDeviceAccess);
@@ -49,6 +45,8 @@ r.use("/attendance", attendance);
 r.use("/attendance-policies", attendancePolicies);
 r.use("/notification-policies", notificationPolicies);
 r.use("/tasks", tasks);
+r.use("/availability", availability);
+r.use("/login-security", loginSecurity);
 r.use("/leaves", leaves);
 r.use("/company-calendar", calendar);
 r.use("/notifications", notifications);

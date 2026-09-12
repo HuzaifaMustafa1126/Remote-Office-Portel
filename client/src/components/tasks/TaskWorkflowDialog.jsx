@@ -6,7 +6,13 @@ import {
   uploadSubmissionImage,
 } from "../../services/task.service";
 const msg = (e) => e.response?.data?.message || "Unable to update this task.";
-export default function TaskWorkflowDialog({ action, task, onClose, onDone }) {
+export default function TaskWorkflowDialog({
+  action,
+  task,
+  onClose,
+  onDone,
+  onConflict,
+}) {
   const [reason, setReason] = useState(""),
     [note, setNote] = useState(""),
     [revision, setRevision] = useState(""),
@@ -77,7 +83,9 @@ export default function TaskWorkflowDialog({ action, task, onClose, onDone }) {
             : "Task completed.",
       );
     } catch (e) {
-      setError(msg(e));
+      const message = msg(e);
+      if (e.response?.status === 409) onConflict?.(message);
+      else setError(message);
     } finally {
       setBusy(false);
     }

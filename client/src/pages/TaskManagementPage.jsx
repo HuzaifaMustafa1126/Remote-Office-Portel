@@ -21,6 +21,10 @@ import {
   publishTask,
   transitionTask,
 } from "../services/task.service";
+import {
+  publishPortalStateChanged,
+  subscribePortalStateChanged,
+} from "../utils/portalSync";
 const labels = {
   ALL: "All Tasks",
   DRAFT: "Drafts",
@@ -71,6 +75,34 @@ export default function TaskManagementPage() {
     load();
     const timer = setInterval(() => load(true), 30000);
     return () => clearInterval(timer);
+  }, [load]);
+  useEffect(() => {
+    const reconcile = () => {
+      load(true);
+      setDetailVersion((value) => value + 1);
+    };
+    const unsubscribe = subscribePortalStateChanged((event) => {
+      if (
+        [
+          "TASK_STATE_CHANGED",
+          "ATTENDANCE_CHANGED",
+          "BREAK_CHANGED",
+          "CONNECTION_RESTORED",
+        ].includes(event?.type)
+      )
+        reconcile();
+    });
+    const focus = () => reconcile();
+    const visible = () => {
+      if (document.visibilityState === "visible") reconcile();
+    };
+    window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("focus", focus);
+      document.removeEventListener("visibilitychange", visible);
+    };
   }, [load]);
   useEffect(() => {
     const id = Number(new URLSearchParams(window.location.search).get("task"));
@@ -175,6 +207,7 @@ export default function TaskManagementPage() {
     setNotice(text);
     setDetailVersion((x) => x + 1);
     await load(true);
+    publishPortalStateChanged("TASK_STATE_CHANGED");
   };
   const action = async (type, task) => {
     setNotice("");
@@ -220,6 +253,7 @@ export default function TaskManagementPage() {
           e.response?.status === 409 &&
           /claimed|transition|available/i.test(raw);
       setNotice(stale ? `${raw} The latest task status has been loaded.` : raw);
+      setDetailVersion((value) => value + 1);
       await load(true);
     } finally {
       setBusyTask(null);
@@ -231,7 +265,9 @@ export default function TaskManagementPage() {
       : setSelected(task);
   const activeTask = management
     ? null
-    : tasks.find((x) => x.status === "IN_PROGRESS");
+    : tasks.find(
+        (x) => x.status === "IN_PROGRESS" && x.activeSessionStartedAt,
+      );
   return (
     <main className={`task-management-canvas mx-auto min-w-0 max-w-[1740px] px-0 pb-8 ${view === "DASHBOARD" ? "task-dashboard-view" : ""}`}>
       <div className="task-page-header relative">
@@ -358,7 +394,11 @@ export default function TaskManagementPage() {
         <TaskManagementList
           onView={setSelected}
           onEdit={setEditing}
-          onChanged={() => load(true)}
+          onChanged={() => {
+            load(true);
+            publishPortalStateChanged("TASK_STATE_CHANGED");
+          }}
+          refreshKey={detailVersion}
         />
       )}
       <TaskDrawerShell
@@ -367,6 +407,7 @@ export default function TaskManagementPage() {
         management={management}
         onAction={action}
         refreshKey={detailVersion}
+        busy={Number(busyTask) === Number(selected?.id)}
       />
       {(creating || editing) && (
         <TaskFormDrawer
@@ -384,6 +425,12 @@ export default function TaskManagementPage() {
           task={workflow.task}
           onClose={() => setWorkflow(null)}
           onDone={done}
+          onConflict={(message) => {
+            setWorkflow(null);
+            setNotice(`${message} The latest task state has been loaded.`);
+            setDetailVersion((value) => value + 1);
+            load(true);
+          }}
         />
       )}
     </main>

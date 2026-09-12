@@ -2,7 +2,7 @@ import ApiError from "./ApiError.js";
 const employee = {
   TO_DO: ["IN_PROGRESS"],
   CHANGES_REQUIRED: ["IN_PROGRESS"],
-  IN_PROGRESS: ["SUBMITTED_FOR_REVIEW", "COMPLETED"],
+  IN_PROGRESS: ["IN_PROGRESS", "SUBMITTED_FOR_REVIEW", "COMPLETED"],
 };
 const management = {
   DRAFT: ["SCHEDULED", "OPEN", "TO_DO"],
@@ -22,6 +22,7 @@ export function assertTransition(
   if (
     !manage &&
     from === "IN_PROGRESS" &&
+    to !== "IN_PROGRESS" &&
     reviewRequired &&
     to !== "SUBMITTED_FOR_REVIEW"
   )
@@ -29,6 +30,7 @@ export function assertTransition(
   if (
     !manage &&
     from === "IN_PROGRESS" &&
+    to !== "IN_PROGRESS" &&
     !reviewRequired &&
     to !== "COMPLETED"
   )

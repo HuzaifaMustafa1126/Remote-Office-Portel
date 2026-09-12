@@ -19,6 +19,10 @@ const requiredTables = [
   "attendance_penalties",
   "notification_subscriptions",
   "notification_policies",
+  "notification_event_preferences",
+  "notification_sounds",
+  "notification_sound_settings",
+  "notification_sound_assignments",
   "user_permission_overrides",
   "tasks",
   "task_settings",
@@ -28,11 +32,15 @@ const requiredTables = [
   "task_comments",
   "task_change_requests",
   "task_assignment_history",
+  "employee_availability_preferences",
+  "login_failed_attempts",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
   audit_logs: ["old_values", "new_values", "reason"],
   employee_salary_profiles: ["change_reason"],
+  attendance_breaks: ["paused_task_id"],
+  auth_sessions: ["browser", "operating_system", "device_type", "login_at", "logout_at", "ended_reason", "is_new_ip", "is_new_device"],
 };
 const requiredMigrations = [
   "018_mobile_portal_access.sql",
@@ -46,6 +54,13 @@ const requiredMigrations = [
   "022_notification_policies.sql",
   "023_user_permission_overrides.sql",
   "024_task_management_phase1.sql",
+  "027_break_task_session_integration.sql",
+  "028_task_presence_indexes.sql",
+  "029_team_availability.sql",
+  "030_login_security.sql",
+  "031_notification_preferences_v2.sql",
+  "032_notification_channel_delivery.sql",
+  "033_notification_sound_manager.sql",
 ];
 
 export async function validateSchema() {

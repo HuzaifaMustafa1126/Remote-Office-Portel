@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import DeviceAccessGuard from "../components/auth/DeviceAccessGuard";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 import PermissionGuard from "../components/roles/PermissionGuard";
@@ -29,11 +29,20 @@ import AttendancePolicyPage from "../pages/AttendancePolicyPage";
 import NotificationPermissionsPage from "../pages/NotificationPermissionsPage";
 import TaskManagementPage from "../pages/TaskManagementPage";
 import EmployeeTaskPerformancePage from "../pages/EmployeeTaskPerformancePage";
+import TaskSettingsPage from "../pages/TaskSettingsPage";
+import LoginSecurityPage from "../pages/LoginSecurityPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
     permission={permission}
-    fallback={<Navigate to="/" replace />}
+    fallback={
+      <section className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+        <h1 className="text-xl font-bold">Access unavailable</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You do not have permission to view this page.
+        </p>
+      </section>
+    }
   >
     {children}
   </PermissionGuard>
@@ -66,6 +75,14 @@ export default function AppRoutes() {
           element={
             <Gate permission={P.NOTIFICATION_POLICY_VIEW}>
               <NotificationPermissionsPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="settings/task-management"
+          element={
+            <Gate permission={P.TASK_SETTINGS}>
+              <TaskSettingsPage />
             </Gate>
           }
         />
@@ -207,6 +224,14 @@ export default function AppRoutes() {
           element={
             <Gate permission={P.PERMISSIONS_VIEW}>
               <PermissionsPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="login-security"
+          element={
+            <Gate permission={P.SECURITY_LOGIN_VIEW}>
+              <LoginSecurityPage />
             </Gate>
           }
         />

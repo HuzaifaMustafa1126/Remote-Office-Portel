@@ -29,3 +29,4 @@ export async function updatePreferences(req, res) {
     data: await service.updatePreferences(req.user.id, req.body),
   });
 }
+export async function test(req,res){res.status(201).json({success:true,data:await service.sendTestNotification(req.user.id)});}

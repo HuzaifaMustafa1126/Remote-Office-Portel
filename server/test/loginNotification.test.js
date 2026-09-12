@@ -13,8 +13,11 @@ function setup(t, { valid = true, employeeId = 7, notificationFails = false, com
   const notifications = [];
   const connection = {
     beginTransaction: async () => {},
-    execute: async (sql) => sql.startsWith("SELECT expires_at")
-      ? [[{ expiresAt: "2026-09-06 01:00:00" }]] : [{}],
+    execute: async (sql) => {
+      if (sql.includes("priorCount")) return [[{ priorCount: 0, knownIp: 0, knownDevice: 0 }]];
+      if (sql.startsWith("SELECT expires_at")) return [[{ expiresAt: "2026-09-06 01:00:00" }]];
+      return [{}];
+    },
     commit: async () => {
       if (commitFails) throw new Error("Commit failed");
       committed = true;
@@ -35,6 +38,8 @@ function setup(t, { valid = true, employeeId = 7, notificationFails = false, com
     if (sql.startsWith("SELECT r.name")) return [[{ name: "EMPLOYEE" }]];
     if (sql.startsWith("SELECT p.name,upo.effect")) return [[]];
     if (sql.startsWith("SELECT DISTINCT p.name")) return [[]];
+    if (sql.includes("COUNT(*) attempts FROM login_failed_attempts")) return [[{ attempts: 0 }]];
+    if (sql.includes("INSERT INTO login_failed_attempts")) return [{ insertId: 1 }];
     if (sql.startsWith("SELECT DISTINCT u.id")) {
       assert.equal(committed, true, "Notify only after the login commits");
       assert.deepEqual(params, ["CEO", "ADMIN"]);
@@ -42,6 +47,8 @@ function setup(t, { valid = true, employeeId = 7, notificationFails = false, com
       if (notificationFails) throw new Error("Notifications unavailable");
       return [[{ id: 10 }, { id: 11 }]];
     }
+    if (sql.startsWith("SELECT COALESCE(np.notifications_enabled"))
+      return [[{notificationsEnabled:1,globalInApp:1,globalDesktop:1,globalSound:1,doNotDisturb:0,categoryEnabled:1,eventInApp:null,eventDesktop:null,eventSound:null}]];
     if (sql.includes("INTO notifications")) {
       notifications.push(params);
       return [{ insertId: params[0] }];
@@ -59,10 +66,11 @@ test("successful employee login persists a named notification for each administr
   assert.ok(result.token);
   assert.equal(notifications.length, 2);
   for (const [index, values] of notifications.entries()) {
+    assert.match(values[9], /^SECURITY_LOGIN:/);
     assert.deepEqual(values, [
-      10 + index, "ATTENDANCE_PORTAL_LOGIN", "Employee logged in",
-      "Ali Khan logged in to the portal.", "EMPLOYEE", 7, "/employees/7",
-      null, true, true,
+      10 + index, "SECURITY_LOGIN", "SECURITY", "Employee logged in",
+      "Ali Khan logged in to the portal.", "EMPLOYEE", 7, "/employees/7", "NORMAL",
+      values[9], true, false, false,
     ]);
   }
 });

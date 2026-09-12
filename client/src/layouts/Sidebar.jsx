@@ -65,6 +65,7 @@ const groups = [
     label: "SYSTEM",
     items: [
       ["Audit Logs", "/audit-logs", ScrollText, P.AUDIT_VIEW],
+      ["Login Security", "/login-security", KeyRound, P.SECURITY_LOGIN_VIEW],
       [
         "Attendance Policy",
         "/settings/attendance-policy",
@@ -76,6 +77,12 @@ const groups = [
         "/settings/notification-permissions",
         SlidersHorizontal,
         P.NOTIFICATION_POLICY_VIEW,
+      ],
+      [
+        "Task Management Settings",
+        "/settings/task-management",
+        SlidersHorizontal,
+        P.TASK_SETTINGS,
       ],
       ["Appearance", "/settings/appearance", Palette, null],
     ],
