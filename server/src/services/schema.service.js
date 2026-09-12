@@ -61,6 +61,7 @@ const requiredMigrations = [
   "031_notification_preferences_v2.sql",
   "032_notification_channel_delivery.sql",
   "033_notification_sound_manager.sql",
+  "034_task_notification_events.sql",
 ];
 
 export async function validateSchema() {

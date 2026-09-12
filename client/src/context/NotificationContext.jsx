@@ -6,7 +6,7 @@ import {
   connectNotifications,
   disconnectNotifications,
 } from "../services/socket.service";
-import { isAudioUnlocked,playNotificationSound,setSoundConfiguration,unlockAudio } from "../services/notificationSound.service";
+import { installAudioUnlockListeners,isAudioUnlocked,playNotificationSound,setSoundConfiguration } from "../services/notificationSound.service";
 export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "", category = "") =>
@@ -33,7 +33,7 @@ export function NotificationProvider({ children }) {
     [toasts, setToasts] = useState([]);
   const [connected, setConnected] = useState(true),
     [preferences, setPreferences] = useState(null);
-  const preferencesRef = useRef(null), seen = useRef(new Set());
+  const preferencesRef = useRef(null), seen = useRef(new Set()), audioWarningShown = useRef(false);
   useEffect(() => {
     preferencesRef.current = preferences;
   }, [preferences]);
@@ -54,17 +54,16 @@ export function NotificationProvider({ children }) {
       !current[categoryFor(notification.type,notification.category)]
     )
       return;
-    playNotificationSound(notification,current.volume).catch(()=>window.dispatchEvent(new CustomEvent("notification:audio-blocked")));
+    playNotificationSound(notification,current.volume).catch((error)=>{
+      if(error?.code!=="AUDIO_BLOCKED"||audioWarningShown.current)return;
+      audioWarningShown.current=true;
+      if(import.meta.env.DEV)console.debug("[AUDIO] playback blocked",{error:error.code});
+      window.dispatchEvent(new CustomEvent("notification:audio-blocked"));
+    });
   }, []);
   useEffect(() => {
     if (!user || blocked) return;
-    const unlock = () => unlockAudio().catch(()=>{});
-    addEventListener("pointerdown", unlock, { once: true });
-    addEventListener("keydown", unlock, { once: true });
-    return () => {
-      removeEventListener("pointerdown", unlock);
-      removeEventListener("keydown", unlock);
-    };
+    return installAudioUnlockListeners();
   }, [user, blocked]);
   useEffect(() => {
     if (!user || blocked) {
@@ -131,7 +130,7 @@ export function NotificationProvider({ children }) {
         Notification.permission === "granted" &&
         document.hidden
       )
-        ownsAttention && new Notification(notification.title, { body: notification.message, tag:`notification-${id}` });
+        if(ownsAttention){const desktop=new Notification(notification.title,{body:notification.message,tag:`notification-${id}`});desktop.onclick=()=>{window.focus();if(notification.actionUrl)window.location.assign(notification.actionUrl);desktop.close();};}
     });
     return () => {
       active = false;

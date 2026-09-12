@@ -5,6 +5,7 @@ import Button from "../components/common/Button";
 import Input from "../components/common/Input";
 import useAuth from "../hooks/useAuth";
 import { errorMessage } from "../utils/helpers";
+import { unlockAudio } from "../services/notificationSound.service";
 export default function LoginPage() {
   const { user, signIn, sessionNotice, clearSessionNotice } = useAuth(),
     [form, setForm] = useState({ email: "", password: "" }),
@@ -17,6 +18,8 @@ export default function LoginPage() {
   if (user) return <Navigate to="/" replace />;
   async function submit(e) {
     e.preventDefault();
+    // Prepare the shared context during the trusted submit gesture. This is silent.
+    unlockAudio().catch(() => {});
     setBusy(true);
     setError("");
     try {

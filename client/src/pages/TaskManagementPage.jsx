@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Columns3, LayoutDashboard, List, Plus, RotateCw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/common/PageHeader";
 import TaskBoard from "../components/tasks/TaskBoard";
 import TaskDrawerShell from "../components/tasks/TaskDrawerShell";
@@ -39,6 +39,8 @@ const labels = {
 const priority = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 export default function TaskManagementPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dismissedNotificationTask = useRef(null);
   const management = usePermission(P.TASK_VIEW_ALL),
     canCreate = usePermission(P.TASK_CREATE),
     [tasks, setTasks] = useState([]),
@@ -105,12 +107,26 @@ export default function TaskManagementPage() {
     };
   }, [load]);
   useEffect(() => {
-    const id = Number(new URLSearchParams(window.location.search).get("task"));
-    if (id && !selected) {
+    const id = Number(searchParams.get("task"));
+    if (!id) {
+      dismissedNotificationTask.current = null;
+      return;
+    }
+    if (
+      dismissedNotificationTask.current !== id &&
+      Number(selected?.id) !== id
+    ) {
       const found = tasks.find((x) => Number(x.id) === id);
       if (found) setSelected(found);
     }
-  }, [tasks, selected]);
+  }, [tasks, selected, searchParams]);
+  const closeSelectedTask = () => {
+    dismissedNotificationTask.current = Number(selected?.id) || null;
+    setSelected(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("task");
+    setSearchParams(next, { replace: true });
+  };
   const tabs = Object.keys(labels).filter(
     (x) => management || !["DRAFT", "SCHEDULED"].includes(x),
   );
@@ -403,7 +419,7 @@ export default function TaskManagementPage() {
       )}
       <TaskDrawerShell
         task={selected}
-        onClose={() => setSelected(null)}
+        onClose={closeSelectedTask}
         management={management}
         onAction={action}
         refreshKey={detailVersion}

@@ -1,14 +1,20 @@
 # Remote Office Portal
 
-A complete **Remote Office Management System** for managing employees,
-attendance, shifts, breaks, leave, holidays, payroll, tasks,
-productivity, permissions, notifications, security, and live office
-activity from one centralized portal.
+A full-featured remote office management platform for attendance, breaks, tasks, leave, payroll, employee management, company calendar, permissions, notifications, and administrative monitoring.
 
-The system is designed for remote and hybrid teams where management
-needs reliable control over daily office operations while employees need
-a simple workspace for attendance, tasks, leave, salary information, and
-day-to-day activity.
+The system is designed for organizations that need a centralized portal for managing employees working remotely or in hybrid environments.
+
+---
+
+## Overview
+
+The Remote Office Portal provides separate experiences for administrators and employees.
+
+Administrators can manage employees, attendance rules, shifts, salaries, leave approvals, notification permissions, holidays, tasks, payroll, and security settings.
+
+Employees can clock in and out, manage breaks, work on tasks, request leave, view attendance history, check salary information, receive notifications, and access company calendar events.
+
+---
 
 ## Technology Stack
 
@@ -19,589 +25,691 @@ day-to-day activity.
 - Tailwind CSS
 - React Router
 - Axios
+- GSAP for selected animations
 
 ### Backend
 
 - Node.js
 - Express.js
-- REST API
-- JWT Authentication
-- bcrypt
+- JWT authentication
+- bcrypt password hashing
 - Zod validation
-- `mysql2/promise`
+- mysql2/promise
 
 ### Database
 
 - MySQL
-- Versioned SQL migrations
-- Connection pooling
-- Transaction-safe operations
+
+### Deployment
+
+Typical production setup:
+
+- Frontend: `portal.yourdomain.com`
+- Backend/API: `backend.yourdomain.com`
+- Database: MySQL attached to the backend
+
+---
 
 ## Project Structure
 
 ```text
-Remote-Office-Portal/
-├── client/                  # React frontend
-├── server/                  # Node.js / Express backend
-├── database/                # Schema, migrations and seed files
-├── docs/                    # Project documentation
+remote-office-portal/
+│
+├── client/                 # React frontend
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── layouts/
+│   │   ├── services/
+│   │   ├── hooks/
+│   │   ├── context/
+│   │   └── utils/
+│   └── package.json
+│
+├── server/                 # Node.js / Express backend
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── services/
+│   │   ├── routes/
+│   │   ├── middleware/
+│   │   ├── validators/
+│   │   ├── scripts/
+│   │   └── server.js
+│   └── package.json
+│
+├── database/
+│   ├── migrations/
+│   ├── schema.sql
+│   └── seed.sql
+│
+├── docs/
 └── README.md
 ```
 
-## Core Modules
+---
 
-The portal includes:
+# Main Modules
 
-- Authentication
-- CEO / Admin / Employee roles
-- Roles & Permissions
-- Employee Management
-- Mobile Access Control
-- Attendance
-- Shift Management
-- Break Management
-- Attendance History
-- Live Office Status
-- Leave Management
-- Weekly Off & Holidays
-- Company Calendar
-- Salary & Payroll
-- Task Management
-- Task Work Time Tracking
-- Team Presence & Availability
-- Notifications
-- Audit Logs
-- Login Security & Session Activity
-- Settings
+## 1. Authentication & Security
 
-## Roles & Permissions
+The portal uses secure JWT-based authentication.
 
-### CEO
+Features include:
 
-The CEO has management-level access, including employee management,
-attendance monitoring, shifts, leave approval, payroll, task management,
-reports, security activity, audit logs, permissions, notifications, and
-system settings.
+- Login
+- Logout
+- Password hashing with bcrypt
+- Protected API routes
+- Role-based access control
+- Permission-based access control
+- Password change
+- Session handling
+- Login activity tracking
+- IP address logging
+- Device/browser information
+- Unauthorized access protection
+- Mobile access restrictions
 
-The CEO does not need to Clock In or Clock Out to perform management
-actions.
+### Mobile Access
 
-### Admin
+CEO/Admin can be allowed to access the portal from mobile devices.
 
-Admin access is controlled through assigned permissions. Admin users can
-be given management capabilities without automatically receiving
-unrestricted CEO-level access.
+Normal employees can be restricted from mobile access unless permission is explicitly granted.
 
-### Employee
+If mobile access is not allowed, the portal can display a message asking the employee to use a laptop or desktop.
 
-Employees can access permitted functions such as:
+---
 
-- Dashboard
-- Clock In / Clock Out
-- Breaks
-- Attendance History
-- Own Tasks
-- Open Tasks
-- Leave Requests
-- Salary information
-- Team Availability
-- Notifications
-- Profile and password settings
+# 2. Roles & Permissions
 
-Backend permission checks remain authoritative.
+The system supports role-based and permission-based access.
 
-## Authentication
+Typical roles:
 
-Authentication uses JWT and bcrypt with server-side authorization
-middleware.
-
-Portal authentication is intentionally separate from Attendance:
-
-```text
-Portal Login != Attendance Clock In
-Portal Logout != Attendance Clock Out
-```
-
-Logging into the portal must not automatically mark an employee present
-or affect salary.
-
-## Employee Management
-
-Management can:
-
-- Create employees
-- Edit employees
-- Assign roles
-- Assign permissions
-- Assign shifts
-- Configure salary
-- Change passwords
-- Deactivate/delete employees according to business rules
-- Configure mobile access
-- Configure notification permissions
-
-Historical business records should remain preserved when employee
-accounts are deactivated.
-
-## Mobile Access
-
-CEO/Admin mobile access is supported.
-
-Employee mobile access follows the existing mobile-access permission
-system. Employees without mobile permission are instructed to use a
-desktop or laptop.
-
-## Attendance Management
-
-Attendance functionality includes:
-
-- Clock In
-- Clock Out
-- Attendance Today
-- Attendance History
-- Daily reports
-- Monthly reports
-- Late detection
-- Grace periods
-- Custom shifts
-- Night shifts
-
-Attendance is server-authoritative.
-
-## Shift Management
-
-Management can assign different shifts to individual employees.
-
-Example night shift:
-
-```text
-Start: 6:00 PM
-End:   3:00 AM
-```
-
-Shift policies can include start/end time, expected working hours, break
-allowance, grace period, and employee assignment.
-
-## Break Management
-
-Employees can start and end breaks while Clocked In.
-
-When a task is running:
-
-```text
-Task Running
-    ↓
-Start Break
-    ↓
-Task Auto-Pauses
-    ↓
-End Break
-    ↓
-Same Task Auto-Resumes
-```
-
-Break duration is excluded from Task Work Time.
-
-## Leave Management
-
-Employees can submit leave requests and management can approve or reject
-them.
-
-Leave integrates with existing attendance and payroll policies while
-keeping private leave details protected.
-
-## Weekly Off & Holidays
-
-The default weekly off supports Sunday, with Monday through Saturday
-treated as working days unless configured otherwise.
-
-Management can create:
-
-- Public Holidays
-- Company Holidays
-- Special Off Days
-
-Applicable off days are excluded from attendance, absence, leave, and
-payroll calculations according to company policy.
-
-## Payroll & Salary Management
-
-Management can configure salary per employee.
-
-Payroll uses business rules involving:
-
-- Attendance
-- Assigned shifts
-- Leave
-- Weekly offs
-- Holidays
-- Grace periods
-- Applicable deductions
-
-The system supports the configured company salary cycle, including a
-5th-to-5th period where enabled.
-
-Employees can view their own salary information.
-
-### Payroll Isolation
-
-Task time and portal login time are not payroll time.
-
-```text
-Attendance → Payroll
-Task Work Sessions → Task Productivity / Reporting
-Login Sessions → Security Monitoring
-```
-
-These systems must remain separate.
-
-## Task Management
-
-The Task Management system supports:
-
-- Direct Tasks
-- Open Tasks
-- Drafts
-- Scheduled Tasks
-- Priorities
-- Due dates/times
-- Review Required
-- Completion Image Required
-- Reference images
-- Comments
-- Activity history
-- Reassignment
-- Archive/Restore
-- Management list view
-- Board view
-- Filters and search
-- Bulk management actions
-
-### Direct Tasks
-
-CEO/Admin can assign a task directly to one employee.
-
-### Open Tasks
-
-Eligible employees can claim available tasks using **Assign to Me**.
-
-Claiming must remain atomic and concurrency-safe.
-
-## Task Workflow
-
-Standard:
-
-```text
-To Do
-  ↓
-In Progress
-  ↓
-Completed
-```
-
-Review workflow:
-
-```text
-To Do
-  ↓
-In Progress
-  ↓
-Submitted for Review
-  ↓
-Completed
-```
-
-Changes workflow:
-
-```text
-Submitted for Review
-        ↓
-Changes Required
-        ↓
-Resume Work
-        ↓
-In Progress
-```
-
-Overdue is a flag, not a workflow status.
-
-## Task Reassignment
-
-Started tasks can be reassigned by authorized management with a required
-reason.
-
-Previous employee contributions remain preserved.
-
-```text
-Employee A → historical contribution preserved
-Employee B → becomes current responsible employee
-```
-
-Historical work must never be silently transferred between employees.
-
-## Task Work Time Tracking
-
-Task time is recorded using authoritative backend work sessions.
-
-The browser timer is display-only.
-
-```text
-Session 1: 8:00 PM → 8:45 PM
-Session 2: 9:15 PM → 10:20 PM
-```
-
-Total time is calculated from valid work sessions rather than database
-writes every second.
-
-### One Active Task Rule
-
-```text
-ONE EMPLOYEE
-=
-MAXIMUM ONE ACTIVE TASK WORK SESSION
-```
-
-Employees may have multiple To Do tasks but can actively work on only
-one task at a time.
-
-## Attendance + Task Integration
-
-Employees must be Clocked In before starting or resuming task work.
-
-```text
-Clock In
-   ↓
-Start Task
-```
-
-Starting/resuming while Clocked Out is rejected by the backend.
-
-## Clock Out + Task Integration
-
-If an employee Clocks Out while a task is running:
-
-```text
-Task Running
-    ↓
-Clock Out
-    ↓
-Task Work Session Closes
-```
-
-The task remains In Progress.
-
-The next Clock In does not automatically resume the task. The employee
-must manually select **Resume Task**.
-
-## Offline Auto-Pause
-
-The portal uses authenticated presence/heartbeat monitoring.
-
-If presence disappears beyond the configured timeout while a task is
-running:
-
-```text
-Task Running
-    ↓
-Presence Lost
-    ↓
-Offline Timeout
-    ↓
-Task Auto-Pauses
-```
-
-The default target timeout is 5 minutes and can be configurable.
-
-Returning online does not automatically resume the task.
-
-## Multi-Tab / Multi-Device Safety
-
-The system protects task sessions from:
-
-- Multiple tabs
-- Multiple windows
-- Multiple browsers
-- Multiple devices
-- Double clicks
-- Network retries
-- Stale frontend state
-
-The backend/database remains authoritative.
-
-Page refresh does not pause a running task or create another work
-session.
-
-## Team Presence & Availability
-
-The Team Availability system supports:
-
-- Online
-- Offline
-- On Break
-- Away
-- Do Not Disturb
-- In a Meeting
-
-Online, Offline, and On Break are system-driven.
-
-Away, Do Not Disturb, and In a Meeting can be manual statuses.
-
-Timed statuses can expire automatically.
-
-Presence is separate from Attendance:
-
-```text
-Online != Clocked In
-Offline != Clocked Out
-```
-
-## Live Office Status
-
-The existing Live Office Status integrates with Team Availability so
-users can quickly understand who is:
-
-- Online
-- In a Meeting
-- Do Not Disturb
-- On Break
-- Away
-- Offline
-
-Private task details, salary information, leave reasons, and attendance
-history are not exposed through Team Availability.
-
-## Login Security & Session Activity
-
-The system supports security monitoring for portal logins.
-
-Security information can include:
-
+- CEO
+- Admin
 - Employee
-- IP Address
-- Browser
-- Operating System
-- Device Type
-- Login Time
-- Last Active
-- Logout Time
-- Session Status
-- Security Signals
 
-The backend determines request IP information. React must not be trusted
-to submit its own IP address.
+The permission system can control access to:
 
-### Security Signals
-
-The system can identify signals such as:
-
-- New IP
-- New browser/device
-- Repeated failed login attempts
-
-These are security indicators and do not automatically prove
-unauthorized access.
-
-### Login Security Privacy
-
-Detailed login IP/device/session information should only be available to
-authorized CEO/Admin users.
-
-Passwords, JWT secrets, refresh tokens, or authentication secrets must
-never appear in security logs.
-
-## Notifications
-
-The portal contains a centralized notification architecture for events
-such as:
-
-- Clock In
-- Clock Out
-- Break Start/End
-- Leave requests
-- Leave approval/rejection
-- Task assignment
-- Task updates
-- Changes Required
-- Task review
-- Task completion
-
-Desktop notification reliability can be tested across Windows and macOS.
-
-Future notification channels can include email or official WhatsApp
-Business integration without creating a separate notification engine.
-
-## Audit Logs
-
-Important business/security operations are recorded through the existing
-Audit Log system.
-
-High-frequency events such as heartbeat updates and timer ticks should
-not generate unnecessary audit spam.
-
-## Dashboard
-
-Management dashboards can include:
-
-- Employee summaries
-- Attendance Today
-- Late employees
-- Live Office Status
-- Team Availability
+- Attendance
 - Tasks
 - Leave
-- Payroll summaries
-- Recent activity
-- Login Security
-- Operational metrics
+- Payroll
+- Employees
+- Company Calendar
+- Notifications
+- Reports
+- Security features
+- Mobile access
 
-Employee dashboards can include:
+Permissions must always be enforced on the backend, not only hidden in the UI.
 
-- Attendance status
-- Clock In / Clock Out
-- Break status
-- Assigned tasks
-- Task progress
-- Salary information
+---
+
+# 3. Employee Management
+
+CEO/Admin can manage employee accounts.
+
+Features include:
+
+- Create employee
+- Edit employee
+- Delete/disable employee
+- Change employee password
+- Assign role
+- Assign permissions
+- Assign shift
+- Set salary
+- Configure mobile access
+- Configure notification access
+
+---
+
+# 4. Attendance Management
+
+Employees can:
+
+- Clock In
+- Clock Out
+- View attendance status
+- View daily history
+- View monthly history
+
+Administrators can:
+
+- View all attendance
+- Monitor late arrivals
+- Monitor early clock-outs
+- View absences
+- Configure shift timings
+- Configure grace periods
+- Review attendance reports
+
+---
+
+## Shift Rules
+
+The system supports custom shifts per employee.
+
+Example:
+
+```text
+Shift Start: 6:00 PM
+Shift End: 3:00 AM
+Break: 1 Hour
+Target Work Duration: 9 Hours
+Grace Period: 10–15 Minutes
+```
+
+Shift values should be dynamic and stored in the database.
+
+Do not hardcode shift timings in frontend logic.
+
+---
+
+# 5. Break Management
+
+Employees can:
+
+- Start Break
+- End Break
+
+The system tracks:
+
+- Break start time
+- Break end time
+- Break duration
+- Excessive break duration
+
+Notifications can be generated for:
+
+- Break Started
+- Break Ended
+- Break Exceeded
+
+---
+
+# 6. Leave Management
+
+Employees can submit leave requests.
+
+CEO/Admin can:
+
+- Approve leave
+- Reject leave
+- Review leave history
+- Apply leave rules
+- Review salary deductions
+
+Supported notification events include:
+
+- Leave Requested
+- Leave Approved
+- Leave Rejected
+- Leave Cancelled
+- Upcoming Leave
+- Leave Deduction
+
+The system should respect existing leave/payroll rules and avoid duplicate deduction logic.
+
+---
+
+# 7. Company Calendar & Holidays
+
+The Company Calendar supports:
+
+- Weekly Off
+- Public Holiday
+- Company Holiday
+- Special Off Day
+- Custom company events
+
+Default weekly off can be configured.
+
+Example:
+
+```text
+Sunday = Weekly Off
+Monday–Saturday = Working Days
+```
+
+Holiday/off days should be excluded from:
+
+- Absence calculations
+- Attendance penalties
+- Leave deductions
+- Payroll deductions
+
+Notification events may include:
+
+- Holiday Created
+- Holiday Updated
+- Holiday Cancelled
+- Special Off Day Added
+- Weekly Off Changed
+- Company Announcement
+
+---
+
+# 8. Task Management
+
+The Task Management module supports both assigned tasks and open tasks.
+
+### Task Features
+
+- Create Task
+- Create Open Task
+- Assign Task
+- Reassign Task
+- Claim Open Task
+- Start Task
+- Pause Task
+- Resume Task
+- Submit Task
+- Request Changes
+- Complete Task
+- Reopen Task
+- Update Task
+- Change Deadline
+- Change Priority
+- Add Comment
+- Delete Task
+- Due Soon reminders
+- Overdue alerts
+
+---
+
+## Open Task Flow
+
+```text
+CEO/Admin creates Open Task
+        ↓
+Eligible employees receive notification
+        ↓
+Employee claims task
+        ↓
+Task becomes assigned to employee
+        ↓
+Creator/CEO/Admin receives claim notification
+```
+
+Open Task claiming must be atomic so two employees cannot successfully claim the same task.
+
+---
+
+## Task Notification Events
+
+Typical event types:
+
+```text
+OPEN_TASK_CREATED
+TASK_CLAIMED
+TASK_ASSIGNED
+TASK_REASSIGNED
+TASK_UPDATED
+TASK_STARTED
+TASK_PAUSED
+TASK_RESUMED
+TASK_SUBMITTED
+TASK_CHANGES_REQUIRED
+TASK_COMPLETED
+TASK_REOPENED
+TASK_DEADLINE_CHANGED
+TASK_PRIORITY_CHANGED
+TASK_COMMENT
+TASK_DUE_SOON
+TASK_OVERDUE
+TASK_DELETED
+```
+
+Task notifications should be generated only after the related database action succeeds.
+
+---
+
+# 9. Payroll & Salary Management
+
+CEO/Admin can:
+
+- Set employee salary
+- Generate payroll
+- Apply attendance deductions
+- Apply leave deductions
+- Apply bonuses
+- Apply overtime
+- Finalize payroll
+- Generate payslips
+
+Employees can view:
+
+- Daily salary calculation
+- Current payroll progress
+- Deductions
+- Bonuses
+- Final salary
+- Payslip status
+
+---
+
+## Salary Period
+
+The portal may use a custom salary period.
+
+Example:
+
+```text
+Salary Month:
+5th of current month → 5th of next month
+```
+
+Payroll calculations should respect:
+
+- Working days
+- Weekly off
+- Holidays
+- Attendance
 - Leave
-- Upcoming holidays
-- Team Availability
+- Grace period
+- Shift timing
+- Approved/unapproved leave rules
+
+---
+
+# 10. Notification System
+
+The portal contains a centralized notification system.
+
+Supported delivery methods:
+
+- In-App Notifications
+- Desktop Notifications
+- Notification Sound
+- Unread Counter
+- Notification History
+- Role-based notification permissions
+- Employee-specific notification permissions
+
+Notifications should be generated by the backend after the business operation succeeds.
+
+Example:
+
+```text
+Leave Approved
+      ↓
+Database updated
+      ↓
+Notification created
+      ↓
+Recipient permission checked
+      ↓
+Realtime delivery
+      ↓
+Bell counter updated
+      ↓
+Desktop alert
+      ↓
+Sound
+```
+
+---
+
+# 11. Notification Permissions
+
+Route:
+
+```text
+/settings/notification-permissions
+```
+
+This page is for CEO/Admin.
+
+It controls:
+
+> Which notification events each role or employee group is allowed to receive.
+
+This page is different from personal notification settings.
+
+Recommended categories:
+
+- Attendance
+- Break
+- Leave
+- Tasks
+- Company & Calendar
+- Payroll & Salary
+- Security
+
+The permission system should support:
+
+- Role-level permissions
+- Employee-specific overrides
+- Category toggles
+- Individual event toggles
+- Enable All
+- Disable All
+- Search/filter
+- Persistent database values
+
+---
+
+# 12. Notification Sound Manager
+
+Administrators can configure notification sounds.
+
+Supported features:
+
+- Upload sound
+- MP3
+- WAV
+- OGG
+- Preview sound
+- Set default sound
+- Set volume
+- Assign sound to category
+- Assign sound to individual event
+- Delete uploaded sound
+- Use built-in fallback sound
+
+Suggested priority:
+
+```text
+Event Sound Override
+        ↓
+Category Sound
+        ↓
+Global Default Sound
+```
+
+---
+
+## Browser Audio Behavior
+
+Modern browsers can block audio before the first real user interaction.
+
+The portal should not require employees to repeatedly press a dedicated `Enable Sound` button.
+
+Instead:
+
+```text
+Login / first normal click
+        ↓
+Audio system unlocks
+        ↓
+Notification sounds work for the current session
+```
+
+Normal interactions can include:
+
+- Login
+- Navigation
+- Clock In
+- Opening Tasks
+- Keyboard interaction
+
+If sound is blocked before any user interaction:
+
+- In-app notification must still work
+- Desktop notification should still work when permitted
+- The app should unlock sound automatically after the next real interaction
+
+---
+
+# 13. Notification Event Reliability
+
+Notifications must avoid duplicates.
+
+Use safe logic so one business event results in only one intended notification per recipient.
+
+Avoid duplicates from:
+
+- API retries
+- React StrictMode
+- Multiple socket listeners
+- Multiple browser tabs
+- Polling
+- Controller + service both generating the same event
+
+Backend notification generation should remain the source of truth.
+
+---
+
+# 14. Notification Database Migration Rules
+
+Notification events should use an idempotent migration strategy.
+
+Do not insert duplicate `event_type` values with plain `INSERT`.
+
+Use an appropriate strategy such as:
+
+```sql
+INSERT INTO notification_policies (...)
+VALUES (...)
+ON DUPLICATE KEY UPDATE
+    category = VALUES(category),
+    name = VALUES(name),
+    description = VALUES(description);
+```
+
+Important:
+
+Do not overwrite manually configured permission values during migrations.
+
+Do not use destructive `REPLACE INTO` if records are referenced elsewhere.
+
+---
+
+# 15. Notification Center
+
+The portal notification center should support:
+
+- Unread count
+- Mark as read
+- Mark all as read
+- Category filters
+- Search
+- Notification history
+- Click-to-open related page
+
+Examples:
+
+```text
+Task notification
+→ Task details
+
+Leave notification
+→ Leave details
+
+Calendar notification
+→ Company Calendar
+
+Payroll notification
+→ Payroll/Payslip
+```
+
+---
+
+# 16. Dashboard
+
+The portal contains separate dashboards for CEO/Admin and employees.
+
+Dashboard goals:
+
+- Modern
+- Responsive
+- Premium
+- Fast
+- Clear hierarchy
+- Live status
+- Charts
+- Summary cards
+- Task summaries
+- Attendance summaries
+- Team availability
+- Company calendar data
 - Notifications
 
-## Data Integrity & Migrations
+Avoid overloading the dashboard with excessive empty spacing or unnecessary cards.
 
-Future database changes must use versioned, backward-compatible
-migrations wherever possible.
+---
 
-Normal deployments must never:
+# 17. Auto Refresh
 
-- Reset the production database
-- Truncate business tables
-- Recreate the entire database
-- Replace existing production data
-- Delete historical records
+The system can support configurable auto-refresh.
 
-Existing employee, attendance, payroll, task, work-session,
-login-security, and audit data must remain preserved across future
-phases.
+Example:
 
-## Security Principles
+```text
+Auto Refresh: ON
+Refresh Every: 2 Minutes
+```
 
-1.  Backend is authoritative.
-2.  Frontend permissions are not sufficient by themselves.
-3.  Server-side role/permission checks are required.
-4.  Client-supplied business timestamps are not trusted.
-5.  Employee identity comes from authenticated context.
-6.  Passwords are hashed.
-7.  SQL queries are parameterized.
-8.  Sensitive security information is permission-protected.
-9.  Login activity is separate from Attendance.
-10. Task timers are separate from Payroll.
-11. Presence is separate from Attendance.
-12. Production data must survive deployments.
+Where possible, realtime events should be preferred over aggressive polling.
 
-## Environment Variables
+---
 
-Example backend `.env` structure:
+# 18. Audit Logs
+
+Important administrative actions should be recorded.
+
+Examples:
+
+- Employee created
+- Employee deleted
+- Salary changed
+- Shift changed
+- Permission changed
+- Notification permission changed
+- Notification sound changed
+- Leave approved/rejected
+- Payroll finalized
+- Company holiday created
+- Security setting changed
+
+Avoid logging noisy actions unnecessarily.
+
+---
+
+# 19. Security Requirements
+
+All protected APIs should require authentication.
+
+Important rules:
+
+- Never trust `user_id` sent by frontend for personal resources.
+- Use authenticated JWT/session identity.
+- Enforce role/permission rules on backend.
+- Do not expose salary data to unauthorized employees.
+- Do not expose IP addresses to normal employees.
+- Do not expose security logs to unauthorized users.
+- Validate uploads and inputs.
+- Use parameterized SQL queries.
+- Use secure password hashing.
+
+---
+
+# 20. Environment Variables
+
+Example backend `.env`:
 
 ```env
 NODE_ENV=development
@@ -613,49 +721,104 @@ DB_NAME=remote_office_portal
 DB_USER=root
 DB_PASSWORD=
 
-JWT_SECRET=replace_with_a_long_secure_random_secret
+JWT_SECRET=replace_with_a_secure_random_secret
+
+CLIENT_URL=http://localhost:5173
 ```
 
-Never commit production secrets to Git.
-
-Frontend configuration may include:
+Example frontend `.env`:
 
 ```env
 VITE_API_URL=http://localhost:4000/api/v1
 ```
 
-Use the actual API port/prefix configured by the project.
+Production values should use live domains.
 
-## Local Development
+---
 
-### Requirements
+# 21. Local Development
 
-- Node.js
+## Requirements
+
+Install:
+
+- Node.js 22+
 - npm
 - MySQL
-- Git
 
-### Clone
+Check versions:
 
 ```bash
-git clone https://github.com/HuzaifaMustafa1126/Remote-Office-Portel.git
-cd Remote-Office-Portel
+node -v
+npm -v
+mysql --version
 ```
 
-### Backend
+---
+
+## Database Setup
+
+Create the database:
+
+```sql
+CREATE DATABASE remote_office_portal
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+```
+
+Make sure the entire database uses a consistent collation.
+
+Avoid mixing:
+
+```text
+utf8mb4_general_ci
+utf8mb4_unicode_ci
+```
+
+inside queries that compare values.
+
+---
+
+# 22. Backend Setup
 
 ```bash
 cd server
 npm install
+```
+
+Create:
+
+```text
+server/.env
+```
+
+Then run migrations:
+
+```bash
 npm run migrate
+```
+
+Seed the first admin/CEO if supported:
+
+```bash
+npm run seed:admin
+```
+
+Start backend:
+
+```bash
 npm run dev
 ```
 
-Configure the server `.env` before starting.
+Expected:
 
-### Frontend
+```text
+API listening on http://localhost:4000
+```
 
-Open another terminal:
+---
+
+# 23. Frontend Setup
 
 ```bash
 cd client
@@ -663,211 +826,338 @@ npm install
 npm run dev
 ```
 
-## MySQL Troubleshooting
-
-If the backend reports:
+Typical development URL:
 
 ```text
-ECONNREFUSED 127.0.0.1:3306
+http://localhost:5173
 ```
-
-verify:
-
-1.  MySQL is installed.
-2.  The MySQL service is running.
-3.  Port 3306 is correct.
-4.  `.env` credentials are correct.
-5.  The database exists.
-6.  The configured MySQL user has database permissions.
-
-## Production Architecture
-
-```text
-Employee / CEO Browser
-          ↓
-        HTTPS
-          ↓
-   Portal Frontend
-          ↓
-   Node.js / Express API
-          ↓
-        MySQL
-```
-
-The application architecture is suitable for online deployment.
-
-However:
-
-```text
-Online-Capable != Production-Ready
-```
-
-A final production-readiness audit should be completed before real
-employees rely on the system.
-
-## Production Checklist
-
-Before production, verify:
-
-- HTTPS
-- Secure environment variables
-- Strong JWT secret
-- CORS
-- Trusted proxy configuration
-- Real client IP detection
-- Authentication/session security
-- Login rate limiting
-- MySQL backups
-- Migration safety
-- Database indexes
-- API authorization
-- File-upload validation
-- Error handling
-- Background worker reliability
-- Presence/heartbeat reliability
-- Concurrent employee behavior
-- Browser compatibility
-- Responsive interfaces
-- Production logging and monitoring
-
-## Core Architecture Separation
-
-The system intentionally separates these concepts:
-
-```text
-AUTHENTICATION
-Who is logged into the portal?
-
-ATTENDANCE
-Who is officially working?
-
-PRESENCE
-Who is currently connected/available?
-
-TASK WORK SESSION
-What task is the employee actively working on?
-
-BREAK
-Is the employee currently taking a registered break?
-
-PAYROLL
-What salary/deductions apply according to company rules?
-```
-
-These systems can communicate without becoming the same system.
-
-## Example Employee Flow
-
-```text
-Employee Login
-      ↓
-Login Security Session
-      ↓
-Presence = Online
-      ↓
-Clock In
-      ↓
-Attendance Active
-      ↓
-Start Task
-      ↓
-Task Work Session Active
-      ↓
-Start Break
-      ↓
-Availability = On Break
-Task Work Session Auto-Pauses
-      ↓
-End Break
-      ↓
-Task Auto-Resumes
-      ↓
-Continue Work
-      ↓
-Clock Out
-      ↓
-Task Auto-Pauses
-Attendance Ends
-      ↓
-Portal may remain Online
-      ↓
-Logout
-      ↓
-Security Session Ends
-```
-
-## Development Principles
-
-When extending this project:
-
-- Audit existing implementation first.
-- Reuse existing services and modules.
-- Avoid duplicate systems.
-- Preserve historical data.
-- Use server-authoritative validation.
-- Use database transactions for multi-record business operations.
-- Keep Payroll isolated from Task timers.
-- Keep Attendance isolated from Portal Login.
-- Keep Presence isolated from Attendance.
-- Maintain employee privacy boundaries.
-- Test on localhost before production.
-- Use safe database migrations.
-- Regression-test existing modules after every major change.
-
-## Planned Improvements
-
-Future development can include:
-
-### Task Analytics & Productivity Dashboard
-
-- Task completion trends
-- Status counts
-- Overdue rates
-- Average completion time
-- Employee workload
-- Time spent per task
-- Reassignment contribution
-- Open Task claim statistics
-
-### Reports & Export
-
-- Employee task-performance reports
-- Task-time reports
-- Completed/overdue reports
-- Attendance vs task activity
-- Date-range reports
-- CSV/PDF/print exports where appropriate
-
-### Notification Improvements
-
-- Windows desktop notification reliability
-- macOS desktop notification reliability
-- Configurable notification sounds
-- Task/deadline reminders
-- Optional email
-- Optional official WhatsApp Business integration
-
-### Production Readiness
-
-- Security audit
-- Performance audit
-- Database/index audit
-- Permission audit
-- Authentication/session audit
-- Migration validation
-- Backup strategy
-- Hostinger configuration
-- Trusted proxy/IP validation
-- Background-job validation
-- Load/concurrency testing
 
 ---
 
-## Remote Office Portal
+# 24. Production Deployment
 
-**One portal for employees, attendance, tasks, payroll, office activity,
-security, and management.**
+Recommended production architecture:
 
-Built as a centralized remote-office operations platform with
-server-authoritative business rules, privacy controls, security
-monitoring, and scalable online deployment in mind.
+```text
+Frontend
+portal.example.com
+
+Backend
+backend.example.com
+
+Database
+MySQL
+```
+
+Before deployment:
+
+```bash
+npm install
+npm run build
+```
+
+Configure environment variables using the hosting provider.
+
+Run database migrations before using new features.
+
+Never replace the production database with local development data.
+
+---
+
+# 25. Production Database Safety
+
+When adding new phases/modules:
+
+Do NOT reset the database.
+
+Use versioned migrations.
+
+Example:
+
+```text
+001_initial_schema.sql
+002_attendance.sql
+003_leave.sql
+...
+034_task_notification_policy.sql
+```
+
+Migrations must be safe for existing production records.
+
+Before running a migration:
+
+- Backup database
+- Review SQL
+- Check duplicate keys
+- Check foreign keys
+- Check column compatibility
+- Test on staging/local copy when possible
+
+---
+
+# 26. API Design
+
+Typical API prefix:
+
+```text
+/api/v1
+```
+
+Example routes:
+
+```text
+/api/v1/auth
+/api/v1/employees
+/api/v1/attendance
+/api/v1/breaks
+/api/v1/leave
+/api/v1/tasks
+/api/v1/payroll
+/api/v1/company-calendar
+/api/v1/notifications
+/api/v1/notification-permissions
+```
+
+All protected endpoints must validate authentication and authorization.
+
+---
+
+# 27. Recommended Notification Testing
+
+For each notification event verify:
+
+```text
+Business action succeeds
+        ↓
+Notification record created
+        ↓
+Correct recipient selected
+        ↓
+Permission checked
+        ↓
+Realtime event delivered
+        ↓
+Bell updates
+        ↓
+Desktop notification works
+        ↓
+Sound works
+        ↓
+No duplicate notification
+```
+
+Important task tests:
+
+- Open Task Created
+- Task Claimed
+- Task Assigned
+- Task Completed
+- Task Due Soon
+- Task Overdue
+
+Important leave tests:
+
+- Leave Requested
+- Leave Approved
+- Leave Rejected
+
+Important calendar tests:
+
+- Holiday Created
+- Holiday Updated
+- Holiday Deleted
+
+---
+
+# 28. Common Issues
+
+## MySQL Connection Refused
+
+Example:
+
+```text
+connect ECONNREFUSED 127.0.0.1:3306
+```
+
+Check:
+
+- MySQL is installed
+- MySQL service is running
+- `.env` credentials are correct
+- Database exists
+
+---
+
+## Unknown Database
+
+Example:
+
+```text
+Unknown database 'remote_office_portal'
+```
+
+Create the database first or run the setup script.
+
+---
+
+## Missing Migration Table
+
+Example:
+
+```text
+Table schema_migrations doesn't exist
+```
+
+Ensure the migration bootstrap creates the migration tracking table before reading from it.
+
+---
+
+## Collation Error
+
+Example:
+
+```text
+Illegal mix of collations
+```
+
+Use one consistent database collation.
+
+Recommended:
+
+```text
+utf8mb4_unicode_ci
+```
+
+or the project standard selected for all tables/columns.
+
+---
+
+## Duplicate Notification Event
+
+Example:
+
+```text
+#1062 Duplicate entry 'TASK_CLAIMED' for key 'event_type'
+```
+
+The migration is attempting to insert an event that already exists.
+
+Use idempotent migrations.
+
+Do not delete existing policies simply to rerun the migration.
+
+---
+
+## Notification Exists But UI Does Not Update
+
+Check:
+
+- realtime listener
+- socket room/user mapping
+- authenticated user ID
+- employee ID vs user ID
+- notification provider
+- unread-count refresh
+
+---
+
+## Sound Does Not Play
+
+Check:
+
+- user sound preference
+- browser autoplay state
+- first interaction unlock
+- uploaded sound URL
+- MIME type
+- HTTPS
+- CORS
+- file exists
+- `NotAllowedError`
+- duplicate/multiple AudioContext instances
+
+---
+
+# 29. Development Principles
+
+When extending this portal:
+
+1. Do not break existing modules.
+2. Use migrations for database changes.
+3. Preserve production data.
+4. Reuse existing services.
+5. Avoid duplicate business logic.
+6. Keep backend as the source of truth.
+7. Validate permissions server-side.
+8. Keep UI responsive.
+9. Avoid hardcoded employee IDs.
+10. Avoid hardcoded shift times.
+11. Avoid hardcoded CEO IDs.
+12. Keep notification events centralized.
+13. Keep audit logs meaningful.
+14. Test production-like behavior before deployment.
+
+---
+
+# 30. Current System Scope
+
+The Remote Office Portal currently covers:
+
+- Authentication
+- Roles
+- Permissions
+- Employees
+- Attendance
+- Breaks
+- Shifts
+- Leave
+- Company Calendar
+- Holidays
+- Tasks
+- Open Tasks
+- Task Time Tracking
+- Payroll
+- Salary
+- Notifications
+- Notification Permissions
+- Custom Notification Sounds
+- Security Events
+- Dashboard
+- Audit Logs
+- Mobile Access Control
+- Reports
+
+---
+
+# Future Improvements
+
+Possible future modules:
+
+- Advanced analytics
+- Performance reports
+- Team productivity metrics
+- Internal chat
+- File sharing
+- Project management
+- Department management
+- Client management
+- Expense management
+- Advanced payroll reports
+- Email notifications
+- Push notifications
+- PWA support
+- Native desktop application
+
+---
+
+## License
+
+Private project.
+
+All rights reserved.
+
+---
+
+## Maintainer
+
+Remote Office Portal Development Team

@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { notifyUser } from "./notification.service.js";
+import { notifyByPolicy, notifyUser } from "./notification.service.js";
 import {
   endTaskSession,
   getTaskTimeTracking,
@@ -21,10 +21,14 @@ import {
 const select = `SELECT t.*,CONCAT(a.first_name,' ',a.last_name) assigneeName,CONCAT(c.first_name,' ',c.last_name) creatorName,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id) imageCount,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id AND ti.image_context='SUBMISSION') submissionImageCount,(SELECT reason FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) changeReason,(SELECT revision_due_at FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) revisionDueAt,(SELECT COALESCE(SUM(CASE WHEN tws.state='ACTIVE' THEN GREATEST(0,TIMESTAMPDIFF(SECOND,tws.started_at,CURRENT_TIMESTAMP)) ELSE COALESCE(tws.duration_seconds,0) END),0) FROM task_work_sessions tws WHERE tws.task_id=t.id) timeSpentSeconds,(SELECT started_at FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ACTIVE' LIMIT 1) activeSessionStartedAt,(SELECT end_reason FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ENDED' ORDER BY tws.ended_at DESC,tws.id DESC LIMIT 1) lastSessionEndReason,CURRENT_TIMESTAMP serverTime FROM tasks t LEFT JOIN employees a ON a.id=t.assignee_employee_id JOIN users cu ON cu.id=t.created_by LEFT JOIN employees c ON c.id=cu.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
+  const afterCommit=[];
+  c.afterCommit=afterCommit;
   try {
     await c.beginTransaction();
     const out = await fn(c);
     await c.commit();
+    const deliveries=await Promise.allSettled(afterCommit.map(deliver=>deliver()));
+    for(const delivery of deliveries)if(delivery.status==="rejected")console.error("[TASK_NOTIFICATION]",delivery.reason);
     return out;
   } catch (e) {
     await c.rollback();
@@ -33,6 +37,13 @@ async function tx(fn) {
     c.release();
   }
 }
+const afterCommit=(c,deliver)=>c.afterCommit.push(deliver);
+const taskNotification=(eventType,actor,task,{title,message,recipientUserIds}={})=>notifyByPolicy(eventType,actor,{title,message,recipientUserIds,referenceType:"TASK",referenceId:Number(task.id),actionUrl:`/tasks?task=${task.id}`,eventKey:`${eventType}:${task.id}`,priority:["TASK_OVERDUE","TASK_CHANGES_REQUIRED"].includes(eventType)?"WARNING":"NORMAL"});
+async function eligibleOpenTaskUsers(){
+  const [users]=await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND e.status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN'))`);
+  const allowed=[];for(const user of users)if(await getEffectivePermission(user.id,"task.view_own"))allowed.push(Number(user.id));return allowed;
+}
+async function assigneeUserId(employeeId){if(!employeeId)return null;const[[user]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[employeeId]);return user?.id?Number(user.id):null;}
 const dbDate = (value) => (value ? new Date(value) : null);
 async function activity(
   c,
@@ -139,6 +150,9 @@ export async function create(data, actor) {
       `${data.title} was created as ${status}.`,
       { status },
     );
+    const created={id:r.insertId,status,title:data.title,assigneeEmployeeId:data.assigneeEmployeeId};
+    if(status==="OPEN")afterCommit(c,async()=>taskNotification("OPEN_TASK_CREATED",actor,created,{title:"New Open Task",message:`A new open task is available: “${data.title}”.`,recipientUserIds:await eligibleOpenTaskUsers()}));
+    if(status==="TO_DO"&&data.assigneeEmployeeId)afterCommit(c,async()=>{const[[recipient]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[data.assigneeEmployeeId]);return recipient&&taskNotification("TASK_ASSIGNED",actor,created,{title:"New Task Assigned",message:`You have been assigned: “${data.title}”.`,recipientUserIds:[recipient.id]})});
     return { id: r.insertId, status };
   });
 }
@@ -285,6 +299,7 @@ export async function claim(id, user) {
     );
     await activity(c, id, "TASK_CLAIMED", user, "OPEN", "TO_DO");
     await audit(c, id, "TASK_CLAIMED", user, `${task.title} was claimed.`);
+    afterCommit(c,()=>taskNotification("TASK_CLAIMED",user,{id,title:task.title},{title:"Open Task Claimed",message:`${user.employee_name||"An employee"} claimed “${task.title}”.`}));
     return { id: Number(id), status: "TO_DO" };
   });
 }
@@ -429,6 +444,8 @@ export async function transition(id, data, user) {
         : `${task.title} changed from ${task.status} to ${data.status}.`,
       data,
     );
+    const eventType=task.status==="COMPLETED"&&data.status==="CHANGES_REQUIRED"?"TASK_REOPENED":resumingWork?"TASK_RESUMED":data.status==="IN_PROGRESS"?"TASK_STARTED":data.status==="SUBMITTED_FOR_REVIEW"?"TASK_SUBMITTED":data.status==="CHANGES_REQUIRED"?"TASK_CHANGES_REQUIRED":data.status==="COMPLETED"?"TASK_COMPLETED":null;
+    if(eventType)afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);const employeeEvent=["TASK_RESUMED","TASK_CHANGES_REQUIRED","TASK_REOPENED"].includes(eventType);return taskNotification(eventType,user,{id,title:task.title},{title:eventType==="TASK_COMPLETED"?"Task Completed":eventType==="TASK_CHANGES_REQUIRED"?"Changes Required":eventType==="TASK_REOPENED"?"Task Reopened":eventType==="TASK_SUBMITTED"?"Task Submitted for Review":eventType==="TASK_STARTED"?"Task Started":"Task Resumed",message:`${user.employee_name||"An employee"} ${eventType==="TASK_COMPLETED"?"completed":eventType==="TASK_SUBMITTED"?"submitted":eventType==="TASK_STARTED"?"started":eventType==="TASK_RESUMED"?"resumed":eventType==="TASK_REOPENED"?"reopened":"must revise"} “${task.title}”.`,recipientUserIds:employeeEvent&&recipient?[recipient]:undefined})});
     return { id: Number(id), status: data.status };
   });
 }
@@ -460,7 +477,7 @@ export async function addComment(id, data, user) {
     const allowed=[];for(const recipient of recipients){if(!recipient||recipient===user.id)continue;const [[candidate]]=await c.execute("SELECT u.id FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id AND p.name='task.view_all' AND up.granted=TRUE) OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) LIMIT 1",[recipient,task.created_by,task.assignee_employee_id]);if(candidate)allowed.push(recipient);}
     return {id:r.insertId,taskTitle:task.title,recipients:allowed,parentCommentId:data.parentCommentId||null,mentions:new Set(data.mentionUserIds||[])};
   });
-  await Promise.allSettled(result.recipients.map(userId=>notifyUser({userId,type:result.mentions.has(userId)?"TASK_MENTION":result.parentCommentId?"TASK_REPLY":"TASK_COMMENT",title:result.mentions.has(userId)?"You were mentioned":result.parentCommentId?"New task reply":"New task comment",message:`${user.employee_name||"Someone"} commented on “${result.taskTitle}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_COMMENT:${result.id}:${userId}`,delivery:{desktop:true,sound:false}})));
+  await notifyByPolicy("TASK_COMMENT",user,{recipientUserIds:result.recipients,title:result.parentCommentId?"New task reply":"New task comment",message:`${user.employee_name||"Someone"} commented on “${result.taskTitle}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_COMMENT:${result.id}`});
   return {id:result.id};
 }
 
@@ -649,6 +666,7 @@ export async function assign(id, data, user) {
       `${task.title} was reassigned.`,
       data,
     );
+    afterCommit(c,async()=>{const recipient=await assigneeUserId(data.employeeId);return taskNotification("TASK_REASSIGNED",user,{id,title:task.title},{title:"Task Assigned to You",message:`“${task.title}” has been reassigned to you.`,recipientUserIds:recipient?[recipient]:[]})});
     return { id: Number(id), employeeId: data.employeeId, status: "TO_DO" };
   });
 }
@@ -758,6 +776,8 @@ export async function update(id, data, user) {
       );
     }
     await activity(c, id, "TASK_UPDATED", user, task.status, task.status);
+    const updateEvent=data.priority!==undefined?"TASK_PRIORITY_CHANGED":data.dueAt!==undefined?"TASK_DEADLINE_CHANGED":"TASK_UPDATED";
+    afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification(updateEvent,user,{id,title:data.title||task.title},{title:updateEvent==="TASK_PRIORITY_CHANGED"?"Task Priority Changed":updateEvent==="TASK_DEADLINE_CHANGED"?"Task Deadline Updated":"Task Updated",message:updateEvent==="TASK_PRIORITY_CHANGED"?`“${data.title||task.title}” priority changed to ${data.priority}.`:updateEvent==="TASK_DEADLINE_CHANGED"?`The deadline for “${data.title||task.title}” has changed.`:`Details for “${data.title||task.title}” were updated.`,recipientUserIds:recipient?[recipient]:[]})});
     return { id: Number(id), status: task.status };
   });
 }
@@ -1018,9 +1038,18 @@ export async function publishDueScheduled() {
         "INSERT INTO task_activities(task_id,event_type,previous_status,new_status,metadata)VALUES(?,'TASK_AUTO_PUBLISHED','SCHEDULED',?,?)",
         [task.id, status, JSON.stringify({ scheduled: true })],
       );
+      const actor={id:task.created_by,employee_id:null};
+      if(status==="OPEN")afterCommit(c,async()=>taskNotification("OPEN_TASK_CREATED",actor,task,{title:"New Open Task",message:`A new open task is available: “${task.title}”.`,recipientUserIds:await eligibleOpenTaskUsers()}));
+      if(status==="TO_DO")afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification("TASK_ASSIGNED",actor,task,{title:"New Task Assigned",message:`You have been assigned: “${task.title}”.`,recipientUserIds:recipient?[recipient]:[]})});
     }
     return rows.length;
   });
+}
+export async function sendTaskDeadlineNotifications(){
+  const [tasks]=await pool.execute(`SELECT id,title,assignee_employee_id,due_at FROM tasks WHERE assignee_employee_id IS NOT NULL AND due_at IS NOT NULL AND status NOT IN('COMPLETED','ARCHIVED','DRAFT','SCHEDULED') AND due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 2 HOUR)`);
+  let delivered=0;
+  for(const task of tasks){const recipient=await assigneeUserId(task.assignee_employee_id);if(!recipient)continue;const overdue=new Date(task.due_at)<new Date(),eventType=overdue?"TASK_OVERDUE":"TASK_DUE_SOON";const result=await taskNotification(eventType,{id:0,employee_id:null},task,{title:overdue?"Task Overdue":"Task Due Soon",message:overdue?`“${task.title}” is now overdue.`:`“${task.title}” is due within 2 hours.`,recipientUserIds:[recipient]});delivered+=result.filter(Boolean).length;}
+  return delivered;
 }
 export async function listManagement(filters,user) {
   const where = [],
@@ -1121,6 +1150,7 @@ export async function changeDeadline(id, data, user) {
         reason: data.reason || null,
       },
     );
+    afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification("TASK_DEADLINE_CHANGED",user,{id,title:task.title},{title:"Task Deadline Updated",message:`The deadline for “${task.title}” has changed.`,recipientUserIds:recipient?[recipient]:[]})});
     return { id: Number(id), dueAt: data.dueAt };
   });
 }

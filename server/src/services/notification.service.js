@@ -98,12 +98,19 @@ export async function notifyByPolicy(eventType, actor, data) {
   if(policy.audience_type==='CEO_ADMIN') conditions.push("UPPER(r.name) IN('CEO','ADMIN')");
   else if(policy.audience_type==='MANAGERS') conditions.push("UPPER(r.name) LIKE '%MANAGER%'");
   else if(policy.audience_type==='SAME_DEPARTMENT'){conditions.push("e.department=(SELECT department FROM employees WHERE id=?)");params.push(actor.employee_id);}
-  else if(policy.audience_type==='SELECTED_ROLES'){conditions.push("r.id IN(SELECT role_id FROM notification_policy_roles WHERE policy_id=?)");params.push(policy.id);}
-  else if(policy.audience_type==='SELECTED_EMPLOYEES'){conditions.push("e.id IN(SELECT employee_id FROM notification_policy_employees WHERE policy_id=?)");params.push(policy.id);}
+  else if(policy.audience_type==='SELECTED_ROLES'&&!data.recipientUserIds){conditions.push("r.id IN(SELECT role_id FROM notification_policy_roles WHERE policy_id=?)");params.push(policy.id);}
+  else if(policy.audience_type==='SELECTED_EMPLOYEES'&&!data.recipientUserIds){conditions.push("e.id IN(SELECT employee_id FROM notification_policy_employees WHERE policy_id=?)");params.push(policy.id);}
   else conditions.push('1=1');
+  if (data.recipientUserIds) {
+    const recipients=[...new Set(data.recipientUserIds.map(Number).filter(Boolean))];
+    if (!recipients.length) return [];
+    conditions.push(`u.id IN(${recipients.map(()=>'?').join(',')})`);
+    params.push(...recipients);
+  }
   if(!policy.notify_actor){conditions.push('u.id<>?');params.push(actor.id);}
   const [users]=await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND ${conditions.join(' AND ')}`,[...params]);
-  return Promise.all(users.map(({id})=>notifyUser({...data,userId:id,type:eventType,eventKey:data.eventKey?`${data.eventKey}:${id}`:`${eventType}:${data.referenceId}:${id}`,delivery:{inApp:Boolean(policy.in_app_enabled),desktop:Boolean(policy.desktop_enabled),sound:Boolean(policy.sound_enabled),push:Boolean(policy.push_enabled)}})));
+  const {recipientUserIds:_,...notification}=data;
+  return Promise.all(users.map(({id})=>notifyUser({...notification,userId:id,type:eventType,eventKey:data.eventKey?`${data.eventKey}:${id}`:`${eventType}:${data.referenceId}:${id}`,delivery:{inApp:Boolean(policy.in_app_enabled),desktop:Boolean(policy.desktop_enabled),sound:Boolean(policy.sound_enabled),push:Boolean(policy.push_enabled)}})));
 }
 
 export async function notifyRoles(roleNames, data) {

@@ -4,7 +4,7 @@ import { verifyDatabase } from "./config/database.js";
 import { createServer } from "node:http";
 import { initializeNotifications } from "./sockets/notification.socket.js";
 import { validateSchema } from "./services/schema.service.js";
-import { publishDueScheduled } from "./services/task.service.js";
+import { publishDueScheduled,sendTaskDeadlineNotifications } from "./services/task.service.js";
 import { pauseStaleTaskSessions } from "./services/taskPresence.service.js";
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -55,6 +55,8 @@ async function start() {
     initializeNotifications(server);
     const publishTimer=setInterval(()=>publishDueScheduled().catch(error=>console.error("Scheduled task publication failed:",error.message)),30000);
     publishTimer.unref();
+    const deadlineTimer=setInterval(()=>sendTaskDeadlineNotifications().catch(error=>console.error("Task deadline notification check failed:",error.message)),60000);
+    deadlineTimer.unref();
     const presenceTimer = setInterval(
       () =>
         pauseStaleTaskSessions().catch((error) =>
