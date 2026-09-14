@@ -22,17 +22,25 @@ const time = (value) =>
   }).format(new Date(value));
 
 export default function AttendanceTimeline({ items = [] }) {
-  const [holidays, setHolidays] = useState([]), [holidaysLoading, setHolidaysLoading] = useState(true), [holidaysError, setHolidaysError] = useState("");
+  const [holidays, setHolidays] = useState([]),
+    [holidaysLoading, setHolidaysLoading] = useState(true),
+    [holidaysError, setHolidaysError] = useState("");
   useEffect(() => {
     let active = true;
     setHolidaysLoading(true);
     setHolidaysError("");
     getUpcoming()
       .then((rows) => {
-        if (active) { setHolidays(rows || []); setHolidaysLoading(false); }
+        if (active) {
+          setHolidays(rows || []);
+          setHolidaysLoading(false);
+        }
       })
       .catch(() => {
-        if (active) { setHolidaysError("Unable to load upcoming holidays."); setHolidaysLoading(false); }
+        if (active) {
+          setHolidaysError("Unable to load upcoming holidays.");
+          setHolidaysLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -61,7 +69,9 @@ export default function AttendanceTimeline({ items = [] }) {
                     <p className="text-sm font-semibold">
                       {labels[item.type] || item.type}
                     </p>
-                    <p className="text-xs text-muted-foreground">{time(item.at)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {time(item.at)}
+                    </p>
                   </div>
                 </div>
               );
@@ -73,7 +83,11 @@ export default function AttendanceTimeline({ items = [] }) {
           )}
         </div>
       </section>
-      <UpcomingHolidays rows={holidays} loading={holidaysLoading} error={holidaysError} />
+      <UpcomingHolidays
+        rows={holidays}
+        loading={holidaysLoading}
+        error={holidaysError}
+      />
     </div>
   );
 }

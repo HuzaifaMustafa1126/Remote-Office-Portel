@@ -7,7 +7,14 @@ import ThemePreviewBar from "./components/appearance/ThemePreviewBar";
 export default function App() {
   return (
     <AuthProvider>
-      <ThemeProvider><DeviceAccessProvider><NotificationProvider><AppRoutes /><ThemePreviewBar /></NotificationProvider></DeviceAccessProvider></ThemeProvider>
+      <ThemeProvider>
+        <DeviceAccessProvider>
+          <NotificationProvider>
+            <AppRoutes />
+            <ThemePreviewBar />
+          </NotificationProvider>
+        </DeviceAccessProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

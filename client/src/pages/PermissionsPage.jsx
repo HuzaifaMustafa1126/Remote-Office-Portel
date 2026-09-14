@@ -12,7 +12,10 @@ import { listRoles } from "../services/role.service";
 import { errorMessage } from "../utils/helpers";
 import { PERMISSIONS as P } from "../utils/permissions";
 const friendly = {
-  "portal.access_mobile": ["Access Portal on Mobile", "Allows this role to access the Remote Office Portal from mobile devices. Individual employee overrides can be configured from Employee Details."],
+  "portal.access_mobile": [
+    "Access Portal on Mobile",
+    "Allows this role to access the Remote Office Portal from mobile devices. Individual employee overrides can be configured from Employee Details.",
+  ],
   "dashboard.view": ["View Dashboard", "Can view the organization dashboard"],
   "attendance.clock": [
     "Clock Attendance",
@@ -69,18 +72,30 @@ const friendly = {
     "Deactivate Employees",
     "Can activate or deactivate employees",
   ],
-  "employees.reset_password": ["Reset Employee Password", "Can reset another employee's password"],
-  "employees.delete": ["Delete Employees", "Can permanently delete employee accounts and related records"],
+  "employees.reset_password": [
+    "Reset Employee Password",
+    "Can reset another employee's password",
+  ],
+  "employees.delete": [
+    "Delete Employees",
+    "Can permanently delete employee accounts and related records",
+  ],
   "shift.view": ["View Shifts", "Can view shift templates and assignments"],
   "shift.manage": ["Manage Shifts", "Can create and update shift templates"],
   "shift.assign": ["Assign Shifts", "Can assign shifts to employees"],
   "salary.view_all": ["View All Salaries", "Can view employee salary profiles"],
   "salary.manage": ["Manage Salaries", "Can update employee salary profiles"],
-  "salary.view_own": ["View Own Salary", "Can view personal salary information"],
+  "salary.view_own": [
+    "View Own Salary",
+    "Can view personal salary information",
+  ],
   "payroll.view_own": ["View Own Payroll", "Can view personal payroll records"],
   "payroll.view_all": ["View All Payroll", "Can view company payroll records"],
   "payroll.generate": ["Generate Payroll", "Can generate payroll runs"],
-  "payroll.recalculate": ["Recalculate Payroll", "Can recalculate draft payroll"],
+  "payroll.recalculate": [
+    "Recalculate Payroll",
+    "Can recalculate draft payroll",
+  ],
   "payroll.approve": ["Approve Payroll", "Can approve payroll runs"],
   "payroll.reopen": ["Reopen Payroll", "Can reopen approved payroll"],
   "payroll.mark_paid": ["Mark Payroll Paid", "Can mark payroll as paid"],
@@ -94,28 +109,33 @@ const friendly = {
   "audit.view": ["View Audit Logs", "Can review system and user activity"],
 };
 const groupFor = (name) =>
-  name.startsWith("portal.") ? "Portal Access" : name.startsWith("dashboard.")
-    ? "Dashboard"
-    : name.startsWith("attendance.")
-      ? "Attendance"
-      : name.startsWith("leave.")
-        ? "Leave"
-        : name.startsWith("calendar.")
-          ? "Company Calendar"
-          : name.startsWith("employees.")
-            ? "Employees"
-            : name.startsWith("shift.")
-              ? "Shifts"
-              : name.startsWith("salary.") || name.startsWith("payroll.")
-                ? "Salary & Payroll"
-                : name.startsWith("reports.")
-                  ? "Reports"
-            : name.startsWith("roles.") || name.startsWith("permissions.")
-              ? "Roles & Permissions"
-              : "System";
+  name.startsWith("portal.")
+    ? "Portal Access"
+    : name.startsWith("dashboard.")
+      ? "Dashboard"
+      : name.startsWith("attendance.")
+        ? "Attendance"
+        : name.startsWith("leave.")
+          ? "Leave"
+          : name.startsWith("calendar.")
+            ? "Company Calendar"
+            : name.startsWith("employees.")
+              ? "Employees"
+              : name.startsWith("shift.")
+                ? "Shifts"
+                : name.startsWith("salary.") || name.startsWith("payroll.")
+                  ? "Salary & Payroll"
+                  : name.startsWith("reports.")
+                    ? "Reports"
+                    : name.startsWith("roles.") ||
+                        name.startsWith("permissions.")
+                      ? "Roles & Permissions"
+                      : "System";
 export default function PermissionsPage() {
   const { user, refresh: refreshAuth } = useAuth();
-  const manageMobile = user.roles.some(role => ["CEO", "SUPER_ADMIN"].includes(role.toUpperCase()));
+  const manageMobile = user.roles.some((role) =>
+    ["CEO", "SUPER_ADMIN"].includes(role.toUpperCase()),
+  );
   const [roles, setRoles] = useState([]),
     [perms, setPerms] = useState([]),
     [roleId, setRoleId] = useState(""),
@@ -229,7 +249,10 @@ export default function PermissionsPage() {
                         className="sr-only"
                         type="checkbox"
                         checked={selected.includes(p.id)}
-                        disabled={!manage || (p.name === "portal.access_mobile" && !manageMobile)}
+                        disabled={
+                          !manage ||
+                          (p.name === "portal.access_mobile" && !manageMobile)
+                        }
                         onChange={() => toggle(p.id)}
                       />
                       <span className="min-w-0 break-words">

@@ -6,14 +6,12 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AttendanceBadge from "../attendance/AttendanceBadge";
 import AvailabilityBadge from "../availability/AvailabilityBadge";
-import LiveOfficeStatus from "../attendance/LiveOfficeStatus";
 import LiveWorkTimer from "../attendance/LiveWorkTimer";
 import PriorityBadge from "../tasks/PriorityBadge";
-import TaskStatusBadge from "../tasks/TaskStatusBadge";
-import UpcomingHolidays from "../calendar/UpcomingHolidays";
 import { initials } from "../../utils/helpers";
 
 const time = (value) =>
@@ -35,6 +33,14 @@ const icons = {
   ATTENDANCE_CLOCK_OUT: LogOut,
   BREAK_STARTED: Coffee,
   BREAK_ENDED: Play,
+};
+const availabilityLabels = {
+  ONLINE: "Online",
+  IN_MEETING: "In a meeting",
+  DO_NOT_DISTURB: "Do not disturb",
+  ON_BREAK: "On break",
+  AWAY: "Away",
+  OFFLINE: "Offline",
 };
 const refreshOptions = [
   [0, "Off"],
@@ -175,7 +181,7 @@ function AttendanceToday({ stats }) {
     ["On break", stats.onBreak, "bg-warning"],
   ];
   return (
-    <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,.03)] transition-shadow duration-150 hover:shadow-[0_8px_24px_rgba(0,0,0,.05)]">
+    <section className="h-full rounded-2xl border border-border/70 bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,.03)] transition-shadow duration-150 hover:shadow-[0_8px_24px_rgba(0,0,0,.05)]">
       <div className="flex justify-between">
         <div>
           <h2 className="font-bold tracking-tight">Attendance Today</h2>
@@ -238,7 +244,7 @@ function AttendanceTable({ employees, availability }) {
     ]),
   );
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-[0_1px_2px_rgba(0,0,0,.03)]">
+    <section className="h-full overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-[0_1px_2px_rgba(0,0,0,.03)]">
       <div className="flex items-start justify-between px-5 py-4">
         <div>
           <h2 className="font-bold tracking-tight">Employee Attendance</h2>
@@ -254,7 +260,7 @@ function AttendanceTable({ employees, availability }) {
         </Link>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[690px] text-left text-xs">
+        <table className="manager-attendance-table w-full min-w-[690px] text-left text-xs">
           <thead className="border-y border-border/60 bg-surface-secondary/35 text-[9px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-2">Employee</th>
@@ -322,12 +328,7 @@ function Tasks({ rows, loading, canCreate, onCreate, onSelect }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-[0_1px_2px_rgba(0,0,0,.03)]">
       <div className="flex items-start justify-between px-5 py-4">
-        <div>
-          <h2 className="font-bold tracking-tight">All Tasks</h2>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Latest task and deadline status
-          </p>
-        </div>
+        <h2 className="font-bold tracking-tight">All tasks</h2>
         {canCreate && (
           <button
             onClick={onCreate}
@@ -347,58 +348,182 @@ function Tasks({ rows, loading, canCreate, onCreate, onSelect }) {
           ))}
         </div>
       ) : rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-xs">
-            <thead className="border-y border-border/60 bg-surface-secondary/35 text-[9px] uppercase text-muted-foreground">
-              <tr>
-                <th className="px-5 py-2">Task</th>
-                <th>Assignee</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th className="pr-5">Due</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {rows.slice(0, 5).map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={() => onSelect(row)}
-                  className="cursor-pointer transition-colors duration-150 hover:bg-surface-secondary/45"
+        <div className="space-y-2 px-5 pb-5">
+          {rows.slice(0, 5).map((row) => (
+            <button
+              key={row.id}
+              onClick={() => onSelect(row)}
+              className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl bg-surface-secondary/65 px-4 py-3 text-left hover:bg-primary-soft/40"
+            >
+              <span className="h-5 w-5 rounded-full border border-border bg-surface" />
+              <span className="min-w-0">
+                <strong className="block truncate text-xs">{row.title}</strong>
+                <span
+                  className={`mt-1 block truncate text-[10px] ${row.overdue ? "text-danger" : "text-muted-foreground"}`}
                 >
-                  <td className="max-w-[250px] truncate px-5 py-3 font-semibold">
-                    {row.title}
-                  </td>
-                  <td>
-                    {row.assigneeName || row.assignee_name || "Not assigned"}
-                  </td>
-                  <td>
-                    <PriorityBadge priority={row.priority} />
-                  </td>
-                  <td>
-                    <TaskStatusBadge status={row.status} />
-                  </td>
-                  <td
-                    className={`pr-5 font-medium ${row.overdue ? "text-danger" : ""}`}
-                  >
-                    {date(row.due_at)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {row.projectName ||
+                    row.assigneeName ||
+                    row.assignee_name ||
+                    "General"}{" "}
+                  · {date(row.due_at)}
+                </span>
+              </span>
+              <PriorityBadge priority={row.priority} />
+            </button>
+          ))}
         </div>
       ) : (
         <p className="p-8 text-center text-sm text-muted-foreground">
           No tasks available.
         </p>
       )}
-      <div className="border-t border-border/60 px-5 py-3 text-right">
+    </section>
+  );
+}
+
+function Holidays({ rows, loading, error }) {
+  return (
+    <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
+      <div className="flex justify-between gap-3">
+        <h2 className="font-bold tracking-tight">Upcoming holidays</h2>
         <Link
-          to="/tasks"
+          to="/company-calendar"
           className="text-[11px] font-semibold text-primary-text"
         >
-          View all tasks
+          View calendar
         </Link>
+      </div>
+      {loading ? (
+        <div className="mt-5 h-12 animate-pulse rounded-xl bg-surface-secondary" />
+      ) : error ? (
+        <p className="mt-6 text-xs text-danger">
+          Unable to load upcoming holidays.
+        </p>
+      ) : rows?.length ? (
+        <div className="mt-4 space-y-2">
+          {rows.slice(0, 3).map((row) => (
+            <div
+              key={row.id}
+              className="rounded-xl bg-surface-secondary p-3 text-xs font-semibold"
+            >
+              {row.title}
+              <span className="mt-1 block text-[10px] font-normal text-muted-foreground">
+                {date(row.calendarDate)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-5 flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary-text">
+            <CalendarDays size={17} />
+          </span>
+          <div>
+            <p className="text-xs font-semibold">No upcoming holidays</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Your company calendar is clear.
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TeamAvailability({ data, connected }) {
+  const [filter, setFilter] = useState("ALL"),
+    employees = data?.employees || [];
+  const shown = useMemo(
+    () =>
+      filter === "ALL"
+        ? employees
+        : employees.filter((row) => row.availability === filter),
+    [employees, filter],
+  );
+  const statuses = [
+    "ONLINE",
+    "IN_MEETING",
+    "DO_NOT_DISTURB",
+    "ON_BREAK",
+    "AWAY",
+    "OFFLINE",
+  ];
+  const filters = [
+    ["ALL", "All"],
+    ["ONLINE", "Online"],
+    ["IN_MEETING", "Meeting"],
+    ["AWAY", "Away"],
+    ["OFFLINE", "Offline"],
+  ];
+  return (
+    <section className="dashboard-card h-full min-w-0 bg-surface p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold tracking-tight">Team availability</h2>
+        <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <i
+            className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-warning"}`}
+          />
+          {connected ? "Live" : "Connecting"}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-y-4 rounded-2xl bg-surface-secondary/65 p-4 sm:grid-cols-3">
+        {statuses.map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilter(status)}
+            className="text-left"
+          >
+            <span className="block truncate text-[10px] text-muted-foreground">
+              {availabilityLabels[status]}
+            </span>
+            <strong className="mt-1 block text-base">
+              {data?.counts?.[status] || 0}
+            </strong>
+          </button>
+        ))}
+      </div>
+      <div
+        className="mt-4 flex gap-2 overflow-x-auto pb-1"
+        role="group"
+        aria-label="Filter team availability"
+      >
+        {filters.map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setFilter(value)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-semibold ${filter === value ? "bg-primary text-primary-foreground" : "bg-surface-secondary text-muted-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3">
+        {shown.length ? (
+          shown.slice(0, 7).map((employee, index) => (
+            <div
+              key={employee.employeeId}
+              className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3 ${index ? "border-t border-border/60" : ""}`}
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-primary-soft text-[10px] font-bold text-primary-text">
+                {initials(employee.employeeName)}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold">
+                  {employee.employeeName}
+                </p>
+                <p className="truncate text-[9px] text-muted-foreground">
+                  {employee.jobTitle || employee.role || "Employee"} ·{" "}
+                  {employee.department || "Team"}
+                </p>
+              </div>
+              <AvailabilityBadge status={employee.availability} />
+            </div>
+          ))
+        ) : (
+          <p className="py-10 text-center text-xs text-muted-foreground">
+            No team members match this status.
+          </p>
+        )}
       </div>
     </section>
   );
@@ -458,33 +583,33 @@ function Activity({ items }) {
   return (
     <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
       <div className="flex justify-between">
-        <div>
-          <h2 className="font-bold tracking-tight">Recent Activity</h2>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Latest attendance events
-          </p>
-        </div>
+        <h2 className="font-bold tracking-tight">Recent activity</h2>
         <Link
           to="/audit-logs"
-          className="text-[11px] font-semibold text-primary-text"
+          aria-label="View all activity"
+          className="text-muted-foreground"
         >
-          View all
+          •••
         </Link>
       </div>
-      <div className="mt-3">
+      <div className="mt-4 grid md:grid-cols-3">
         {items.length ? (
           items.slice(0, 3).map((item, index) => {
             const Icon = icons[item.action] || CalendarDays;
             return (
               <div
                 key={item.id}
-                className={`flex gap-3 py-3 ${index < Math.min(items.length, 6) - 1 ? "border-b border-border/60" : ""}`}
+                className={`flex min-w-0 gap-3 py-3 md:px-5 md:first:pl-0 md:last:pr-0 ${index ? "border-t border-border/60 md:border-l md:border-t-0" : ""}`}
               >
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text">
                   <Icon size={12} />
                 </span>
                 <div>
-                  <p className="text-xs font-medium leading-snug">
+                  <p className="text-xs font-semibold leading-snug">
+                    {item.action?.replaceAll("_", " ").toLowerCase() ||
+                      "Activity recorded"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
                     {item.description}
                   </p>
                   <p className="mt-0.5 text-[9px] text-muted-foreground">
@@ -495,7 +620,7 @@ function Activity({ items }) {
             );
           })
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
             No recent activity.
           </p>
         )}
@@ -527,8 +652,8 @@ export default function ManagerDashboard({
   onTaskSelect,
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-8 xl:grid-cols-12">
-      <div className="md:col-span-8 xl:col-span-12">
+    <div className="manager-dashboard mx-auto grid w-full max-w-[1800px] min-w-0 gap-4">
+      <div>
         <Hero
           user={user}
           stats={live.stats}
@@ -540,40 +665,34 @@ export default function ManagerDashboard({
           onRefresh={onRefresh}
         />
       </div>
-      <div className="order-1 md:col-span-3 xl:col-span-5">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)]">
         <AttendanceToday stats={live.stats} />
-      </div>
-      <div className="order-3 md:col-span-5 xl:order-2 xl:col-span-7">
         <AttendanceTable
           employees={live.employees || []}
           availability={availability}
         />
       </div>
-      <div className="order-2 md:col-span-5 xl:order-3 xl:col-span-7">
-        <Tasks
-          rows={tasks}
-          loading={tasksLoading}
-          canCreate={canCreateTask}
-          onCreate={onCreateTask}
-          onSelect={onTaskSelect}
-        />
+      <div className="grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,1fr)]">
+        <div className="grid min-w-0 gap-4">
+          <Tasks
+            rows={tasks}
+            loading={tasksLoading}
+            canCreate={canCreateTask}
+            onCreate={onCreateTask}
+            onSelect={onTaskSelect}
+          />
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <Holidays
+              rows={holidays}
+              loading={holidaysLoading}
+              error={holidaysError}
+            />
+            <LeaveRequests data={leaves} />
+          </div>
+        </div>
+        <TeamAvailability data={availability} connected={connected} />
       </div>
-      <div className="order-4 md:col-span-3 xl:col-span-5">
-        <LiveOfficeStatus data={availability} connected={connected} />
-      </div>
-      <div className="order-5 md:col-span-4 xl:col-span-3">
-        <UpcomingHolidays
-          rows={holidays}
-          loading={holidaysLoading}
-          error={holidaysError}
-        />
-      </div>
-      <div className="order-6 md:col-span-4 xl:col-span-3">
-        <LeaveRequests data={leaves} />
-      </div>
-      <div className="order-7 md:col-span-8 xl:col-span-6">
-        <Activity items={activity} />
-      </div>
+      <Activity items={activity} />
     </div>
   );
 }

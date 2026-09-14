@@ -205,7 +205,6 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
       </aside>
-      §
     </>
   );
 }

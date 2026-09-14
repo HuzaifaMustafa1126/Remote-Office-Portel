@@ -10,7 +10,10 @@ const options = [
   [900000, "15 Minutes"],
   [1800000, "30 Minutes"],
 ];
-const remaining = (seconds) => seconds >= 60 ? `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s` : `${seconds}s`;
+const remaining = (seconds) =>
+  seconds >= 60
+    ? `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`
+    : `${seconds}s`;
 const updated = (value) =>
   value
     ? new Intl.DateTimeFormat("en-PK", {

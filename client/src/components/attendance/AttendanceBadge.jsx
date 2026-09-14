@@ -31,7 +31,15 @@ export default function AttendanceBadge({ status = "NOT_CLOCKED_IN" }) {
     <span
       className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${styles[status] || styles.NOT_CLOCKED_IN}`}
     >
-      <span aria-hidden="true" className="mr-1">{["WORKING", "CLOCKED_OUT", "WORKED_HOLIDAY"].includes(status) ? "✓" : status === "ABSENT" ? "×" : status === "ON_BREAK" ? "Ⅱ" : "○"}</span>
+      <span aria-hidden="true" className="mr-1">
+        {["WORKING", "CLOCKED_OUT", "WORKED_HOLIDAY"].includes(status)
+          ? "✓"
+          : status === "ABSENT"
+            ? "×"
+            : status === "ON_BREAK"
+              ? "Ⅱ"
+              : "○"}
+      </span>
       {labels[status] || status}
     </span>
   );

@@ -198,7 +198,10 @@ export default function ShiftManagementPage() {
               })
             }
           />
-          <p id="required-work-help" className="text-xs text-muted-foreground sm:col-span-2">
+          <p
+            id="required-work-help"
+            className="text-xs text-muted-foreground sm:col-span-2"
+          >
             Required work is calculated automatically from the start and end
             times, minus the break allowance.
           </p>

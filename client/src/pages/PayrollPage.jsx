@@ -34,7 +34,10 @@ export default function PayrollPage() {
     }
   };
   const open = async (id) => setSelected(await api.get(id));
-  const refresh=async()=>{await open(selected.id);await load()};
+  const refresh = async () => {
+    await open(selected.id);
+    await load();
+  };
   const showAdjustment = (item) => {
     setAdjustmentEmployee(item);
     setAdjustment(emptyAdjustment);
@@ -111,10 +114,84 @@ export default function PayrollPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {selected.status === "DRAFT" && (
-                    <><Button variant="secondary" onClick={async()=>{await api.recalculate(selected.periodLabel);await refresh()}}>Recalculate</Button><Button onClick={async()=>{const total=selected.items.reduce((n,x)=>n+Number(x.net_salary),0);if(!window.confirm(`Approve ${selected.periodStart} → ${selected.periodEnd} payroll with net total ${money(total)}?`))return;await api.approve(selected.id);await refresh()}}>Approve Payroll</Button></>
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          await api.recalculate(selected.periodLabel);
+                          await refresh();
+                        }}
+                      >
+                        Recalculate
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          const total = selected.items.reduce(
+                            (n, x) => n + Number(x.net_salary),
+                            0,
+                          );
+                          if (
+                            !window.confirm(
+                              `Approve ${selected.periodStart} → ${selected.periodEnd} payroll with net total ${money(total)}?`,
+                            )
+                          )
+                            return;
+                          await api.approve(selected.id);
+                          await refresh();
+                        }}
+                      >
+                        Approve Payroll
+                      </Button>
+                    </>
                   )}
                   {selected.status === "APPROVED" && (
-                    <><Button variant="secondary" onClick={async()=>{const reason=window.prompt("Reason for reopening this approved payroll");if(!reason?.trim())return;await api.reopen(selected.id,reason);await refresh()}}>Reopen</Button><Button onClick={async()=>{const paymentMethod=window.prompt("Payment method: BANK_TRANSFER, CASH, or OTHER","BANK_TRANSFER");if(!["BANK_TRANSFER","CASH","OTHER"].includes(paymentMethod))return;const paymentDate=window.prompt("Payment date (YYYY-MM-DD)",new Date().toISOString().slice(0,10));const paymentReference=window.prompt("Payment reference");if(!paymentDate||!paymentReference?.trim())return;const note=window.prompt("Optional payment note")||"";await api.markPaid(selected.id,{paymentMethod,paymentDate,paymentReference,note});await refresh()}}>Mark Paid</Button></>
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          const reason = window.prompt(
+                            "Reason for reopening this approved payroll",
+                          );
+                          if (!reason?.trim()) return;
+                          await api.reopen(selected.id, reason);
+                          await refresh();
+                        }}
+                      >
+                        Reopen
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          const paymentMethod = window.prompt(
+                            "Payment method: BANK_TRANSFER, CASH, or OTHER",
+                            "BANK_TRANSFER",
+                          );
+                          if (
+                            !["BANK_TRANSFER", "CASH", "OTHER"].includes(
+                              paymentMethod,
+                            )
+                          )
+                            return;
+                          const paymentDate = window.prompt(
+                            "Payment date (YYYY-MM-DD)",
+                            new Date().toISOString().slice(0, 10),
+                          );
+                          const paymentReference =
+                            window.prompt("Payment reference");
+                          if (!paymentDate || !paymentReference?.trim()) return;
+                          const note =
+                            window.prompt("Optional payment note") || "";
+                          await api.markPaid(selected.id, {
+                            paymentMethod,
+                            paymentDate,
+                            paymentReference,
+                            note,
+                          });
+                          await refresh();
+                        }}
+                      >
+                        Mark Paid
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -155,17 +232,126 @@ export default function PayrollPage() {
                       <td>{money(x.leave_deduction)}</td>
                       <td>{money(x.absence_deduction)}</td>
                       <td className="font-bold">{money(x.net_salary)}</td>
-                      {selected.status==="DRAFT"&&<td><button className="font-semibold text-primary-text hover:text-primary-text" onClick={()=>showAdjustment(x)}>Add adjustment</button></td>}
+                      {selected.status === "DRAFT" && (
+                        <td>
+                          <button
+                            className="font-semibold text-primary-text hover:text-primary-text"
+                            onClick={() => showAdjustment(x)}
+                          >
+                            Add adjustment
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </ResponsiveTable>
-              {selected.reviewRequired?<p className="m-4 rounded-xl bg-warning-soft p-3 text-sm font-semibold text-warning">Requires Review — underlying salary or operational data changed after approval.</p>:null}
+              {selected.reviewRequired ? (
+                <p className="m-4 rounded-xl bg-warning-soft p-3 text-sm font-semibold text-warning">
+                  Requires Review — underlying salary or operational data
+                  changed after approval.
+                </p>
+              ) : null}
               <div className="grid gap-5 border-t p-4 lg:grid-cols-2">
-                <section><h3 className="mb-3 font-bold">Adjustments</h3>{selected.adjustments?.length?selected.adjustments.map(x=><div key={x.id} className="mb-2 rounded-xl bg-surface-secondary p-3 text-sm"><b>{x.title}</b> · {x.type} · {money(x.amount)}<p className="text-muted-foreground">{x.reason} · {x.createdBy||"System"}</p>{selected.status==="DRAFT"&&<button className="mt-1 text-danger" onClick={async()=>{if(confirm("Remove this adjustment?")){await api.removeAdjustment(selected.id,x.id);await refresh()}}}>Remove</button>}</div>):<p className="text-sm text-muted-foreground">No manual adjustments.</p>}</section>
-                <section><h3 className="mb-3 font-bold">Payroll Activity</h3>{selected.activity?.length?selected.activity.map(x=><div key={x.id} className="mb-3 border-l-2 border-primary-border pl-3 text-sm"><b>{x.description}</b><p className="text-muted-foreground">{x.performedBy||"System"} · {new Date(x.createdAt).toLocaleString()}</p>{x.reason&&<p>Reason: {x.reason}</p>}</div>):<p className="text-sm text-muted-foreground">No activity recorded.</p>}</section>
+                <section>
+                  <h3 className="mb-3 font-bold">Adjustments</h3>
+                  {selected.adjustments?.length ? (
+                    selected.adjustments.map((x) => (
+                      <div
+                        key={x.id}
+                        className="mb-2 rounded-xl bg-surface-secondary p-3 text-sm"
+                      >
+                        <b>{x.title}</b> · {x.type} · {money(x.amount)}
+                        <p className="text-muted-foreground">
+                          {x.reason} · {x.createdBy || "System"}
+                        </p>
+                        {selected.status === "DRAFT" && (
+                          <button
+                            className="mt-1 text-danger"
+                            onClick={async () => {
+                              if (confirm("Remove this adjustment?")) {
+                                await api.removeAdjustment(selected.id, x.id);
+                                await refresh();
+                              }
+                            }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No manual adjustments.
+                    </p>
+                  )}
+                </section>
+                <section>
+                  <h3 className="mb-3 font-bold">Payroll Activity</h3>
+                  {selected.activity?.length ? (
+                    selected.activity.map((x) => (
+                      <div
+                        key={x.id}
+                        className="mb-3 border-l-2 border-primary-border pl-3 text-sm"
+                      >
+                        <b>{x.description}</b>
+                        <p className="text-muted-foreground">
+                          {x.performedBy || "System"} ·{" "}
+                          {new Date(x.createdAt).toLocaleString()}
+                        </p>
+                        {x.reason && <p>Reason: {x.reason}</p>}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No activity recorded.
+                    </p>
+                  )}
+                </section>
               </div>
-              <details className="border-t p-4"><summary className="cursor-pointer font-bold">Day Breakdown ({selected.days?.length||0})</summary><div className="mt-3 max-h-96 overflow-auto"><ResponsiveTable className="w-full text-sm"><thead><tr><th>Employee</th><th>Work Date</th><th>Classification</th><th>Deduction</th><th>Source</th></tr></thead><tbody>{selected.days?.map(x=><tr className="border-t" key={x.id}><td>{selected.items.find(i=>i.employee_id===x.employeeId)?.employeeName}</td><td>{x.work_date}</td><td>{x.classification}</td><td>{money(x.deduction_amount)}</td><td>{x.attendance_id?`Attendance #${x.attendance_id}`:x.leave_day_id?`Leave #${x.leave_day_id}`:x.calendar_day_id?`Calendar #${x.calendar_day_id}`:"Policy"}</td></tr>)}</tbody></ResponsiveTable></div></details>
+              <details className="border-t p-4">
+                <summary className="cursor-pointer font-bold">
+                  Day Breakdown ({selected.days?.length || 0})
+                </summary>
+                <div className="mt-3 max-h-96 overflow-auto">
+                  <ResponsiveTable className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Work Date</th>
+                        <th>Classification</th>
+                        <th>Deduction</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.days?.map((x) => (
+                        <tr className="border-t" key={x.id}>
+                          <td>
+                            {
+                              selected.items.find(
+                                (i) => i.employee_id === x.employeeId,
+                              )?.employeeName
+                            }
+                          </td>
+                          <td>{x.work_date}</td>
+                          <td>{x.classification}</td>
+                          <td>{money(x.deduction_amount)}</td>
+                          <td>
+                            {x.attendance_id
+                              ? `Attendance #${x.attendance_id}`
+                              : x.leave_day_id
+                                ? `Leave #${x.leave_day_id}`
+                                : x.calendar_day_id
+                                  ? `Calendar #${x.calendar_day_id}`
+                                  : "Policy"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </ResponsiveTable>
+                </div>
+              </details>
             </>
           ) : (
             <p className="p-10 text-center text-muted-foreground">
@@ -181,8 +367,12 @@ export default function PayrollPage() {
       >
         <form className="space-y-5" onSubmit={addAdjustment}>
           <div className="rounded-xl bg-primary-soft px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary-text">Employee</p>
-            <p className="mt-1 font-bold text-foreground">{adjustmentEmployee?.employeeName}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary-text">
+              Employee
+            </p>
+            <p className="mt-1 font-bold text-foreground">
+              {adjustmentEmployee?.employeeName}
+            </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
@@ -193,14 +383,20 @@ export default function PayrollPage() {
               required
               autoFocus
               value={adjustment.title}
-              onChange={(e) => setAdjustment({ ...adjustment, title: e.target.value })}
+              onChange={(e) =>
+                setAdjustment({ ...adjustment, title: e.target.value })
+              }
             />
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-foreground">Adjustment type</span>
+              <span className="mb-1.5 block text-sm font-medium text-foreground">
+                Adjustment type
+              </span>
               <select
                 className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 outline-none transition focus:border-primary-border focus:ring-3 focus:ring-primary-border"
                 value={adjustment.type}
-                onChange={(e) => setAdjustment({ ...adjustment, type: e.target.value })}
+                onChange={(e) =>
+                  setAdjustment({ ...adjustment, type: e.target.value })
+                }
               >
                 <option value="ALLOWANCE">Allowance</option>
                 <option value="DEDUCTION">Deduction</option>
@@ -217,10 +413,14 @@ export default function PayrollPage() {
               step="0.01"
               required
               value={adjustment.amount}
-              onChange={(e) => setAdjustment({ ...adjustment, amount: e.target.value })}
+              onChange={(e) =>
+                setAdjustment({ ...adjustment, amount: e.target.value })
+              }
             />
             <label className="block sm:col-span-2">
-              <span className="mb-1.5 block text-sm font-medium text-foreground">Reason</span>
+              <span className="mb-1.5 block text-sm font-medium text-foreground">
+                Reason
+              </span>
               <textarea
                 className="min-h-28 w-full resize-y rounded-xl border border-border px-3.5 py-2.5 outline-none transition focus:border-primary-border focus:ring-3 focus:ring-primary-border"
                 placeholder="Explain why this adjustment is being added"
@@ -228,14 +428,29 @@ export default function PayrollPage() {
                 maxLength="500"
                 required
                 value={adjustment.reason}
-                onChange={(e) => setAdjustment({ ...adjustment, reason: e.target.value })}
+                onChange={(e) =>
+                  setAdjustment({ ...adjustment, reason: e.target.value })
+                }
               />
             </label>
           </div>
-          {adjustmentError && <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{adjustmentError}</p>}
+          {adjustmentError && (
+            <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
+              {adjustmentError}
+            </p>
+          )}
           <div className="flex justify-end gap-3 border-t pt-4">
-            <Button type="button" variant="secondary" disabled={savingAdjustment} onClick={closeAdjustment}>Cancel</Button>
-            <Button type="submit" disabled={savingAdjustment}>{savingAdjustment ? "Adding…" : "Add Adjustment"}</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={savingAdjustment}
+              onClick={closeAdjustment}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={savingAdjustment}>
+              {savingAdjustment ? "Adding…" : "Add Adjustment"}
+            </Button>
           </div>
         </form>
       </Modal>

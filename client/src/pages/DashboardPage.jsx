@@ -11,7 +11,9 @@ import {
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import AttendanceBadge from "../components/attendance/AttendanceBadge";
-import AttendanceStatusCard, { AttendanceScheduleSummary } from "../components/attendance/AttendanceStatusCard";
+import AttendanceStatusCard, {
+  AttendanceScheduleSummary,
+} from "../components/attendance/AttendanceStatusCard";
 import EmployeeDashboardSidebar from "../components/dashboard/EmployeeDashboardSidebar";
 import EmployeeSalaryOverview from "../components/dashboard/EmployeeSalaryOverview";
 import EmployeeMyTasks from "../components/dashboard/EmployeeMyTasks";
@@ -44,7 +46,9 @@ const clock = (v) =>
         minute: "2-digit",
       }).format(new Date(v))
     : "—";
-const refreshIntervals = [0, 15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000];
+const refreshIntervals = [
+  0, 15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000,
+];
 function CompactStat({ label, value, detail, icon: Icon, tone = "indigo" }) {
   const colors = {
     indigo: "bg-primary-soft text-primary-text",
@@ -332,7 +336,11 @@ export default function DashboardPage() {
     [taskBusy, setTaskBusy] = useState(null),
     [taskNotice, setTaskNotice] = useState(""),
     [refreshInterval, setRefreshInterval] = useState(() => {
-      const stored = Number(localStorage.getItem(`remoteOffice.dashboardAutoRefreshInterval.${user.id}`));
+      const stored = Number(
+        localStorage.getItem(
+          `remoteOffice.dashboardAutoRefreshInterval.${user.id}`,
+        ),
+      );
       return refreshIntervals.includes(stored) ? stored : 0;
     });
   useEffect(() => {
@@ -349,7 +357,9 @@ export default function DashboardPage() {
     if (canViewOwnTasks || canViewAllTasks) {
       setTasksLoading(true);
       tasks.push(
-        listTasks({}).then(setDashboardTasks).finally(() => setTasksLoading(false)),
+        listTasks({})
+          .then(setDashboardTasks)
+          .finally(() => setTasksLoading(false)),
       );
     }
     if (canViewCalendar) {
@@ -379,7 +389,16 @@ export default function DashboardPage() {
     const results = await Promise.allSettled(tasks);
     if (results.length && results.every((r) => r.status === "rejected"))
       throw results[0].reason;
-  }, [canClock, canViewAll, canViewSalary, canViewOwnTasks, canViewAllTasks, canViewCalendar, canViewLeaves, own.refresh]);
+  }, [
+    canClock,
+    canViewAll,
+    canViewSalary,
+    canViewOwnTasks,
+    canViewAllTasks,
+    canViewCalendar,
+    canViewLeaves,
+    own.refresh,
+  ]);
   const auto = useAutoRefresh({
     interval: refreshInterval,
     enabled: true,
@@ -387,7 +406,10 @@ export default function DashboardPage() {
   });
   const changeRefreshInterval = (value) => {
     if (!refreshIntervals.includes(value)) return;
-    localStorage.setItem(`remoteOffice.dashboardAutoRefreshInterval.${user.id}`, String(value));
+    localStorage.setItem(
+      `remoteOffice.dashboardAutoRefreshInterval.${user.id}`,
+      String(value),
+    );
     setRefreshInterval(value);
   };
   const startEmployeeTask = async (task) => {
@@ -396,10 +418,14 @@ export default function DashboardPage() {
     setTaskNotice("");
     try {
       await transitionTask(task.id, { status: "IN_PROGRESS" });
-      setTaskNotice(task.status === "TO_DO" ? "Task started." : "Task resumed.");
+      setTaskNotice(
+        task.status === "TO_DO" ? "Task started." : "Task resumed.",
+      );
       await refreshDashboard();
     } catch (error) {
-      setTaskNotice(error.response?.data?.message || "Unable to update the task.");
+      setTaskNotice(
+        error.response?.data?.message || "Unable to update the task.",
+      );
       await refreshDashboard().catch(() => {});
     } finally {
       setTaskBusy(null);
@@ -436,20 +462,47 @@ export default function DashboardPage() {
   }).format(new Date());
   return (
     <>
-      <div className={`mb-6 flex flex-wrap items-start justify-between gap-4 ${canViewAll ? "border-b border-border pb-4" : ""}`}>
+      {!canViewAll && <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{canViewAll ? "Dashboard Overview" : `Welcome back, ${user.name}`}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{canViewAll ? "Attendance, availability and security for your remote team — one clear view." : date}</p>
+          <h1 className="text-2xl font-bold">
+            {canViewAll ? "Dashboard Overview" : `Welcome back, ${user.name}`}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {canViewAll
+              ? "Attendance, availability and security for your remote team — one clear view."
+              : date}
+          </p>
         </div>
-        {!canViewAll && <AutoRefreshControl interval={refreshInterval} onIntervalChange={changeRefreshInterval} countdown={auto.countdown} lastUpdated={auto.lastUpdated} refreshing={auto.refreshing} error={auto.error} onRefresh={auto.refresh}/>}
-      </div>
-      {auto.error && canViewAll && <div role="alert" className="mb-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{auto.error}</div>}
+        {!canViewAll && (
+          <AutoRefreshControl
+            interval={refreshInterval}
+            onIntervalChange={changeRefreshInterval}
+            countdown={auto.countdown}
+            lastUpdated={auto.lastUpdated}
+            refreshing={auto.refreshing}
+            error={auto.error}
+            onRefresh={auto.refresh}
+          />
+        )}
+      </div>}
+      {auto.error && canViewAll && (
+        <div
+          role="alert"
+          className="mb-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger"
+        >
+          {auto.error}
+        </div>
+      )}
       {own.notice && (
         <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
           {own.notice}
         </div>
       )}
-      {taskNotice && !canViewAll && <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">{taskNotice}</div>}
+      {taskNotice && !canViewAll && (
+        <div className="mb-4 rounded-xl bg-primary-soft p-3 text-sm font-semibold text-primary-text">
+          {taskNotice}
+        </div>
+      )}
       {canClock && own.error && !auto.error && (
         <div className="mb-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {own.error}
@@ -470,7 +523,7 @@ export default function DashboardPage() {
       )}
       {canClock && own.data && (
         <div className="space-y-5">
-          <AttendanceScheduleSummary data={own.data}/>
+          <AttendanceScheduleSummary data={own.data} />
           <div className="grid items-start gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.1fr)_minmax(300px,.9fr)]">
             <AttendanceStatusCard
               data={own.data}
@@ -483,12 +536,31 @@ export default function DashboardPage() {
                 onClockOut: own.clockOut,
               }}
             />
-            {canViewOwnTasks && <EmployeeMyTasks tasks={dashboardTasks} loading={tasksLoading} busy={Boolean(taskBusy)} onOpen={setSelectedTask} onStart={startEmployeeTask}/>}
-            {teamAvailability && <EmployeeTeamAvailability data={teamAvailability} connected={connected} activity={own.data.timeline}/>}
+            {canViewOwnTasks && (
+              <EmployeeMyTasks
+                tasks={dashboardTasks}
+                loading={tasksLoading}
+                busy={Boolean(taskBusy)}
+                onOpen={setSelectedTask}
+                onStart={startEmployeeTask}
+              />
+            )}
+            {teamAvailability && (
+              <EmployeeTeamAvailability
+                data={teamAvailability}
+                connected={connected}
+                activity={own.data.timeline}
+              />
+            )}
           </div>
-          <div className={`grid items-start gap-5 ${canViewSalary ? "xl:grid-cols-[minmax(300px,.7fr)_minmax(0,1.3fr)]" : ""}`}>
-            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual}/>}
-            <EmployeeDashboardSidebar items={own.data.timeline} showRecent={false}/>
+          <div
+            className={`grid items-start gap-5 ${canViewSalary ? "xl:grid-cols-[minmax(300px,.7fr)_minmax(0,1.3fr)]" : ""}`}
+          >
+            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
+            <EmployeeDashboardSidebar
+              items={own.data.timeline}
+              showRecent={false}
+            />
           </div>
         </div>
       )}
@@ -497,10 +569,66 @@ export default function DashboardPage() {
           <TeamLeave rows={teamLeave} />
         </div>
       )}
-      {canViewAll && !live && <div className="grid min-h-[360px] place-items-center rounded-2xl border border-border bg-surface"><div className="text-center"><p className="text-sm font-semibold">Unable to load the management dashboard.</p><button onClick={auto.refresh} className="mt-3 text-sm font-bold text-primary-text">Retry</button></div></div>}
-      {canViewAll && live && <ManagerDashboard user={user} live={live} availability={teamAvailability} tasks={dashboardTasks} tasksLoading={tasksLoading} holidays={holidays} holidaysLoading={holidaysLoading} holidaysError={holidaysError} leaves={pendingLeaves} activity={activity} canCreateTask={canCreateTask} connected={connected} refreshing={auto.refreshing} lastUpdated={auto.lastUpdated} refreshInterval={refreshInterval} countdown={auto.countdown} onRefreshIntervalChange={changeRefreshInterval} onRefresh={auto.refresh} onCreateTask={() => setCreatingTask(true)} onTaskSelect={setSelectedTask}/>}
-      {selectedTask && <TaskDrawerShell task={selectedTask} management={canViewAll} onClose={() => setSelectedTask(null)} onAction={() => { setSelectedTask(null); navigate("/tasks"); }}/>}
-      {creatingTask && <TaskFormDrawer task={null} onClose={() => setCreatingTask(false)} onSaved={() => { setCreatingTask(false); refreshDashboard().catch(() => {}); }}/>}
+      {canViewAll && !live && (
+        <div className="grid min-h-[360px] place-items-center rounded-2xl border border-border bg-surface">
+          <div className="text-center">
+            <p className="text-sm font-semibold">
+              Unable to load the management dashboard.
+            </p>
+            <button
+              onClick={auto.refresh}
+              className="mt-3 text-sm font-bold text-primary-text"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+      {canViewAll && live && (
+        <ManagerDashboard
+          user={user}
+          live={live}
+          availability={teamAvailability}
+          tasks={dashboardTasks}
+          tasksLoading={tasksLoading}
+          holidays={holidays}
+          holidaysLoading={holidaysLoading}
+          holidaysError={holidaysError}
+          leaves={pendingLeaves}
+          activity={activity}
+          canCreateTask={canCreateTask}
+          connected={connected}
+          refreshing={auto.refreshing}
+          lastUpdated={auto.lastUpdated}
+          refreshInterval={refreshInterval}
+          countdown={auto.countdown}
+          onRefreshIntervalChange={changeRefreshInterval}
+          onRefresh={auto.refresh}
+          onCreateTask={() => setCreatingTask(true)}
+          onTaskSelect={setSelectedTask}
+        />
+      )}
+      {selectedTask && (
+        <TaskDrawerShell
+          task={selectedTask}
+          management={canViewAll}
+          onClose={() => setSelectedTask(null)}
+          onAction={() => {
+            setSelectedTask(null);
+            navigate("/tasks");
+          }}
+        />
+      )}
+      {creatingTask && (
+        <TaskFormDrawer
+          task={null}
+          onClose={() => setCreatingTask(false)}
+          onSaved={() => {
+            setCreatingTask(false);
+            refreshDashboard().catch(() => {});
+          }}
+        />
+      )}
     </>
   );
 }

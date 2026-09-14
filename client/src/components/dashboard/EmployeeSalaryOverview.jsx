@@ -1,5 +1,173 @@
-import{Link}from"react-router-dom";import{formatDate}from"../../utils/helpers";
-const money=n=>`Rs. ${Number(n||0).toLocaleString("en-PK",{maximumFractionDigits:2})}`,short=v=>new Intl.DateTimeFormat("en-PK",{day:"2-digit",month:"short"}).format(new Date(v));
-const badge=s=>s==='PAID'?'bg-success-soft text-success':s==='APPROVED'?'bg-primary-soft text-primary-text':s==='DRAFT'?'bg-warning-soft text-warning':'bg-accent-soft text-accent-text';
-export default function EmployeeSalaryOverview({data}){if(!data)return <section className="rounded-2xl border bg-surface p-8 text-center text-sm text-muted-foreground">Loading salary overview…</section>;const status=data.payrollStatus==='LIVE_ESTIMATE'?'LIVE ESTIMATE':data.payrollStatus==='PAID'?'PAID':`PAYROLL ${data.payrollStatus}`,applicable=data.dailyBreakdown.length,progress=applicable?Math.min(100,(data.processedDays/applicable)*100):0,recent=data.dailyBreakdown.slice(-5).reverse();return <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"><header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5"><div><div className="flex items-center gap-2"><h2 className="font-black">MY SALARY</h2><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${badge(data.payrollStatus)}`}>{status}</span></div><p className="mt-1 text-xs text-muted-foreground">Current payroll overview · {formatDate(data.period.start)} → {formatDate(data.period.end)}</p></div><Link to="/my-salary" className="text-xs font-bold text-primary-text">View Salary Details →</Link></header><div className="p-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Monthly Salary" value={money(data.monthlySalary)}/><Metric important label="Earned So Far" value={money(data.earnedSoFar)} detail={`${data.validPaidDays} valid paid days`}/><Metric label="Daily Rate" value={money(data.dailyRate)}/><Metric label={data.isFinal?'Net Salary':'Projected Net Salary'} value={money(data.projectedNet)} detail={data.isFinal?status:'Live Estimate'}/></div><div className="mt-6 rounded-2xl bg-surface-secondary p-4"><div className="flex justify-between text-xs"><b>PAYROLL PROGRESS</b><span className="text-muted-foreground">{data.processedDays} / {applicable} applicable days processed</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-primary transition-all" style={{width:`${progress}%`}}/></div><div className="mt-2 flex justify-between text-[11px] text-muted-foreground"><span>{short(data.period.start)}</span><span>{data.validPaidDays} valid paid days</span><span>{short(data.period.end)}</span></div></div><div className="mt-6 grid gap-6 lg:grid-cols-2"><div><h3 className="text-xs font-bold tracking-wider text-muted-foreground">SALARY BREAKDOWN</h3><div className="mt-3 space-y-2 text-sm">{[["Present Days",data.presentDays],["Paid Holidays / Weekly Offs",data.paidOffDays ?? 0],["Free Approved Leave",data.freeLeaveDays],["Deductible Leave",data.deductibleLeaveDays],["Unauthorized Absence",data.unauthorizedAbsenceDays]].map(([k,v])=><div key={k} className="flex justify-between"><span className="text-muted-foreground">{k}</span><b>{v}</b></div>)}<div className="mt-3 flex justify-between border-t pt-3"><span>Current Deductions</span><b className="text-danger">{money(data.knownDeductions)}</b></div><div className="flex justify-between"><b>{data.isFinal?'Net Salary':'Projected Net Salary'}</b><b>{money(data.projectedNet)}</b></div></div></div><div><h3 className="text-xs font-bold tracking-wider text-muted-foreground">RECENT DAILY EARNINGS</h3><div className="mt-2 divide-y divide-border">{recent.map(x=><div key={x.date} className="grid grid-cols-[70px_1fr_auto] items-center gap-2 py-2 text-xs"><b>{short(x.date)}</b><span className="truncate text-muted-foreground">{x.label}</span><b className={x.earned?'text-success':'text-muted-foreground'}>{x.earned?`+ ${money(x.earned)}`:'—'}</b></div>)}</div><Link to="/my-salary" className="mt-3 inline-block text-xs font-bold text-primary-text">View Full Salary Details →</Link></div></div></div></section>}
-function Metric({label,value,detail,important=false}){return <div className={`rounded-2xl border p-4 ${important?'border-primary-border bg-primary-soft':'border-border bg-surface'}`}><p className={`text-[10px] font-bold tracking-wider ${important?'text-primary-text':'text-muted-foreground'}`}>{label.toUpperCase()}</p><p className={`mt-2 font-black ${important?'text-3xl text-primary-text':'text-xl'}`}>{value}</p>{detail&&<p className="mt-1 text-xs text-muted-foreground">{detail}</p>}</div>}
+import { Link } from "react-router-dom";
+import { formatDate } from "../../utils/helpers";
+const money = (n) =>
+    `Rs. ${Number(n || 0).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`,
+  short = (v) =>
+    new Intl.DateTimeFormat("en-PK", { day: "2-digit", month: "short" }).format(
+      new Date(v),
+    );
+const badge = (s) =>
+  s === "PAID"
+    ? "bg-success-soft text-success"
+    : s === "APPROVED"
+      ? "bg-primary-soft text-primary-text"
+      : s === "DRAFT"
+        ? "bg-warning-soft text-warning"
+        : "bg-accent-soft text-accent-text";
+export default function EmployeeSalaryOverview({ data }) {
+  if (!data)
+    return (
+      <section className="rounded-2xl border bg-surface p-8 text-center text-sm text-muted-foreground">
+        Loading salary overview…
+      </section>
+    );
+  const status =
+      data.payrollStatus === "LIVE_ESTIMATE"
+        ? "LIVE ESTIMATE"
+        : data.payrollStatus === "PAID"
+          ? "PAID"
+          : `PAYROLL ${data.payrollStatus}`,
+    applicable = data.dailyBreakdown.length,
+    progress = applicable
+      ? Math.min(100, (data.processedDays / applicable) * 100)
+      : 0,
+    recent = data.dailyBreakdown.slice(-5).reverse();
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="font-black">MY SALARY</h2>
+            <span
+              className={`rounded-full px-2 py-1 text-[10px] font-bold ${badge(data.payrollStatus)}`}
+            >
+              {status}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Current payroll overview · {formatDate(data.period.start)} →{" "}
+            {formatDate(data.period.end)}
+          </p>
+        </div>
+        <Link to="/my-salary" className="text-xs font-bold text-primary-text">
+          View Salary Details →
+        </Link>
+      </header>
+      <div className="p-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Monthly Salary" value={money(data.monthlySalary)} />
+          <Metric
+            important
+            label="Earned So Far"
+            value={money(data.earnedSoFar)}
+            detail={`${data.validPaidDays} valid paid days`}
+          />
+          <Metric label="Daily Rate" value={money(data.dailyRate)} />
+          <Metric
+            label={data.isFinal ? "Net Salary" : "Projected Net Salary"}
+            value={money(data.projectedNet)}
+            detail={data.isFinal ? status : "Live Estimate"}
+          />
+        </div>
+        <div className="mt-6 rounded-2xl bg-surface-secondary p-4">
+          <div className="flex justify-between text-xs">
+            <b>PAYROLL PROGRESS</b>
+            <span className="text-muted-foreground">
+              {data.processedDays} / {applicable} applicable days processed
+            </span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-border">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+            <span>{short(data.period.start)}</span>
+            <span>{data.validPaidDays} valid paid days</span>
+            <span>{short(data.period.end)}</span>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div>
+            <h3 className="text-xs font-bold tracking-wider text-muted-foreground">
+              SALARY BREAKDOWN
+            </h3>
+            <div className="mt-3 space-y-2 text-sm">
+              {[
+                ["Present Days", data.presentDays],
+                ["Paid Holidays / Weekly Offs", data.paidOffDays ?? 0],
+                ["Free Approved Leave", data.freeLeaveDays],
+                ["Deductible Leave", data.deductibleLeaveDays],
+                ["Unauthorized Absence", data.unauthorizedAbsenceDays],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-muted-foreground">{k}</span>
+                  <b>{v}</b>
+                </div>
+              ))}
+              <div className="mt-3 flex justify-between border-t pt-3">
+                <span>Current Deductions</span>
+                <b className="text-danger">{money(data.knownDeductions)}</b>
+              </div>
+              <div className="flex justify-between">
+                <b>{data.isFinal ? "Net Salary" : "Projected Net Salary"}</b>
+                <b>{money(data.projectedNet)}</b>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold tracking-wider text-muted-foreground">
+              RECENT DAILY EARNINGS
+            </h3>
+            <div className="mt-2 divide-y divide-border">
+              {recent.map((x) => (
+                <div
+                  key={x.date}
+                  className="grid grid-cols-[70px_1fr_auto] items-center gap-2 py-2 text-xs"
+                >
+                  <b>{short(x.date)}</b>
+                  <span className="truncate text-muted-foreground">
+                    {x.label}
+                  </span>
+                  <b
+                    className={
+                      x.earned ? "text-success" : "text-muted-foreground"
+                    }
+                  >
+                    {x.earned ? `+ ${money(x.earned)}` : "—"}
+                  </b>
+                </div>
+              ))}
+            </div>
+            <Link
+              to="/my-salary"
+              className="mt-3 inline-block text-xs font-bold text-primary-text"
+            >
+              View Full Salary Details →
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+function Metric({ label, value, detail, important = false }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${important ? "border-primary-border bg-primary-soft" : "border-border bg-surface"}`}
+    >
+      <p
+        className={`text-[10px] font-bold tracking-wider ${important ? "text-primary-text" : "text-muted-foreground"}`}
+      >
+        {label.toUpperCase()}
+      </p>
+      <p
+        className={`mt-2 font-black ${important ? "text-3xl text-primary-text" : "text-xl"}`}
+      >
+        {value}
+      </p>
+      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+    </div>
+  );
+}

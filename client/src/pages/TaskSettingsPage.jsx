@@ -41,7 +41,8 @@ export default function TaskSettingsPage() {
           Offline Auto-Pause Timeout
         </label>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Automatically pause active task work when an employee is no longer connected to the portal for this amount of time.
+          Automatically pause active task work when an employee is no longer
+          connected to the portal for this amount of time.
         </p>
         {settings ? (
           <select
@@ -65,7 +66,11 @@ export default function TaskSettingsPage() {
           <div className="mt-4 h-11 max-w-xs animate-pulse rounded-xl bg-surface-secondary" />
         )}
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-        {notice && <p role="status" className="mt-3 text-sm text-success">{notice}</p>}
+        {notice && (
+          <p role="status" className="mt-3 text-sm text-success">
+            {notice}
+          </p>
+        )}
         <button
           disabled={!settings || saving}
           onClick={save}

@@ -281,26 +281,26 @@ export default function TaskManagementPage() {
       : setSelected(task);
   const activeTask = management
     ? null
-    : tasks.find(
-        (x) => x.status === "IN_PROGRESS" && x.activeSessionStartedAt,
-      );
+    : tasks.find((x) => x.status === "IN_PROGRESS" && x.activeSessionStartedAt);
   return (
-    <main className={`task-management-canvas mx-auto min-w-0 max-w-[1740px] px-0 pb-8 ${view === "DASHBOARD" ? "task-dashboard-view" : ""}`}>
+    <main
+      className={`task-management-canvas mx-auto min-w-0 max-w-[1740px] px-0 pb-8 ${view === "DASHBOARD" ? "task-dashboard-view" : ""}`}
+    >
       <div className="task-page-header relative">
         <PageHeader
-        title="Task Management"
-        description="Manage team tasks, deadlines and project progress efficiently."
-        action={
-          canCreate ? (
-            <button
-              onClick={() => setCreating(true)}
-              className="task-create-button flex h-11 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-bold text-background shadow-sm transition"
-            >
-              <Plus size={17} />
-              Create Task
-            </button>
-          ) : null
-        }
+          title="Task Management"
+          description="Manage team tasks, deadlines and project progress efficiently."
+          action={
+            canCreate ? (
+              <button
+                onClick={() => setCreating(true)}
+                className="task-create-button flex h-11 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-bold text-background shadow-sm transition"
+              >
+                <Plus size={17} />
+                Create Task
+              </button>
+            ) : null
+          }
         />
       </div>
       {!management && claimStatus && (
