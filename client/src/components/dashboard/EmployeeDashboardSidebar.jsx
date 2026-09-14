@@ -55,6 +55,15 @@ export default function EmployeeDashboardSidebar({
       active = false;
     };
   }, [items]);
+  const panels = <>
+      <EmployeeLeavePanel summary={leave.summary} requests={leave.requests} />
+      <UpcomingHolidays
+        rows={holidays}
+        loading={holidaysLoading}
+        error={holidaysError}
+      />
+    </>;
+  if (!showRecent) return panels;
   return (
     <div className="grid gap-5 md:grid-cols-2">
       {showRecent && (
@@ -97,12 +106,7 @@ export default function EmployeeDashboardSidebar({
           </div>
         </section>
       )}
-      <EmployeeLeavePanel summary={leave.summary} requests={leave.requests} />
-      <UpcomingHolidays
-        rows={holidays}
-        loading={holidaysLoading}
-        error={holidaysError}
-      />
+      {panels}
     </div>
   );
 }

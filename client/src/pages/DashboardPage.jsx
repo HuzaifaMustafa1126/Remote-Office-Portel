@@ -246,7 +246,7 @@ function TeamLeave({ rows = [] }) {
     </section>
   );
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid h-full gap-4">
       {block("Who's On Leave Today", current)}
       {block("Upcoming Team Leave", upcoming)}
     </div>
@@ -522,9 +522,9 @@ export default function DashboardPage() {
         </div>
       )}
       {canClock && own.data && (
-        <div className="space-y-5">
+        <div className="employee-dashboard space-y-4">
           <AttendanceScheduleSummary data={own.data} />
-          <div className="grid items-start gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.1fr)_minmax(300px,.9fr)]">
+          <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(300px,.75fr)]">
             <AttendanceStatusCard
               data={own.data}
               busy={own.busy}
@@ -553,20 +553,14 @@ export default function DashboardPage() {
               />
             )}
           </div>
-          <div
-            className={`grid items-start gap-5 ${canViewSalary ? "xl:grid-cols-[minmax(300px,.7fr)_minmax(0,1.3fr)]" : ""}`}
-          >
-            {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
+          <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
+            <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar
               items={own.data.timeline}
               showRecent={false}
             />
           </div>
-        </div>
-      )}
-      {canClock && (
-        <div className="mt-5">
-          <TeamLeave rows={teamLeave} />
+          {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
         </div>
       )}
       {canViewAll && !live && (
