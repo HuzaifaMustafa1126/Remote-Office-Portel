@@ -40,6 +40,7 @@ const availabilityLabels = {
   DO_NOT_DISTURB: "Do not disturb",
   ON_BREAK: "On break",
   AWAY: "Away",
+  NAMAZ: "Namaz",
   OFFLINE: "Offline",
 };
 const refreshOptions = [
@@ -446,6 +447,7 @@ function TeamAvailability({ data, connected }) {
     "DO_NOT_DISTURB",
     "ON_BREAK",
     "AWAY",
+    "NAMAZ",
     "OFFLINE",
   ];
   const filters = [
@@ -453,6 +455,9 @@ function TeamAvailability({ data, connected }) {
     ["ONLINE", "Online"],
     ["IN_MEETING", "Meeting"],
     ["AWAY", "Away"],
+    ["NAMAZ", "Namaz"],
+    ["ON_BREAK", "Break"],
+    ["DO_NOT_DISTURB", "DND"],
     ["OFFLINE", "Offline"],
   ];
   return (
@@ -497,9 +502,9 @@ function TeamAvailability({ data, connected }) {
           </button>
         ))}
       </div>
-      <div className="mt-3">
+      <div className="mt-3 max-h-[315px] overflow-y-auto overflow-x-hidden pr-1 [scrollbar-color:rgb(var(--border))_transparent] [scrollbar-width:thin]">
         {shown.length ? (
-          shown.slice(0, 7).map((employee, index) => (
+          shown.map((employee, index) => (
             <div
               key={employee.employeeId}
               className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3 ${index ? "border-t border-border/60" : ""}`}
@@ -511,6 +516,7 @@ function TeamAvailability({ data, connected }) {
                 <p className="truncate text-xs font-semibold">
                   {employee.employeeName}
                 </p>
+                {employee.ongoingWorkTitle&&<p className="truncate text-[9px] text-primary-text">Working on: {employee.ongoingWorkTitle}</p>}
                 <p className="truncate text-[9px] text-muted-foreground">
                   {employee.jobTitle || employee.role || "Employee"} ·{" "}
                   {employee.department || "Team"}

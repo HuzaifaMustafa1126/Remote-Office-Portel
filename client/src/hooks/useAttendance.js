@@ -66,7 +66,7 @@ export default function useAttendance({ enabled = true } = {}) {
             ? `${response.message} Your active task has been paused.`
             : response.message,
       );
-      publishPortalStateChanged(eventType);
+      publishPortalStateChanged(eventType, { includeCurrent: true });
     } catch (e) {
       setError(errorMessage(e));
     } finally {

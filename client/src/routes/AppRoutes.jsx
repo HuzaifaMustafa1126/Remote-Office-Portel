@@ -31,6 +31,7 @@ import TaskManagementPage from "../pages/TaskManagementPage";
 import EmployeeTaskPerformancePage from "../pages/EmployeeTaskPerformancePage";
 import TaskSettingsPage from "../pages/TaskSettingsPage";
 import LoginSecurityPage from "../pages/LoginSecurityPage";
+import NotesPage from "../pages/NotesPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -93,6 +94,18 @@ export default function AppRoutes() {
               <TaskManagementPage />
             </Gate>
           }
+        />
+        <Route
+          path="notes"
+          element={
+            <Gate permission={P.NOTES_VIEW_OWN}>
+              <NotesPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="notes/:noteId"
+          element={<Gate permission={P.NOTES_VIEW_OWN}><NotesPage /></Gate>}
         />
         <Route
           path="tasks/employees/:employeeId"

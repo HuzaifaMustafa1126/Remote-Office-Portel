@@ -8,9 +8,17 @@ export const AVAILABILITY = Object.freeze({
   AWAY: "AWAY",
   DO_NOT_DISTURB: "DO_NOT_DISTURB",
   IN_MEETING: "IN_MEETING",
+  NAMAZ: "NAMAZ",
 });
 
 export function resolveEmployeeAvailability(row, now = new Date()) {
+  const until = row.manualStatusUntil ? new Date(row.manualStatusUntil) : null;
+  const manualValid =
+    row.manualStatus &&
+    (!until || (Number.isFinite(until.getTime()) && until.getTime() > now.getTime()));
+  if (Boolean(row.activeBreak)) return AVAILABILITY.ON_BREAK;
+  if (manualValid && row.manualStatus === AVAILABILITY.NAMAZ)
+    return AVAILABILITY.NAMAZ;
   const lastSeen = row.lastSeenAt ? new Date(row.lastSeenAt) : null;
   const timeoutMs = Number(row.timeoutMinutes || 5) * 60_000;
   const present = Boolean(
@@ -19,11 +27,6 @@ export function resolveEmployeeAvailability(row, now = new Date()) {
       now.getTime() - lastSeen.getTime() <= timeoutMs,
   );
   if (!present) return AVAILABILITY.OFFLINE;
-  if (Boolean(row.activeBreak)) return AVAILABILITY.ON_BREAK;
-  const until = row.manualStatusUntil ? new Date(row.manualStatusUntil) : null;
-  const manualValid =
-    row.manualStatus &&
-    (!until || (Number.isFinite(until.getTime()) && until.getTime() > now.getTime()));
   return manualValid && Object.hasOwn(AVAILABILITY, row.manualStatus)
     ? row.manualStatus
     : AVAILABILITY.ONLINE;
@@ -46,6 +49,8 @@ async function baseRows(executor = pool, employeeId = null) {
         SELECT 1 FROM attendance_records ar
         WHERE ar.employee_id=e.id AND ar.status IN ('WORKING','ON_BREAK')
       ) clockedIn,
+      (SELECT ow.title FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkTitle,
+      (SELECT ow.status FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkStatus,
       ts.offline_timeout_minutes timeoutMinutes,CURRENT_TIMESTAMP serverTime
      FROM employees e
      CROSS JOIN task_settings ts
@@ -86,6 +91,8 @@ function publicRow(row) {
     statusUntil: manualActive && availability !== "OFFLINE" && availability !== "ON_BREAK" ? row.manualStatusUntil : null,
     statusNote: manualActive && availability !== "OFFLINE" ? row.statusNote : null,
     lastSeenAt: row.lastSeenAt,
+    ongoingWorkTitle: row.ongoingWorkTitle || null,
+    ongoingWorkStatus: row.ongoingWorkStatus || null,
   };
 }
 

@@ -5,6 +5,7 @@ const styles = {
   AWAY: "bg-warning-soft text-warning",
   DO_NOT_DISTURB: "bg-danger-soft text-danger",
   IN_MEETING: "bg-primary-soft text-primary-text",
+  NAMAZ: "bg-accent-soft text-accent-text",
 };
 export const availabilityLabels = {
   ONLINE: "Online",
@@ -13,6 +14,7 @@ export const availabilityLabels = {
   AWAY: "Away",
   DO_NOT_DISTURB: "Do Not Disturb",
   IN_MEETING: "In a Meeting",
+  NAMAZ: "Namaz",
 };
 
 export default function AvailabilityBadge({ status = "OFFLINE" }) {

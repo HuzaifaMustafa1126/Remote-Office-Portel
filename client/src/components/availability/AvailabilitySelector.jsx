@@ -28,6 +28,7 @@ const choices = [
     ["Custom end time", "custom"],
     ["Until I turn it off", 0],
   ],
+  ["NAMAZ", "Namaz", ["Until I turn it off", 0]],
 ];
 
 export default function AvailabilitySelector({ onDone }) {

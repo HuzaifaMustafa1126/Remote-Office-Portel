@@ -14,7 +14,10 @@
     "build": "echo \"Build complete\"",
     "check": "node --check src/server.js && node --check src/app.js",
     "seed:admin": "node src/scripts/seedAdmin.js",
-    "migrate": "node src/scripts/migrate.js"
+    "migrate": "node src/scripts/migrate.js",
+    "migrations:audit": "node src/scripts/auditMigrationHistory.js",
+    "migrations:repair-history": "node src/scripts/auditMigrationHistory.js --repair",
+    "migrations:verify": "node src/scripts/verifyMigrationState.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

@@ -14,6 +14,8 @@ export default function EmployeeTeamAvailability({
     ["Away", counts.AWAY, "bg-warning"],
     ["Break", counts.ON_BREAK, "bg-warning"],
     ["Meeting", counts.IN_MEETING, "bg-primary"],
+    ["DND", counts.DO_NOT_DISTURB, "bg-danger"],
+    ["Namaz", counts.NAMAZ, "bg-accent"],
     ["Offline", counts.OFFLINE, "bg-muted-foreground"],
   ];
   return (
@@ -37,8 +39,8 @@ export default function EmployeeTeamAvailability({
           </span>
         ))}
       </div>
-      <div className="mt-3 divide-y divide-border">
-        {people.slice(0, 5).map((person) => (
+      <div className="mt-3 max-h-[245px] overflow-y-auto overflow-x-hidden pr-1 [scrollbar-color:rgb(var(--border))_transparent] [scrollbar-width:thin]">
+        <div className="divide-y divide-border">{people.map((person) => (
           <div
             key={person.employeeId}
             className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 py-2.5"
@@ -50,6 +52,7 @@ export default function EmployeeTeamAvailability({
               <p className="truncate text-xs font-semibold">
                 {person.employeeName}
               </p>
+              {person.ongoingWorkTitle&&<p className="truncate text-[10px] text-primary-text">Working on: {person.ongoingWorkTitle}</p>}
               <p className="truncate text-[10px] text-muted-foreground">
                 Attendance:{" "}
                 {person.attendance === "CLOCKED_IN"
@@ -61,26 +64,8 @@ export default function EmployeeTeamAvailability({
             </div>
             <AvailabilityBadge status={person.availability} />
           </div>
-        ))}
+        ))}</div>
       </div>
-      {people.length > 5 && (
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          + {people.length - 5} more team members
-        </p>
-      )}
-      {activity.length > 0 && (
-        <div className="mt-auto border-t border-border pt-3">
-          <Link
-            to="/attendance"
-            className="text-[10px] font-semibold text-primary-text"
-          >
-            Recent activity
-          </Link>
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">
-            {activity[activity.length - 1]?.type?.replaceAll("_", " ")}
-          </p>
-        </div>
-      )}
     </section>
   );
 }

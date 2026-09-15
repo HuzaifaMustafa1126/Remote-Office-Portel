@@ -11,6 +11,7 @@ const statuses = [
   "DO_NOT_DISTURB",
   "ON_BREAK",
   "AWAY",
+  "NAMAZ",
   "OFFLINE",
 ];
 const dots = {
@@ -19,6 +20,7 @@ const dots = {
   DO_NOT_DISTURB: "bg-danger",
   ON_BREAK: "bg-warning",
   AWAY: "bg-warning/60",
+  NAMAZ: "bg-accent",
   OFFLINE: "bg-muted-foreground/50",
 };
 const relative = (value, now) => {
@@ -107,9 +109,9 @@ export default function LiveOfficeStatus({ data, connected = true }) {
               </button>
             ))}
           </div>
-          <div className="mt-4">
+          <div className="mt-4 max-h-[320px] overflow-y-auto overflow-x-hidden pr-1 [scrollbar-color:rgb(var(--border))_transparent] [scrollbar-width:thin]">
             {shown.length ? (
-              shown.slice(0, 6).map((employee, index) => (
+              shown.map((employee, index) => (
                 <div
                   key={employee.employeeId}
                   className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3 transition-colors duration-150 hover:bg-surface-secondary/45 ${index ? "border-t border-border/60" : ""}`}
@@ -121,6 +123,7 @@ export default function LiveOfficeStatus({ data, connected = true }) {
                     <p className="truncate text-sm font-semibold">
                       {employee.employeeName}
                     </p>
+                    {employee.ongoingWorkTitle&&<p className="mt-0.5 truncate text-[10px] text-primary-text">Working on: {employee.ongoingWorkTitle}</p>}
                     <p className="truncate text-[11px] text-muted-foreground">
                       {employee.jobTitle || employee.role} ·{" "}
                       {employee.department}

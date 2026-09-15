@@ -21,14 +21,18 @@ import {
 const select = `SELECT t.*,CONCAT(a.first_name,' ',a.last_name) assigneeName,CONCAT(c.first_name,' ',c.last_name) creatorName,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id) imageCount,(SELECT COUNT(*) FROM task_images ti WHERE ti.task_id=t.id AND ti.image_context='SUBMISSION') submissionImageCount,(SELECT reason FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) changeReason,(SELECT revision_due_at FROM task_change_requests cr WHERE cr.task_id=t.id ORDER BY cr.id DESC LIMIT 1) revisionDueAt,(SELECT COALESCE(SUM(CASE WHEN tws.state='ACTIVE' THEN GREATEST(0,TIMESTAMPDIFF(SECOND,tws.started_at,CURRENT_TIMESTAMP)) ELSE COALESCE(tws.duration_seconds,0) END),0) FROM task_work_sessions tws WHERE tws.task_id=t.id) timeSpentSeconds,(SELECT started_at FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ACTIVE' LIMIT 1) activeSessionStartedAt,(SELECT end_reason FROM task_work_sessions tws WHERE tws.task_id=t.id AND tws.state='ENDED' ORDER BY tws.ended_at DESC,tws.id DESC LIMIT 1) lastSessionEndReason,CURRENT_TIMESTAMP serverTime FROM tasks t LEFT JOIN employees a ON a.id=t.assignee_employee_id JOIN users cu ON cu.id=t.created_by LEFT JOIN employees c ON c.id=cu.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
-  const afterCommit=[];
-  c.afterCommit=afterCommit;
+  const afterCommit = [];
+  c.afterCommit = afterCommit;
   try {
     await c.beginTransaction();
     const out = await fn(c);
     await c.commit();
-    const deliveries=await Promise.allSettled(afterCommit.map(deliver=>deliver()));
-    for(const delivery of deliveries)if(delivery.status==="rejected")console.error("[TASK_NOTIFICATION]",delivery.reason);
+    const deliveries = await Promise.allSettled(
+      afterCommit.map((deliver) => deliver()),
+    );
+    for (const delivery of deliveries)
+      if (delivery.status === "rejected")
+        console.error("[TASK_NOTIFICATION]", delivery.reason);
     return out;
   } catch (e) {
     await c.rollback();
@@ -37,13 +41,43 @@ async function tx(fn) {
     c.release();
   }
 }
-const afterCommit=(c,deliver)=>c.afterCommit.push(deliver);
-const taskNotification=(eventType,actor,task,{title,message,recipientUserIds}={})=>notifyByPolicy(eventType,actor,{title,message,recipientUserIds,referenceType:"TASK",referenceId:Number(task.id),actionUrl:`/tasks?task=${task.id}`,eventKey:`${eventType}:${task.id}`,priority:["TASK_OVERDUE","TASK_CHANGES_REQUIRED"].includes(eventType)?"WARNING":"NORMAL"});
-async function eligibleOpenTaskUsers(){
-  const [users]=await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND e.status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN'))`);
-  const allowed=[];for(const user of users)if(await getEffectivePermission(user.id,"task.view_own"))allowed.push(Number(user.id));return allowed;
+const afterCommit = (c, deliver) => c.afterCommit.push(deliver);
+const taskNotification = (
+  eventType,
+  actor,
+  task,
+  { title, message, recipientUserIds, eventKey } = {},
+) =>
+  notifyByPolicy(eventType, actor, {
+    title,
+    message,
+    recipientUserIds,
+    referenceType: "TASK",
+    referenceId: Number(task.id),
+    actionUrl: `/tasks?task=${task.id}`,
+    eventKey: eventKey || `${eventType}:${task.id}`,
+    priority: ["TASK_OVERDUE", "TASK_CHANGES_REQUIRED"].includes(eventType)
+      ? "WARNING"
+      : "NORMAL",
+  });
+async function eligibleOpenTaskUsers() {
+  const [users] = await pool.execute(
+    `SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND e.status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN'))`,
+  );
+  const allowed = [];
+  for (const user of users)
+    if (await getEffectivePermission(user.id, "task.view_own"))
+      allowed.push(Number(user.id));
+  return allowed;
 }
-async function assigneeUserId(employeeId){if(!employeeId)return null;const[[user]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[employeeId]);return user?.id?Number(user.id):null;}
+async function assigneeUserId(employeeId) {
+  if (!employeeId) return null;
+  const [[user]] = await pool.execute(
+    "SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",
+    [employeeId],
+  );
+  return user?.id ? Number(user.id) : null;
+}
 const dbDate = (value) => (value ? new Date(value) : null);
 async function activity(
   c,
@@ -54,7 +88,7 @@ async function activity(
   newStatus,
   metadata = {},
 ) {
-  await c.execute(
+  const [result] = await c.execute(
     "INSERT INTO task_activities(task_id,event_type,actor_user_id,previous_status,new_status,metadata)VALUES(?,?,?,?,?,?)",
     [
       taskId,
@@ -65,6 +99,7 @@ async function activity(
       JSON.stringify(metadata),
     ],
   );
+  return Number(result.insertId);
 }
 async function audit(c, taskId, type, actor, description, metadata = {}) {
   await c.execute(
@@ -150,9 +185,35 @@ export async function create(data, actor) {
       `${data.title} was created as ${status}.`,
       { status },
     );
-    const created={id:r.insertId,status,title:data.title,assigneeEmployeeId:data.assigneeEmployeeId};
-    if(status==="OPEN")afterCommit(c,async()=>taskNotification("OPEN_TASK_CREATED",actor,created,{title:"New Open Task",message:`A new open task is available: “${data.title}”.`,recipientUserIds:await eligibleOpenTaskUsers()}));
-    if(status==="TO_DO"&&data.assigneeEmployeeId)afterCommit(c,async()=>{const[[recipient]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[data.assigneeEmployeeId]);return recipient&&taskNotification("TASK_ASSIGNED",actor,created,{title:"New Task Assigned",message:`You have been assigned: “${data.title}”.`,recipientUserIds:[recipient.id]})});
+    const created = {
+      id: r.insertId,
+      status,
+      title: data.title,
+      assigneeEmployeeId: data.assigneeEmployeeId,
+    };
+    if (status === "OPEN")
+      afterCommit(c, async () =>
+        taskNotification("OPEN_TASK_CREATED", actor, created, {
+          title: "New Open Task",
+          message: `A new open task is available: “${data.title}”.`,
+          recipientUserIds: await eligibleOpenTaskUsers(),
+        }),
+      );
+    if (status === "TO_DO" && data.assigneeEmployeeId)
+      afterCommit(c, async () => {
+        const [[recipient]] = await pool.execute(
+          "SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",
+          [data.assigneeEmployeeId],
+        );
+        return (
+          recipient &&
+          taskNotification("TASK_ASSIGNED", actor, created, {
+            title: "New Task Assigned",
+            message: `You have been assigned: “${data.title}”.`,
+            recipientUserIds: [recipient.id],
+          })
+        );
+      });
     return { id: r.insertId, status };
   });
 }
@@ -199,17 +260,32 @@ export async function list(filters, user) {
     `${select}${where.length ? " WHERE " + where.join(" AND ") : ""} ORDER BY FIELD(t.priority,'URGENT','HIGH','MEDIUM','LOW'),t.due_at IS NULL,t.due_at,t.id DESC`,
     params,
   );
-  return addUnread(rows.map((x) => ({
-    ...x,
-    overdue: isOverdue({
-      status: x.status,
-      dueAt: x.due_at,
-      submittedAt: x.submitted_at,
-      completedAt: x.completed_at,
-    }),
-  })),user.id);
+  return addUnread(
+    rows.map((x) => ({
+      ...x,
+      overdue: isOverdue({
+        status: x.status,
+        dueAt: x.due_at,
+        submittedAt: x.submitted_at,
+        completedAt: x.completed_at,
+      }),
+    })),
+    user.id,
+  );
 }
-async function addUnread(rows,userId){if(!rows.length)return rows;const ids=rows.map(x=>Number(x.id)),marks=ids.map(()=>"?").join(","),[counts]=await pool.execute(`SELECT a.task_id taskId,COUNT(*) unreadCount FROM task_activities a LEFT JOIN task_read_states r ON r.task_id=a.task_id AND r.user_id=? WHERE a.task_id IN(${marks}) AND COALESCE(a.actor_user_id,0)<>? AND a.created_at>COALESCE(r.last_read_at,'1970-01-01') GROUP BY a.task_id`,[userId,...ids,userId]);const byId=new Map(counts.map(x=>[Number(x.taskId),Number(x.unreadCount)]));return rows.map(x=>({...x,unreadCount:byId.get(Number(x.id))||0}));}
+async function addUnread(rows, userId) {
+  if (!rows.length) return rows;
+  const ids = rows.map((x) => Number(x.id)),
+    marks = ids.map(() => "?").join(","),
+    [counts] = await pool.execute(
+      `SELECT a.task_id taskId,COUNT(*) unreadCount FROM task_activities a LEFT JOIN task_read_states r ON r.task_id=a.task_id AND r.user_id=? WHERE a.task_id IN(${marks}) AND COALESCE(a.actor_user_id,0)<>? AND a.created_at>COALESCE(r.last_read_at,'1970-01-01') GROUP BY a.task_id`,
+      [userId, ...ids, userId],
+    );
+  const byId = new Map(
+    counts.map((x) => [Number(x.taskId), Number(x.unreadCount)]),
+  );
+  return rows.map((x) => ({ ...x, unreadCount: byId.get(Number(x.id)) || 0 }));
+}
 export async function get(id, user) {
   const [[task]] = await pool.execute(`${select} WHERE t.id=?`, [id]);
   if (!task) throw new ApiError(404, "Task not found");
@@ -299,7 +375,17 @@ export async function claim(id, user) {
     );
     await activity(c, id, "TASK_CLAIMED", user, "OPEN", "TO_DO");
     await audit(c, id, "TASK_CLAIMED", user, `${task.title} was claimed.`);
-    afterCommit(c,()=>taskNotification("TASK_CLAIMED",user,{id,title:task.title},{title:"Open Task Claimed",message:`${user.employee_name||"An employee"} claimed “${task.title}”.`}));
+    afterCommit(c, () =>
+      taskNotification(
+        "TASK_CLAIMED",
+        user,
+        { id, title: task.title },
+        {
+          title: "Open Task Claimed",
+          message: `${user.employee_name || "An employee"} claimed “${task.title}”.`,
+        },
+      ),
+    );
     return { id: Number(id), status: "TO_DO" };
   });
 }
@@ -337,12 +423,18 @@ export async function transition(id, data, user) {
       Number(task.assignee_employee_id) === Number(user.employee_id) &&
       data.status === "IN_PROGRESS" &&
       ["TO_DO", "CHANGES_REQUIRED", "IN_PROGRESS"].includes(task.status);
-    const resumingWork =
-      ownedWorkAction && task.status !== "TO_DO";
-    const resumingPausedWork =
-      ownedWorkAction && task.status === "IN_PROGRESS";
+    const ownedEmployeeTransition =
+      Number(task.assignee_employee_id) === Number(user.employee_id) &&
+      ((task.status === "TO_DO" && data.status === "IN_PROGRESS") ||
+        (task.status === "CHANGES_REQUIRED" && data.status === "IN_PROGRESS") ||
+        (task.status === "IN_PROGRESS" &&
+          ["IN_PROGRESS", "SUBMITTED_FOR_REVIEW", "COMPLETED"].includes(
+            data.status,
+          )));
+    const resumingWork = ownedWorkAction && task.status !== "TO_DO";
+    const resumingPausedWork = ownedWorkAction && task.status === "IN_PROGRESS";
     assertTransition(task.status, data.status, {
-      management: manage && !ownedWorkAction,
+      management: manage && !ownedEmployeeTransition,
       reviewRequired: Boolean(task.review_required),
     });
     if (data.status === "CHANGES_REQUIRED" && !data.reason)
@@ -379,7 +471,7 @@ export async function transition(id, data, user) {
       });
     }
     if (
-      !manage &&
+      (!manage || ownedEmployeeTransition) &&
       task.completion_image_required &&
       ["COMPLETED", "SUBMITTED_FOR_REVIEW"].includes(data.status)
     ) {
@@ -407,20 +499,40 @@ export async function transition(id, data, user) {
         "INSERT INTO task_change_requests(task_id,requested_by,reason,previous_due_at,revision_due_at)VALUES(?,?,?,?,?)",
         [id, user.id, data.reason, task.due_at, dbDate(data.revisionDueAt)],
       );
+    const submittedAt =
+      data.status === "SUBMITTED_FOR_REVIEW" ? new Date() : null;
+
+    const completedAt = data.status === "COMPLETED" ? new Date() : null;
+
+    const archivedAt = data.status === "ARCHIVED" ? new Date() : null;
+
     await c.execute(
-      `UPDATE tasks SET status=?,submitted_at=IF(?='SUBMITTED_FOR_REVIEW',CURRENT_TIMESTAMP,submitted_at),completed_at=IF(?='COMPLETED',CURRENT_TIMESTAMP,completed_at),archived_at=IF(?='ARCHIVED',CURRENT_TIMESTAMP,IF(?='COMPLETED',NULL,archived_at)),due_at=COALESCE(?,due_at),updated_by=? WHERE id=?`,
+      `UPDATE tasks
+   SET
+     status = ?,
+     submitted_at = COALESCE(?, submitted_at),
+     completed_at = COALESCE(?, completed_at),
+     archived_at = CASE
+       WHEN ? = 1 THEN ?
+       WHEN ? = 1 THEN NULL
+       ELSE archived_at
+     END,
+     due_at = COALESCE(?, due_at),
+     updated_by = ?
+   WHERE id = ?`,
       [
         data.status,
-        data.status,
-        data.status,
-        data.status,
-        data.status,
+        submittedAt,
+        completedAt,
+        data.status === "ARCHIVED" ? 1 : 0,
+        archivedAt,
+        data.status === "COMPLETED" ? 1 : 0,
         dbDate(data.revisionDueAt),
         user.id,
         id,
       ],
     );
-    await activity(
+    const transitionActivityId = await activity(
       c,
       id,
       resumingPausedWork ? "WORK_SESSION_RESUMED" : `TASK_${data.status}`,
@@ -444,13 +556,57 @@ export async function transition(id, data, user) {
         : `${task.title} changed from ${task.status} to ${data.status}.`,
       data,
     );
-    const eventType=task.status==="COMPLETED"&&data.status==="CHANGES_REQUIRED"?"TASK_REOPENED":resumingWork?"TASK_RESUMED":data.status==="IN_PROGRESS"?"TASK_STARTED":data.status==="SUBMITTED_FOR_REVIEW"?"TASK_SUBMITTED":data.status==="CHANGES_REQUIRED"?"TASK_CHANGES_REQUIRED":data.status==="COMPLETED"?"TASK_COMPLETED":null;
-    if(eventType)afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);const employeeEvent=["TASK_RESUMED","TASK_CHANGES_REQUIRED","TASK_REOPENED"].includes(eventType);return taskNotification(eventType,user,{id,title:task.title},{title:eventType==="TASK_COMPLETED"?"Task Completed":eventType==="TASK_CHANGES_REQUIRED"?"Changes Required":eventType==="TASK_REOPENED"?"Task Reopened":eventType==="TASK_SUBMITTED"?"Task Submitted for Review":eventType==="TASK_STARTED"?"Task Started":"Task Resumed",message:`${user.employee_name||"An employee"} ${eventType==="TASK_COMPLETED"?"completed":eventType==="TASK_SUBMITTED"?"submitted":eventType==="TASK_STARTED"?"started":eventType==="TASK_RESUMED"?"resumed":eventType==="TASK_REOPENED"?"reopened":"must revise"} “${task.title}”.`,recipientUserIds:employeeEvent&&recipient?[recipient]:undefined})});
+    const eventType =
+      task.status === "COMPLETED" && data.status === "CHANGES_REQUIRED"
+        ? "TASK_REOPENED"
+        : resumingWork
+          ? "TASK_RESUMED"
+          : data.status === "IN_PROGRESS"
+            ? "TASK_STARTED"
+            : data.status === "SUBMITTED_FOR_REVIEW"
+              ? "TASK_SUBMITTED"
+              : data.status === "CHANGES_REQUIRED"
+                ? "TASK_CHANGES_REQUIRED"
+                : data.status === "COMPLETED"
+                  ? "TASK_COMPLETED"
+                  : null;
+    if (eventType)
+      afterCommit(c, async () => {
+        const recipient = await assigneeUserId(task.assignee_employee_id);
+        const employeeEvent = [
+          "TASK_RESUMED",
+          "TASK_CHANGES_REQUIRED",
+          "TASK_REOPENED",
+        ].includes(eventType);
+        return taskNotification(
+          eventType,
+          user,
+          { id, title: task.title },
+          {
+            title:
+              eventType === "TASK_COMPLETED"
+                ? "Task Completed"
+                : eventType === "TASK_CHANGES_REQUIRED"
+                  ? "Changes Required"
+                  : eventType === "TASK_REOPENED"
+                    ? "Task Reopened"
+                    : eventType === "TASK_SUBMITTED"
+                      ? "Task Submitted for Review"
+                      : eventType === "TASK_STARTED"
+                        ? "Task Started"
+                        : "Task Resumed",
+            message: `${user.employee_name || "An employee"} ${eventType === "TASK_COMPLETED" ? "completed" : eventType === "TASK_SUBMITTED" ? "submitted" : eventType === "TASK_STARTED" ? "started" : eventType === "TASK_RESUMED" ? "resumed" : eventType === "TASK_REOPENED" ? "reopened" : "must revise"} “${task.title}”.`,
+            recipientUserIds:
+              employeeEvent && recipient ? [recipient] : undefined,
+            eventKey: `${eventType}:${id}:${transitionActivityId}`,
+          },
+        );
+      });
     return { id: Number(id), status: data.status };
   });
 }
 export async function addComment(id, data, user) {
-  const result=await tx(async (c) => {
+  const result = await tx(async (c) => {
     const [[task]] = await c.execute(
       "SELECT * FROM tasks WHERE id=? FOR UPDATE",
       [id],
@@ -462,34 +618,267 @@ export async function addComment(id, data, user) {
       Number(task.assignee_employee_id) !== Number(user.employee_id)
     )
       throw new ApiError(403, "You cannot comment on this task");
-    if(data.parentCommentId){const [[parent]]=await c.execute("SELECT id,parent_comment_id FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL",[data.parentCommentId,id]);if(!parent)throw new ApiError(404,"Comment not found");if(parent.parent_comment_id)throw new ApiError(400,"Replies can only be nested one level");}
+    if (data.parentCommentId) {
+      const [[parent]] = await c.execute(
+        "SELECT id,parent_comment_id FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL",
+        [data.parentCommentId, id],
+      );
+      if (!parent) throw new ApiError(404, "Comment not found");
+      if (parent.parent_comment_id)
+        throw new ApiError(400, "Replies can only be nested one level");
+    }
     const [r] = await c.execute(
       "INSERT INTO task_comments(task_id,author_user_id,parent_comment_id,content)VALUES(?,?,?,?)",
-      [id, user.id, data.parentCommentId||null, data.content],
+      [id, user.id, data.parentCommentId || null, data.content],
     );
     await activity(c, id, "COMMENT_ADDED", user, task.status, task.status, {
-      commentId: r.insertId,parentCommentId:data.parentCommentId||null,
+      commentId: r.insertId,
+      parentCommentId: data.parentCommentId || null,
     });
-    const recipients=new Set(data.mentionUserIds||[]);
-    if(task.created_by!==user.id)recipients.add(Number(task.created_by));
-    if(task.assignee_employee_id){const [[assignee]]=await c.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",[task.assignee_employee_id]);if(assignee?.id!==user.id)recipients.add(Number(assignee.id));}
-    if(data.parentCommentId){const [[parent]]=await c.execute("SELECT author_user_id id FROM task_comments WHERE id=?",[data.parentCommentId]);if(parent?.id!==user.id)recipients.add(Number(parent.id));}
-    const allowed=[];for(const recipient of recipients){if(!recipient||recipient===user.id)continue;const [[candidate]]=await c.execute("SELECT u.id FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id AND p.name='task.view_all' AND up.granted=TRUE) OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) LIMIT 1",[recipient,task.created_by,task.assignee_employee_id]);if(candidate)allowed.push(recipient);}
-    return {id:r.insertId,taskTitle:task.title,recipients:allowed,parentCommentId:data.parentCommentId||null,mentions:new Set(data.mentionUserIds||[])};
+    const recipients = new Set(data.mentionUserIds || []);
+    if (task.created_by !== user.id) recipients.add(Number(task.created_by));
+    if (task.assignee_employee_id) {
+      const [[assignee]] = await c.execute(
+        "SELECT id FROM users WHERE employee_id=? AND status='ACTIVE' LIMIT 1",
+        [task.assignee_employee_id],
+      );
+      if (assignee?.id !== user.id) recipients.add(Number(assignee.id));
+    }
+    if (data.parentCommentId) {
+      const [[parent]] = await c.execute(
+        "SELECT author_user_id id FROM task_comments WHERE id=?",
+        [data.parentCommentId],
+      );
+      if (parent?.id !== user.id) recipients.add(Number(parent.id));
+    }
+    const allowed = [];
+    for (const recipient of recipients) {
+      if (!recipient || recipient === user.id) continue;
+      const [[candidate]] = await c.execute(
+        "SELECT u.id FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=? AND u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id AND p.name='task.view_all' AND up.granted=TRUE) OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) LIMIT 1",
+        [recipient, task.created_by, task.assignee_employee_id],
+      );
+      if (candidate) allowed.push(recipient);
+    }
+    return {
+      id: r.insertId,
+      taskTitle: task.title,
+      recipients: allowed,
+      parentCommentId: data.parentCommentId || null,
+      mentions: new Set(data.mentionUserIds || []),
+    };
   });
-  await notifyByPolicy("TASK_COMMENT",user,{recipientUserIds:result.recipients,title:result.parentCommentId?"New task reply":"New task comment",message:`${user.employee_name||"Someone"} commented on “${result.taskTitle}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_COMMENT:${result.id}`});
-  return {id:result.id};
+  await notifyByPolicy("TASK_COMMENT", user, {
+    recipientUserIds: result.recipients,
+    title: result.parentCommentId ? "New task reply" : "New task comment",
+    message: `${user.employee_name || "Someone"} commented on “${result.taskTitle}”`,
+    referenceType: "TASK",
+    referenceId: Number(id),
+    actionUrl: `/tasks?task=${id}`,
+    eventKey: `TASK_COMMENT:${result.id}`,
+  });
+  return { id: result.id };
 }
 
-export async function editComment(taskId,commentId,content,user){return tx(async c=>{await assertTaskAccess(c,taskId,user);const [[row]]=await c.execute("SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[commentId,taskId]);if(!row)throw new ApiError(404,"Comment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(row.author_user_id)!==Number(user.id))throw new ApiError(403,"You cannot edit this comment");await c.execute("UPDATE task_comments SET content=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[content,commentId]);await activity(c,taskId,"COMMENT_EDITED",user,null,null,{commentId:Number(commentId)});return{id:Number(commentId)};});}
-export async function deleteComment(taskId,commentId,user){return tx(async c=>{await assertTaskAccess(c,taskId,user);const [[row]]=await c.execute("SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[commentId,taskId]);if(!row)throw new ApiError(404,"Comment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(row.author_user_id)!==Number(user.id))throw new ApiError(403,"You cannot delete this comment");await c.execute("UPDATE task_comments SET content='',deleted_at=CURRENT_TIMESTAMP WHERE id=?",[commentId]);await activity(c,taskId,"COMMENT_DELETED",user,null,null,{commentId:Number(commentId)});return{id:Number(commentId)};});}
+export async function editComment(taskId, commentId, content, user) {
+  return tx(async (c) => {
+    await assertTaskAccess(c, taskId, user);
+    const [[row]] = await c.execute(
+      "SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",
+      [commentId, taskId],
+    );
+    if (!row) throw new ApiError(404, "Comment not found");
+    const manage = await getEffectivePermission(user.id, "task.manage", c);
+    if (!manage && Number(row.author_user_id) !== Number(user.id))
+      throw new ApiError(403, "You cannot edit this comment");
+    await c.execute(
+      "UPDATE task_comments SET content=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      [content, commentId],
+    );
+    await activity(c, taskId, "COMMENT_EDITED", user, null, null, {
+      commentId: Number(commentId),
+    });
+    return { id: Number(commentId) };
+  });
+}
+export async function deleteComment(taskId, commentId, user) {
+  return tx(async (c) => {
+    await assertTaskAccess(c, taskId, user);
+    const [[row]] = await c.execute(
+      "SELECT * FROM task_comments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",
+      [commentId, taskId],
+    );
+    if (!row) throw new ApiError(404, "Comment not found");
+    const manage = await getEffectivePermission(user.id, "task.manage", c);
+    if (!manage && Number(row.author_user_id) !== Number(user.id))
+      throw new ApiError(403, "You cannot delete this comment");
+    await c.execute(
+      "UPDATE task_comments SET content='',deleted_at=CURRENT_TIMESTAMP WHERE id=?",
+      [commentId],
+    );
+    await activity(c, taskId, "COMMENT_DELETED", user, null, null, {
+      commentId: Number(commentId),
+    });
+    return { id: Number(commentId) };
+  });
+}
 
-async function assertTaskAccess(c,id,user){const [[task]]=await c.execute("SELECT * FROM tasks WHERE id=?",[id]);if(!task)throw new ApiError(404,"Task not found");const all=await getEffectivePermission(user.id,"task.view_all",c);if(!all&&Number(task.assignee_employee_id)!==Number(user.employee_id)&&!(task.assignment_type==='OPEN'&&task.status==='OPEN'))throw new ApiError(403,"You cannot view this task");return task;}
-export async function mentionableUsers(id,search,user){const c=await pool.getConnection();try{const task=await assertTaskAccess(c,id,user),params=[task.created_by,task.assignee_employee_id,`%${search}%`,`%${search}%`];const [rows]=await c.execute("SELECT DISTINCT u.id,CONCAT(e.first_name,' ',e.last_name) name,e.job_title jobTitle FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) AND (CONCAT(e.first_name,' ',e.last_name) LIKE ? OR e.job_title LIKE ?) ORDER BY name LIMIT 10",params);return rows;}finally{c.release();}}
-export async function markTaskRead(id,user){return tx(async c=>{await assertTaskAccess(c,id,user);await c.execute("INSERT INTO task_read_states(task_id,user_id,last_read_at)VALUES(?,?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE last_read_at=CURRENT_TIMESTAMP",[id,user.id]);return{id:Number(id),read:true};});}
-export async function uploadAttachment(id,file,buffer,user){const task=await tx(async c=>{const current=await assertTaskAccess(c,id,user);const folder=path.resolve(new URL(`../../uploads/tasks/${id}/attachments`,import.meta.url).pathname);await mkdir(folder,{recursive:true});const key=path.join(folder,`${randomUUID()}.${file.extension}`);await writeFile(key,buffer,{flag:"wx"});try{const[r]=await c.execute("INSERT INTO task_attachments(task_id,uploaded_by,storage_key,original_filename,mime_type,size_bytes)VALUES(?,?,?,?,?,?)",[id,user.id,key,file.originalFilename,file.mimeType,file.sizeBytes]);await activity(c,id,"ATTACHMENT_ADDED",user,current.status,current.status,{attachmentId:r.insertId,filename:file.originalFilename});return{id:r.insertId,title:current.title,creatorId:current.created_by,assigneeEmployeeId:current.assignee_employee_id};}catch(error){await unlink(key).catch(()=>{});throw error;}});const recipients=new Set([Number(task.creatorId)]);if(task.assigneeEmployeeId){const[[u]]=await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE'",[task.assigneeEmployeeId]);if(u)recipients.add(Number(u.id));}recipients.delete(Number(user.id));await Promise.allSettled([...recipients].map(userId=>notifyUser({userId,type:"TASK_ATTACHMENT_ADDED",title:"Task attachment added",message:`${file.originalFilename} was added to “${task.title}”`,referenceType:"TASK",referenceId:Number(id),actionUrl:`/tasks?task=${id}`,eventKey:`TASK_ATTACHMENT:${task.id}:${userId}`,delivery:{desktop:false,sound:false}})));return{id:task.id};}
-export async function getAttachmentContent(taskId,attachmentId,user){const c=await pool.getConnection();try{await assertTaskAccess(c,taskId,user);const[[file]]=await c.execute("SELECT storage_key,original_filename originalFilename,mime_type mimeType FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL",[attachmentId,taskId]);if(!file)throw new ApiError(404,"Attachment not found");return{...file,buffer:await readFile(file.storage_key)};}finally{c.release();}}
-export async function deleteAttachment(taskId,attachmentId,user){let key;await tx(async c=>{await assertTaskAccess(c,taskId,user);const[[file]]=await c.execute("SELECT * FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",[attachmentId,taskId]);if(!file)throw new ApiError(404,"Attachment not found");const manage=await getEffectivePermission(user.id,"task.manage",c);if(!manage&&Number(file.uploaded_by)!==Number(user.id))throw new ApiError(403,"You cannot delete this attachment");key=file.storage_key;await c.execute("UPDATE task_attachments SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",[attachmentId]);await activity(c,taskId,"ATTACHMENT_DELETED",user,null,null,{attachmentId:Number(attachmentId),filename:file.original_filename});});try{await unlink(key);}catch(error){await pool.execute("UPDATE task_attachments SET deleted_at=NULL WHERE id=?",[attachmentId]);throw new ApiError(500,"Unable to delete attachment safely");}return{id:Number(attachmentId)};}
+async function assertTaskAccess(c, id, user) {
+  const [[task]] = await c.execute("SELECT * FROM tasks WHERE id=?", [id]);
+  if (!task) throw new ApiError(404, "Task not found");
+  const all = await getEffectivePermission(user.id, "task.view_all", c);
+  if (
+    !all &&
+    Number(task.assignee_employee_id) !== Number(user.employee_id) &&
+    !(task.assignment_type === "OPEN" && task.status === "OPEN")
+  )
+    throw new ApiError(403, "You cannot view this task");
+  return task;
+}
+export async function mentionableUsers(id, search, user) {
+  const c = await pool.getConnection();
+  try {
+    const task = await assertTaskAccess(c, id, user),
+      params = [
+        task.created_by,
+        task.assignee_employee_id,
+        `%${search}%`,
+        `%${search}%`,
+      ];
+    const [rows] = await c.execute(
+      "SELECT DISTINCT u.id,CONCAT(e.first_name,' ',e.last_name) name,e.job_title jobTitle FROM users u LEFT JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND (u.id=? OR e.id=? OR EXISTS(SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id WHERE ur.user_id=u.id AND p.name='task.view_all')) AND (CONCAT(e.first_name,' ',e.last_name) LIKE ? OR e.job_title LIKE ?) ORDER BY name LIMIT 10",
+      params,
+    );
+    return rows;
+  } finally {
+    c.release();
+  }
+}
+export async function markTaskRead(id, user) {
+  return tx(async (c) => {
+    await assertTaskAccess(c, id, user);
+    await c.execute(
+      "INSERT INTO task_read_states(task_id,user_id,last_read_at)VALUES(?,?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE last_read_at=CURRENT_TIMESTAMP",
+      [id, user.id],
+    );
+    return { id: Number(id), read: true };
+  });
+}
+export async function uploadAttachment(id, file, buffer, user) {
+  const task = await tx(async (c) => {
+    const current = await assertTaskAccess(c, id, user);
+    const folder = path.resolve(
+      new URL(`../../uploads/tasks/${id}/attachments`, import.meta.url)
+        .pathname,
+    );
+    await mkdir(folder, { recursive: true });
+    const key = path.join(folder, `${randomUUID()}.${file.extension}`);
+    await writeFile(key, buffer, { flag: "wx" });
+    try {
+      const [r] = await c.execute(
+        "INSERT INTO task_attachments(task_id,uploaded_by,storage_key,original_filename,mime_type,size_bytes)VALUES(?,?,?,?,?,?)",
+        [
+          id,
+          user.id,
+          key,
+          file.originalFilename,
+          file.mimeType,
+          file.sizeBytes,
+        ],
+      );
+      await activity(
+        c,
+        id,
+        "ATTACHMENT_ADDED",
+        user,
+        current.status,
+        current.status,
+        { attachmentId: r.insertId, filename: file.originalFilename },
+      );
+      return {
+        id: r.insertId,
+        title: current.title,
+        creatorId: current.created_by,
+        assigneeEmployeeId: current.assignee_employee_id,
+      };
+    } catch (error) {
+      await unlink(key).catch(() => {});
+      throw error;
+    }
+  });
+  const recipients = new Set([Number(task.creatorId)]);
+  if (task.assigneeEmployeeId) {
+    const [[u]] = await pool.execute(
+      "SELECT id FROM users WHERE employee_id=? AND status='ACTIVE'",
+      [task.assigneeEmployeeId],
+    );
+    if (u) recipients.add(Number(u.id));
+  }
+  recipients.delete(Number(user.id));
+  await Promise.allSettled(
+    [...recipients].map((userId) =>
+      notifyUser({
+        userId,
+        type: "TASK_ATTACHMENT_ADDED",
+        title: "Task attachment added",
+        message: `${file.originalFilename} was added to “${task.title}”`,
+        referenceType: "TASK",
+        referenceId: Number(id),
+        actionUrl: `/tasks?task=${id}`,
+        eventKey: `TASK_ATTACHMENT:${task.id}:${userId}`,
+        delivery: { desktop: false, sound: false },
+      }),
+    ),
+  );
+  return { id: task.id };
+}
+export async function getAttachmentContent(taskId, attachmentId, user) {
+  const c = await pool.getConnection();
+  try {
+    await assertTaskAccess(c, taskId, user);
+    const [[file]] = await c.execute(
+      "SELECT storage_key,original_filename originalFilename,mime_type mimeType FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL",
+      [attachmentId, taskId],
+    );
+    if (!file) throw new ApiError(404, "Attachment not found");
+    return { ...file, buffer: await readFile(file.storage_key) };
+  } finally {
+    c.release();
+  }
+}
+export async function deleteAttachment(taskId, attachmentId, user) {
+  let key;
+  await tx(async (c) => {
+    await assertTaskAccess(c, taskId, user);
+    const [[file]] = await c.execute(
+      "SELECT * FROM task_attachments WHERE id=? AND task_id=? AND deleted_at IS NULL FOR UPDATE",
+      [attachmentId, taskId],
+    );
+    if (!file) throw new ApiError(404, "Attachment not found");
+    const manage = await getEffectivePermission(user.id, "task.manage", c);
+    if (!manage && Number(file.uploaded_by) !== Number(user.id))
+      throw new ApiError(403, "You cannot delete this attachment");
+    key = file.storage_key;
+    await c.execute(
+      "UPDATE task_attachments SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",
+      [attachmentId],
+    );
+    await activity(c, taskId, "ATTACHMENT_DELETED", user, null, null, {
+      attachmentId: Number(attachmentId),
+      filename: file.original_filename,
+    });
+  });
+  try {
+    await unlink(key);
+  } catch (error) {
+    await pool.execute(
+      "UPDATE task_attachments SET deleted_at=NULL WHERE id=?",
+      [attachmentId],
+    );
+    throw new ApiError(500, "Unable to delete attachment safely");
+  }
+  return { id: Number(attachmentId) };
+}
 export async function addImage(id, data, user) {
   return tx(async (c) => {
     const [[task]] = await c.execute(
@@ -595,6 +984,10 @@ export async function permanentlyDelete(id, user) {
           JSON.stringify({ title: task.title, status: task.status }),
         ],
       );
+      await c.execute(
+        "UPDATE notifications SET reference_id=NULL,action_url=NULL WHERE reference_type='TASK' AND reference_id=?",
+        [id],
+      );
       await c.execute("DELETE FROM tasks WHERE id=?", [id]);
       return { deleted: true };
     });
@@ -666,7 +1059,19 @@ export async function assign(id, data, user) {
       `${task.title} was reassigned.`,
       data,
     );
-    afterCommit(c,async()=>{const recipient=await assigneeUserId(data.employeeId);return taskNotification("TASK_REASSIGNED",user,{id,title:task.title},{title:"Task Assigned to You",message:`“${task.title}” has been reassigned to you.`,recipientUserIds:recipient?[recipient]:[]})});
+    afterCommit(c, async () => {
+      const recipient = await assigneeUserId(data.employeeId);
+      return taskNotification(
+        "TASK_REASSIGNED",
+        user,
+        { id, title: task.title },
+        {
+          title: "Task Assigned to You",
+          message: `“${task.title}” has been reassigned to you.`,
+          recipientUserIds: recipient ? [recipient] : [],
+        },
+      );
+    });
     return { id: Number(id), employeeId: data.employeeId, status: "TO_DO" };
   });
 }
@@ -776,8 +1181,35 @@ export async function update(id, data, user) {
       );
     }
     await activity(c, id, "TASK_UPDATED", user, task.status, task.status);
-    const updateEvent=data.priority!==undefined?"TASK_PRIORITY_CHANGED":data.dueAt!==undefined?"TASK_DEADLINE_CHANGED":"TASK_UPDATED";
-    afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification(updateEvent,user,{id,title:data.title||task.title},{title:updateEvent==="TASK_PRIORITY_CHANGED"?"Task Priority Changed":updateEvent==="TASK_DEADLINE_CHANGED"?"Task Deadline Updated":"Task Updated",message:updateEvent==="TASK_PRIORITY_CHANGED"?`“${data.title||task.title}” priority changed to ${data.priority}.`:updateEvent==="TASK_DEADLINE_CHANGED"?`The deadline for “${data.title||task.title}” has changed.`:`Details for “${data.title||task.title}” were updated.`,recipientUserIds:recipient?[recipient]:[]})});
+    const updateEvent =
+      data.priority !== undefined
+        ? "TASK_PRIORITY_CHANGED"
+        : data.dueAt !== undefined
+          ? "TASK_DEADLINE_CHANGED"
+          : "TASK_UPDATED";
+    afterCommit(c, async () => {
+      const recipient = await assigneeUserId(task.assignee_employee_id);
+      return taskNotification(
+        updateEvent,
+        user,
+        { id, title: data.title || task.title },
+        {
+          title:
+            updateEvent === "TASK_PRIORITY_CHANGED"
+              ? "Task Priority Changed"
+              : updateEvent === "TASK_DEADLINE_CHANGED"
+                ? "Task Deadline Updated"
+                : "Task Updated",
+          message:
+            updateEvent === "TASK_PRIORITY_CHANGED"
+              ? `“${data.title || task.title}” priority changed to ${data.priority}.`
+              : updateEvent === "TASK_DEADLINE_CHANGED"
+                ? `The deadline for “${data.title || task.title}” has changed.`
+                : `Details for “${data.title || task.title}” were updated.`,
+          recipientUserIds: recipient ? [recipient] : [],
+        },
+      );
+    });
     return { id: Number(id), status: task.status };
   });
 }
@@ -1038,20 +1470,55 @@ export async function publishDueScheduled() {
         "INSERT INTO task_activities(task_id,event_type,previous_status,new_status,metadata)VALUES(?,'TASK_AUTO_PUBLISHED','SCHEDULED',?,?)",
         [task.id, status, JSON.stringify({ scheduled: true })],
       );
-      const actor={id:task.created_by,employee_id:null};
-      if(status==="OPEN")afterCommit(c,async()=>taskNotification("OPEN_TASK_CREATED",actor,task,{title:"New Open Task",message:`A new open task is available: “${task.title}”.`,recipientUserIds:await eligibleOpenTaskUsers()}));
-      if(status==="TO_DO")afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification("TASK_ASSIGNED",actor,task,{title:"New Task Assigned",message:`You have been assigned: “${task.title}”.`,recipientUserIds:recipient?[recipient]:[]})});
+      const actor = { id: task.created_by, employee_id: null };
+      if (status === "OPEN")
+        afterCommit(c, async () =>
+          taskNotification("OPEN_TASK_CREATED", actor, task, {
+            title: "New Open Task",
+            message: `A new open task is available: “${task.title}”.`,
+            recipientUserIds: await eligibleOpenTaskUsers(),
+          }),
+        );
+      if (status === "TO_DO")
+        afterCommit(c, async () => {
+          const recipient = await assigneeUserId(task.assignee_employee_id);
+          return taskNotification("TASK_ASSIGNED", actor, task, {
+            title: "New Task Assigned",
+            message: `You have been assigned: “${task.title}”.`,
+            recipientUserIds: recipient ? [recipient] : [],
+          });
+        });
     }
     return rows.length;
   });
 }
-export async function sendTaskDeadlineNotifications(){
-  const [tasks]=await pool.execute(`SELECT id,title,assignee_employee_id,due_at FROM tasks WHERE assignee_employee_id IS NOT NULL AND due_at IS NOT NULL AND status NOT IN('COMPLETED','ARCHIVED','DRAFT','SCHEDULED') AND due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 2 HOUR)`);
-  let delivered=0;
-  for(const task of tasks){const recipient=await assigneeUserId(task.assignee_employee_id);if(!recipient)continue;const overdue=new Date(task.due_at)<new Date(),eventType=overdue?"TASK_OVERDUE":"TASK_DUE_SOON";const result=await taskNotification(eventType,{id:0,employee_id:null},task,{title:overdue?"Task Overdue":"Task Due Soon",message:overdue?`“${task.title}” is now overdue.`:`“${task.title}” is due within 2 hours.`,recipientUserIds:[recipient]});delivered+=result.filter(Boolean).length;}
+export async function sendTaskDeadlineNotifications() {
+  const [tasks] = await pool.execute(
+    `SELECT id,title,assignee_employee_id,due_at FROM tasks WHERE assignee_employee_id IS NOT NULL AND due_at IS NOT NULL AND status NOT IN('COMPLETED','ARCHIVED','DRAFT','SCHEDULED') AND due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 2 HOUR)`,
+  );
+  let delivered = 0;
+  for (const task of tasks) {
+    const recipient = await assigneeUserId(task.assignee_employee_id);
+    if (!recipient) continue;
+    const overdue = new Date(task.due_at) < new Date(),
+      eventType = overdue ? "TASK_OVERDUE" : "TASK_DUE_SOON";
+    const result = await taskNotification(
+      eventType,
+      { id: 0, employee_id: null },
+      task,
+      {
+        title: overdue ? "Task Overdue" : "Task Due Soon",
+        message: overdue
+          ? `“${task.title}” is now overdue.`
+          : `“${task.title}” is due within 2 hours.`,
+        recipientUserIds: [recipient],
+      },
+    );
+    delivered += result.filter(Boolean).length;
+  }
   return delivered;
 }
-export async function listManagement(filters,user) {
+export async function listManagement(filters, user) {
   const where = [],
     params = [];
   if (filters.search) {
@@ -1093,15 +1560,18 @@ export async function listManagement(filters,user) {
     [...params, filters.limit, offset],
   );
   return {
-    items: await addUnread(items.map((x) => ({
-      ...x,
-      overdue: isOverdue({
-        status: x.status,
-        dueAt: x.due_at,
-        submittedAt: x.submitted_at,
-        completedAt: x.completed_at,
-      }),
-    })),user.id),
+    items: await addUnread(
+      items.map((x) => ({
+        ...x,
+        overdue: isOverdue({
+          status: x.status,
+          dueAt: x.due_at,
+          submittedAt: x.submitted_at,
+          completedAt: x.completed_at,
+        }),
+      })),
+      user.id,
+    ),
     pagination: {
       page: filters.page,
       limit: filters.limit,
@@ -1150,7 +1620,19 @@ export async function changeDeadline(id, data, user) {
         reason: data.reason || null,
       },
     );
-    afterCommit(c,async()=>{const recipient=await assigneeUserId(task.assignee_employee_id);return taskNotification("TASK_DEADLINE_CHANGED",user,{id,title:task.title},{title:"Task Deadline Updated",message:`The deadline for “${task.title}” has changed.`,recipientUserIds:recipient?[recipient]:[]})});
+    afterCommit(c, async () => {
+      const recipient = await assigneeUserId(task.assignee_employee_id);
+      return taskNotification(
+        "TASK_DEADLINE_CHANGED",
+        user,
+        { id, title: task.title },
+        {
+          title: "Task Deadline Updated",
+          message: `The deadline for “${task.title}” has changed.`,
+          recipientUserIds: recipient ? [recipient] : [],
+        },
+      );
+    });
     return { id: Number(id), dueAt: data.dueAt };
   });
 }
@@ -1192,57 +1674,318 @@ export async function bulk(data, user) {
     results,
   };
 }
-function analyticsDates(filters){
-  const now=new Date(),local=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  if(filters.range==="CUSTOM")return {start:filters.startDate,end:filters.endDate};
-  let start=new Date(now),end=new Date(now);
-  if(filters.range==="7_DAYS")start.setDate(start.getDate()-6);
-  else if(filters.range==="30_DAYS")start.setDate(start.getDate()-29);
-  else if(filters.range==="3_MONTHS")start.setMonth(start.getMonth()-3);
-  else if(filters.range==="6_MONTHS")start.setMonth(start.getMonth()-6);
-  else if(filters.range==="12_MONTHS")start.setFullYear(start.getFullYear()-1);
-  else if(filters.range==="THIS_WEEK")start.setDate(start.getDate()-((start.getDay()+6)%7));
-  else if(filters.range==="THIS_MONTH")start=new Date(now.getFullYear(),now.getMonth(),1);
-  else if(filters.range==="LAST_MONTH"){start=new Date(now.getFullYear(),now.getMonth()-1,1);end=new Date(now.getFullYear(),now.getMonth(),0)}
-  else if(filters.range==="THIS_YEAR")start=new Date(now.getFullYear(),0,1);
-  return {start:local(start),end:local(end)};
+function analyticsDates(filters) {
+  const now = new Date(),
+    local = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  if (filters.range === "CUSTOM")
+    return { start: filters.startDate, end: filters.endDate };
+  let start = new Date(now),
+    end = new Date(now);
+  if (filters.range === "7_DAYS") start.setDate(start.getDate() - 6);
+  else if (filters.range === "30_DAYS") start.setDate(start.getDate() - 29);
+  else if (filters.range === "3_MONTHS") start.setMonth(start.getMonth() - 3);
+  else if (filters.range === "6_MONTHS") start.setMonth(start.getMonth() - 6);
+  else if (filters.range === "12_MONTHS")
+    start.setFullYear(start.getFullYear() - 1);
+  else if (filters.range === "THIS_WEEK")
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  else if (filters.range === "THIS_MONTH")
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (filters.range === "LAST_MONTH") {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    end = new Date(now.getFullYear(), now.getMonth(), 0);
+  } else if (filters.range === "THIS_YEAR")
+    start = new Date(now.getFullYear(), 0, 1);
+  return { start: local(start), end: local(end) };
 }
-export async function analytics(filters,user){
-  const all=await getEffectivePermission(user.id,"task.view_all");
-  if(!all&&filters.employeeId&&Number(filters.employeeId)!==Number(user.employee_id))throw new ApiError(403,"You cannot view another employee's analytics");
-  const period=analyticsDates(filters),employeeId=all?filters.employeeId:user.employee_id,scope=employeeId?" AND t.assignee_employee_id=?":"",params=[period.start,period.end,...(employeeId?[employeeId]:[])],eligible="t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')",overdue="t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED')",bucket=(new Date(period.end)-new Date(period.start)>100*86400000)?"DATE_FORMAT(%s,'%Y-%m-01')":"DATE(%s)";
-  const startDate=new Date(period.start+"T00:00:00"),endDate=new Date(period.end+"T00:00:00"),days=Math.round((endDate-startDate)/86400000)+1,previousEnd=new Date(startDate.getTime()-86400000),previousStart=new Date(previousEnd.getTime()-(days-1)*86400000),local=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,previous={start:local(previousStart),end:local(previousEnd)};
-  const summarySql=`SELECT COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status IN('OPEN','TO_DO','CHANGES_REQUIRED')) pending,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${overdue}) overdue,SUM(t.due_at>CURRENT_TIMESTAMP AND t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 7 DAY) AND ${eligible}) upcoming,SUM(DATE(t.due_at)=CURRENT_DATE AND ${eligible}) dueToday,SUM(DATE(t.due_at)=DATE_ADD(CURRENT_DATE,INTERVAL 1 DAY) AND ${eligible}) dueTomorrow,SUM(t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND ${eligible}) dueThisWeek,SUM(t.due_at>=DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 15 DAY) AND ${eligible}) dueNextWeek,SUM(${eligible}) eligible FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope}`;
-  const prioritySql=`SELECT t.priority,COUNT(*) total FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.priority`;
-  const employeeSql=`SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) name,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')) active,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND DATE(ca.due_at)=CURRENT_DATE) dueToday,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND ca.due_at>=CURRENT_TIMESTAMP AND ca.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) completionRate,ROUND(100*SUM(t.status='COMPLETED' AND(t.due_at IS NULL OR t.completed_at<=t.due_at))/NULLIF(SUM(t.status='COMPLETED'),0)) onTimeRate FROM tasks t JOIN employees e ON e.id=t.assignee_employee_id WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY e.id,e.first_name,e.last_name ORDER BY assigned DESC LIMIT 10`;
-  const projectSql=`SELECT IF(t.assignment_type='OPEN','Open Assignments','Direct Assignments') name,COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) progress FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.assignment_type ORDER BY total DESC`;
-  const createdSql=`SELECT ${bucket.replace("%s","t.created_at")} date,COUNT(*) value FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`;
-  const completedParams=[period.start,period.end,...(employeeId?[employeeId]:[])],completedSql=`SELECT ${bucket.replace("%s","t.completed_at")} date,COUNT(*) value FROM tasks t WHERE t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`,overdueSql=`SELECT ${bucket.replace("%s","t.due_at")} date,COUNT(*) value FROM tasks t WHERE t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)${scope} GROUP BY date ORDER BY date`;
-  const previousSql=`SELECT SUM(t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)) created,SUM(t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)) completed,SUM(t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)) overdue FROM tasks t WHERE 1=1${scope}`,previousParams=[previous.start,previous.end,previous.start,previous.end,previous.start,previous.end,...(employeeId?[employeeId]:[])];
-  const [[summary],[priorities],[employees],[projects],[created],[completed],[late],[previousRows]]=await Promise.all([pool.execute(summarySql,params),pool.execute(prioritySql,params),pool.execute(employeeSql,params),pool.execute(projectSql,params),pool.execute(createdSql,params),pool.execute(completedSql,completedParams),pool.execute(overdueSql,completedParams),pool.execute(previousSql,previousParams)]);
-  const points=new Map(),put=(rows,key)=>rows.forEach(x=>{const d=String(x.date).slice(0,10),v=points.get(d)||{date:d,created:0,completed:0,overdue:0};v[key]=Number(x.value);points.set(d,v)});put(created,"created");put(completed,"completed");put(late,"overdue");
-  const s=summary[0]||{},priority=Object.fromEntries(["URGENT","HIGH","MEDIUM","LOW"].map(x=>[x.toLowerCase(),Number(priorities.find(p=>p.priority===x)?.total||0)]));
-  const totals={created:created.reduce((n,x)=>n+Number(x.value),0),completed:completed.reduce((n,x)=>n+Number(x.value),0),overdue:late.reduce((n,x)=>n+Number(x.value),0)},prev=previousRows[0]||{},trend=(current,before)=>Number(before)?Math.round((current-Number(before))*1000/Number(before))/10:null;
-  return {period,scope:all?"TEAM":"PERSONAL",summary:{total:Number(s.total||0),completed:Number(s.completed||0),inProgress:Number(s.inProgress||0),pending:Number(s.pending||0),pendingApproval:Number(s.pendingApproval||0),overdue:Number(s.overdue||0),upcoming:Number(s.upcoming||0),dueToday:Number(s.dueToday||0),dueTomorrow:Number(s.dueTomorrow||0),dueThisWeek:Number(s.dueThisWeek||0),dueNextWeek:Number(s.dueNextWeek||0),completionRate:Number(s.eligible)?Math.round(100*Number(s.completed||0)/Number(s.eligible)):0},trends:{created:trend(totals.created,prev.created),completed:trend(totals.completed,prev.completed),overdue:trend(totals.overdue,prev.overdue)},activity:[...points.values()].sort((a,b)=>a.date.localeCompare(b.date)),priorities:priority,employees:all?employees.map(x=>({...x,assigned:Number(x.assigned),active:Number(x.active),dueToday:Number(x.dueToday),dueThisWeek:Number(x.dueThisWeek),workload:Number(x.active)<=3?'Low':Number(x.active)<=7?'Normal':Number(x.active)<=12?'High':'Heavy',completed:Number(x.completed),inProgress:Number(x.inProgress),overdue:Number(x.overdue),completionRate:Number(x.completionRate||0),onTimeRate:Number(x.onTimeRate||0)})):[],projects:projects.map(x=>({...x,total:Number(x.total),completed:Number(x.completed),inProgress:Number(x.inProgress),overdue:Number(x.overdue),progress:Number(x.progress||0) }))};
-}
-export async function employeePerformance(employeeId,filters,user){
-  const id=Number(employeeId),all=await getEffectivePermission(user.id,"task.view_all");
-  if(!all&&id!==Number(user.employee_id))throw new ApiError(403,"You can only view your own task performance");
-  const [[employee]]=await pool.execute(`SELECT e.id,CONCAT(e.first_name,' ',e.last_name) name,e.department,e.job_title jobTitle,e.employee_code employeeCode,GROUP_CONCAT(DISTINCT r.name ORDER BY r.name) roles FROM employees e LEFT JOIN users u ON u.employee_id=e.id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE e.id=? GROUP BY e.id`,[id]);
-  if(!employee)throw new ApiError(404,"Employee not found");
-  const period=analyticsDates(filters),range=[period.start,period.end,id],active="t.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",late="t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED') AND NOT(t.status='SUBMITTED_FOR_REVIEW' AND t.submitted_at<=t.due_at)",effective="COALESCE(t.submitted_at,t.completed_at)";
-  const summarySql=`SELECT COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${late}) overdue,SUM(t.status='CHANGES_REQUIRED') needsRevision,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}<=t.due_at) onTime,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}>t.due_at) completedLate,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL) timedCompleted FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND t.assignee_employee_id=? AND t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')`;
-  const workloadSql=`SELECT SUM(${active}) active,SUM(${active} AND t.priority='URGENT') urgent,SUM(${active} AND t.priority='HIGH') high,SUM(${active} AND DATE(t.due_at)=CURRENT_DATE) dueToday,SUM(${active} AND t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,SUM(${late}) overdue FROM tasks t WHERE t.assignee_employee_id=?`;
-  const listBase=`SELECT t.id,t.title,t.description,t.priority,t.status,t.assignment_type,t.due_at,t.completed_at,t.submitted_at,t.created_at,(SELECT MAX(h.created_at) FROM task_assignment_history h WHERE h.task_id=t.id AND h.new_employee_id=?) assignedAt FROM tasks t WHERE t.assignee_employee_id=?`;
-  const [summaryRows,workloadRows,activeRows,overdueRows,completedRows,atRiskRows,analyticsData,timelinessRows]=await Promise.all([
-    pool.execute(summarySql,range),pool.execute(workloadSql,[id]),
-    pool.execute(`${listBase} AND ${active} ORDER BY t.due_at IS NULL,t.due_at LIMIT 50`,[id,id]),
-    pool.execute(`${listBase} AND ${late} ORDER BY t.due_at LIMIT 50`,[id,id]),
-    pool.execute(`${listBase} AND t.status='COMPLETED' AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY) ORDER BY t.completed_at DESC LIMIT 50`,[id,id,period.start,period.end]),
-    pool.execute(`${listBase} AND ${active} AND(${late} OR(t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 48 HOUR) AND t.priority IN('URGENT','HIGH'))) ORDER BY t.due_at LIMIT 20`,[id,id]),
-    analytics({...filters,employeeId:id},user),
-    pool.execute(`SELECT SUM(DATE(${effective})<DATE(t.due_at)) early,SUM(DATE(${effective})=DATE(t.due_at)) onDueDate,SUM(${effective}>t.due_at) late FROM tasks t WHERE t.assignee_employee_id=? AND t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective} IS NOT NULL AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)`,[id,period.start,period.end])
+export async function analytics(filters, user) {
+  const all = await getEffectivePermission(user.id, "task.view_all");
+  if (
+    !all &&
+    filters.employeeId &&
+    Number(filters.employeeId) !== Number(user.employee_id)
+  )
+    throw new ApiError(403, "You cannot view another employee's analytics");
+  const period = analyticsDates(filters),
+    employeeId = all ? filters.employeeId : user.employee_id,
+    scope = employeeId ? " AND t.assignee_employee_id=?" : "",
+    params = [period.start, period.end, ...(employeeId ? [employeeId] : [])],
+    eligible = "t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')",
+    overdue =
+      "t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED')",
+    bucket =
+      new Date(period.end) - new Date(period.start) > 100 * 86400000
+        ? "DATE_FORMAT(%s,'%Y-%m-01')"
+        : "DATE(%s)";
+  const startDate = new Date(period.start + "T00:00:00"),
+    endDate = new Date(period.end + "T00:00:00"),
+    days = Math.round((endDate - startDate) / 86400000) + 1,
+    previousEnd = new Date(startDate.getTime() - 86400000),
+    previousStart = new Date(previousEnd.getTime() - (days - 1) * 86400000),
+    local = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    previous = { start: local(previousStart), end: local(previousEnd) };
+  const summarySql = `SELECT COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status IN('OPEN','TO_DO','CHANGES_REQUIRED')) pending,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${overdue}) overdue,SUM(t.due_at>CURRENT_TIMESTAMP AND t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 7 DAY) AND ${eligible}) upcoming,SUM(DATE(t.due_at)=CURRENT_DATE AND ${eligible}) dueToday,SUM(DATE(t.due_at)=DATE_ADD(CURRENT_DATE,INTERVAL 1 DAY) AND ${eligible}) dueTomorrow,SUM(t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND ${eligible}) dueThisWeek,SUM(t.due_at>=DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY) AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 15 DAY) AND ${eligible}) dueNextWeek,SUM(${eligible}) eligible FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope}`;
+  const prioritySql = `SELECT t.priority,COUNT(*) total FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.priority`;
+  const employeeSql = `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) name,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')) active,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND DATE(ca.due_at)=CURRENT_DATE) dueToday,(SELECT COUNT(*) FROM tasks ca WHERE ca.assignee_employee_id=e.id AND ca.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED') AND ca.due_at>=CURRENT_TIMESTAMP AND ca.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) completionRate,ROUND(100*SUM(t.status='COMPLETED' AND(t.due_at IS NULL OR t.completed_at<=t.due_at))/NULLIF(SUM(t.status='COMPLETED'),0)) onTimeRate FROM tasks t JOIN employees e ON e.id=t.assignee_employee_id WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY e.id,e.first_name,e.last_name ORDER BY assigned DESC LIMIT 10`;
+  const projectSql = `SELECT IF(t.assignment_type='OPEN','Open Assignments','Direct Assignments') name,COUNT(*) total,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(${overdue}) overdue,ROUND(100*SUM(t.status='COMPLETED')/NULLIF(COUNT(*),0)) progress FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND ${eligible}${scope} GROUP BY t.assignment_type ORDER BY total DESC`;
+  const createdSql = `SELECT ${bucket.replace("%s", "t.created_at")} date,COUNT(*) value FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`;
+  const completedParams = [
+      period.start,
+      period.end,
+      ...(employeeId ? [employeeId] : []),
+    ],
+    completedSql = `SELECT ${bucket.replace("%s", "t.completed_at")} date,COUNT(*) value FROM tasks t WHERE t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)${scope} GROUP BY date ORDER BY date`,
+    overdueSql = `SELECT ${bucket.replace("%s", "t.due_at")} date,COUNT(*) value FROM tasks t WHERE t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)${scope} GROUP BY date ORDER BY date`;
+  const previousSql = `SELECT SUM(t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)) created,SUM(t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)) completed,SUM(t.due_at>=? AND t.due_at<DATE_ADD(?,INTERVAL 1 DAY) AND(t.completed_at IS NULL OR t.completed_at>t.due_at)) overdue FROM tasks t WHERE 1=1${scope}`,
+    previousParams = [
+      previous.start,
+      previous.end,
+      previous.start,
+      previous.end,
+      previous.start,
+      previous.end,
+      ...(employeeId ? [employeeId] : []),
+    ];
+  const [
+    [summary],
+    [priorities],
+    [employees],
+    [projects],
+    [created],
+    [completed],
+    [late],
+    [previousRows],
+  ] = await Promise.all([
+    pool.execute(summarySql, params),
+    pool.execute(prioritySql, params),
+    pool.execute(employeeSql, params),
+    pool.execute(projectSql, params),
+    pool.execute(createdSql, params),
+    pool.execute(completedSql, completedParams),
+    pool.execute(overdueSql, completedParams),
+    pool.execute(previousSql, previousParams),
   ]);
-  const s=summaryRows[0][0]||{},w=workloadRows[0][0]||{},activeCount=Number(w.active||0),level=activeCount<=3?"Low":activeCount<=7?"Normal":activeCount<=12?"High":"Heavy",map=x=>({...x,overdue:isOverdue({status:x.status,dueAt:x.due_at,submittedAt:x.submitted_at,completedAt:x.completed_at}),progress:{TO_DO:10,IN_PROGRESS:55,SUBMITTED_FOR_REVIEW:85,CHANGES_REQUIRED:65,COMPLETED:100}[x.status]||0});
-  return {employee:{...employee,roles:String(employee.roles||"").split(",").filter(Boolean)},period,summary:{assigned:Number(s.assigned||0),completed:Number(s.completed||0),inProgress:Number(s.inProgress||0),pendingApproval:Number(s.pendingApproval||0),overdue:Number(s.overdue||0),needsRevision:Number(s.needsRevision||0),completionRate:Number(s.assigned)?Math.round(Number(s.completed||0)*1000/Number(s.assigned))/10:0,onTimeRate:Number(s.timedCompleted)?Math.round(Number(s.onTime||0)*1000/Number(s.timedCompleted))/10:0,onTime:Number(s.onTime||0),late:Number(s.completedLate||0)},workload:{active:activeCount,urgent:Number(w.urgent||0),high:Number(w.high||0),dueToday:Number(w.dueToday||0),dueThisWeek:Number(w.dueThisWeek||0),overdue:Number(w.overdue||0),level},activeTasks:activeRows[0].map(map),overdueTasks:overdueRows[0].map(map),completionHistory:completedRows[0].map(map),atRisk:atRiskRows[0].map(map),timeliness:Object.fromEntries(Object.entries(timelinessRows[0][0]||{}).map(([k,v])=>[k,Number(v||0)])),analytics:analyticsData};
+  const points = new Map(),
+    put = (rows, key) =>
+      rows.forEach((x) => {
+        const d = String(x.date).slice(0, 10),
+          v = points.get(d) || {
+            date: d,
+            created: 0,
+            completed: 0,
+            overdue: 0,
+          };
+        v[key] = Number(x.value);
+        points.set(d, v);
+      });
+  put(created, "created");
+  put(completed, "completed");
+  put(late, "overdue");
+  const s = summary[0] || {},
+    priority = Object.fromEntries(
+      ["URGENT", "HIGH", "MEDIUM", "LOW"].map((x) => [
+        x.toLowerCase(),
+        Number(priorities.find((p) => p.priority === x)?.total || 0),
+      ]),
+    );
+  const totals = {
+      created: created.reduce((n, x) => n + Number(x.value), 0),
+      completed: completed.reduce((n, x) => n + Number(x.value), 0),
+      overdue: late.reduce((n, x) => n + Number(x.value), 0),
+    },
+    prev = previousRows[0] || {},
+    trend = (current, before) =>
+      Number(before)
+        ? Math.round(((current - Number(before)) * 1000) / Number(before)) / 10
+        : null;
+  return {
+    period,
+    scope: all ? "TEAM" : "PERSONAL",
+    summary: {
+      total: Number(s.total || 0),
+      completed: Number(s.completed || 0),
+      inProgress: Number(s.inProgress || 0),
+      pending: Number(s.pending || 0),
+      pendingApproval: Number(s.pendingApproval || 0),
+      overdue: Number(s.overdue || 0),
+      upcoming: Number(s.upcoming || 0),
+      dueToday: Number(s.dueToday || 0),
+      dueTomorrow: Number(s.dueTomorrow || 0),
+      dueThisWeek: Number(s.dueThisWeek || 0),
+      dueNextWeek: Number(s.dueNextWeek || 0),
+      completionRate: Number(s.eligible)
+        ? Math.round((100 * Number(s.completed || 0)) / Number(s.eligible))
+        : 0,
+    },
+    trends: {
+      created: trend(totals.created, prev.created),
+      completed: trend(totals.completed, prev.completed),
+      overdue: trend(totals.overdue, prev.overdue),
+    },
+    activity: [...points.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    priorities: priority,
+    employees: all
+      ? employees.map((x) => ({
+          ...x,
+          assigned: Number(x.assigned),
+          active: Number(x.active),
+          dueToday: Number(x.dueToday),
+          dueThisWeek: Number(x.dueThisWeek),
+          workload:
+            Number(x.active) <= 3
+              ? "Low"
+              : Number(x.active) <= 7
+                ? "Normal"
+                : Number(x.active) <= 12
+                  ? "High"
+                  : "Heavy",
+          completed: Number(x.completed),
+          inProgress: Number(x.inProgress),
+          overdue: Number(x.overdue),
+          completionRate: Number(x.completionRate || 0),
+          onTimeRate: Number(x.onTimeRate || 0),
+        }))
+      : [],
+    projects: projects.map((x) => ({
+      ...x,
+      total: Number(x.total),
+      completed: Number(x.completed),
+      inProgress: Number(x.inProgress),
+      overdue: Number(x.overdue),
+      progress: Number(x.progress || 0),
+    })),
+  };
+}
+export async function employeePerformance(employeeId, filters, user) {
+  const id = Number(employeeId),
+    all = await getEffectivePermission(user.id, "task.view_all");
+  if (!all && id !== Number(user.employee_id))
+    throw new ApiError(403, "You can only view your own task performance");
+  const [[employee]] = await pool.execute(
+    `SELECT e.id,CONCAT(e.first_name,' ',e.last_name) name,e.department,e.job_title jobTitle,e.employee_code employeeCode,GROUP_CONCAT(DISTINCT r.name ORDER BY r.name) roles FROM employees e LEFT JOIN users u ON u.employee_id=e.id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE e.id=? GROUP BY e.id`,
+    [id],
+  );
+  if (!employee) throw new ApiError(404, "Employee not found");
+  const period = analyticsDates(filters),
+    range = [period.start, period.end, id],
+    active =
+      "t.status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",
+    late =
+      "t.due_at<CURRENT_TIMESTAMP AND t.status NOT IN('COMPLETED','ARCHIVED') AND NOT(t.status='SUBMITTED_FOR_REVIEW' AND t.submitted_at<=t.due_at)",
+    effective = "COALESCE(t.submitted_at,t.completed_at)";
+  const summarySql = `SELECT COUNT(*) assigned,SUM(t.status='COMPLETED') completed,SUM(t.status='IN_PROGRESS') inProgress,SUM(t.status='SUBMITTED_FOR_REVIEW') pendingApproval,SUM(${late}) overdue,SUM(t.status='CHANGES_REQUIRED') needsRevision,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}<=t.due_at) onTime,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective}>t.due_at) completedLate,SUM(t.status='COMPLETED' AND t.due_at IS NOT NULL) timedCompleted FROM tasks t WHERE t.created_at>=? AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY) AND t.assignee_employee_id=? AND t.status NOT IN('DRAFT','SCHEDULED','ARCHIVED')`;
+  const workloadSql = `SELECT SUM(${active}) active,SUM(${active} AND t.priority='URGENT') urgent,SUM(${active} AND t.priority='HIGH') high,SUM(${active} AND DATE(t.due_at)=CURRENT_DATE) dueToday,SUM(${active} AND t.due_at>=CURRENT_TIMESTAMP AND t.due_at<DATE_ADD(CURRENT_DATE,INTERVAL 8 DAY)) dueThisWeek,SUM(${late}) overdue FROM tasks t WHERE t.assignee_employee_id=?`;
+  const listBase = `SELECT t.id,t.title,t.description,t.priority,t.status,t.assignment_type,t.due_at,t.completed_at,t.submitted_at,t.created_at,(SELECT MAX(h.created_at) FROM task_assignment_history h WHERE h.task_id=t.id AND h.new_employee_id=?) assignedAt FROM tasks t WHERE t.assignee_employee_id=?`;
+  const [
+    summaryRows,
+    workloadRows,
+    activeRows,
+    overdueRows,
+    completedRows,
+    atRiskRows,
+    analyticsData,
+    timelinessRows,
+  ] = await Promise.all([
+    pool.execute(summarySql, range),
+    pool.execute(workloadSql, [id]),
+    pool.execute(
+      `${listBase} AND ${active} ORDER BY t.due_at IS NULL,t.due_at LIMIT 50`,
+      [id, id],
+    ),
+    pool.execute(`${listBase} AND ${late} ORDER BY t.due_at LIMIT 50`, [
+      id,
+      id,
+    ]),
+    pool.execute(
+      `${listBase} AND t.status='COMPLETED' AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY) ORDER BY t.completed_at DESC LIMIT 50`,
+      [id, id, period.start, period.end],
+    ),
+    pool.execute(
+      `${listBase} AND ${active} AND(${late} OR(t.due_at<=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 48 HOUR) AND t.priority IN('URGENT','HIGH'))) ORDER BY t.due_at LIMIT 20`,
+      [id, id],
+    ),
+    analytics({ ...filters, employeeId: id }, user),
+    pool.execute(
+      `SELECT SUM(DATE(${effective})<DATE(t.due_at)) early,SUM(DATE(${effective})=DATE(t.due_at)) onDueDate,SUM(${effective}>t.due_at) late FROM tasks t WHERE t.assignee_employee_id=? AND t.status='COMPLETED' AND t.due_at IS NOT NULL AND ${effective} IS NOT NULL AND t.completed_at>=? AND t.completed_at<DATE_ADD(?,INTERVAL 1 DAY)`,
+      [id, period.start, period.end],
+    ),
+  ]);
+  const s = summaryRows[0][0] || {},
+    w = workloadRows[0][0] || {},
+    activeCount = Number(w.active || 0),
+    level =
+      activeCount <= 3
+        ? "Low"
+        : activeCount <= 7
+          ? "Normal"
+          : activeCount <= 12
+            ? "High"
+            : "Heavy",
+    map = (x) => ({
+      ...x,
+      overdue: isOverdue({
+        status: x.status,
+        dueAt: x.due_at,
+        submittedAt: x.submitted_at,
+        completedAt: x.completed_at,
+      }),
+      progress:
+        {
+          TO_DO: 10,
+          IN_PROGRESS: 55,
+          SUBMITTED_FOR_REVIEW: 85,
+          CHANGES_REQUIRED: 65,
+          COMPLETED: 100,
+        }[x.status] || 0,
+    });
+  return {
+    employee: {
+      ...employee,
+      roles: String(employee.roles || "")
+        .split(",")
+        .filter(Boolean),
+    },
+    period,
+    summary: {
+      assigned: Number(s.assigned || 0),
+      completed: Number(s.completed || 0),
+      inProgress: Number(s.inProgress || 0),
+      pendingApproval: Number(s.pendingApproval || 0),
+      overdue: Number(s.overdue || 0),
+      needsRevision: Number(s.needsRevision || 0),
+      completionRate: Number(s.assigned)
+        ? Math.round((Number(s.completed || 0) * 1000) / Number(s.assigned)) /
+          10
+        : 0,
+      onTimeRate: Number(s.timedCompleted)
+        ? Math.round(
+            (Number(s.onTime || 0) * 1000) / Number(s.timedCompleted),
+          ) / 10
+        : 0,
+      onTime: Number(s.onTime || 0),
+      late: Number(s.completedLate || 0),
+    },
+    workload: {
+      active: activeCount,
+      urgent: Number(w.urgent || 0),
+      high: Number(w.high || 0),
+      dueToday: Number(w.dueToday || 0),
+      dueThisWeek: Number(w.dueThisWeek || 0),
+      overdue: Number(w.overdue || 0),
+      level,
+    },
+    activeTasks: activeRows[0].map(map),
+    overdueTasks: overdueRows[0].map(map),
+    completionHistory: completedRows[0].map(map),
+    atRisk: atRiskRows[0].map(map),
+    timeliness: Object.fromEntries(
+      Object.entries(timelinessRows[0][0] || {}).map(([k, v]) => [
+        k,
+        Number(v || 0),
+      ]),
+    ),
+    analytics: analyticsData,
+  };
 }

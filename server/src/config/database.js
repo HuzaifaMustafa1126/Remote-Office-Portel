@@ -19,7 +19,7 @@ const pool = mysql.createPool({
 // Shift times and work dates are Pakistan local time. Set the SQL session too:
 // the driver's timezone option alone does not affect NOW() or TIMESTAMP reads.
 pool.on("connection", (connection) => {
-  connection.query("SET SESSION time_zone = '+05:00'", (error) => {
+  connection.query("SET SESSION time_zone = '+05:00', collation_connection = 'utf8mb4_unicode_ci'", (error) => {
     if (error) connection.destroy();
   });
 });

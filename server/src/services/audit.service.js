@@ -85,6 +85,13 @@ const categories = {
     "TASK_DELETED",
     "TASK_SETTINGS_UPDATED",
   ],
+  notes: [
+    "NOTE_CREATED",
+    "NOTE_UPDATED",
+    "NOTE_ARCHIVED",
+    "NOTE_DELETED",
+    "NOTE_MARKED_IMPORTANT",
+  ],
 };
 export async function searchAuditLogs(filters = {}) {
   const where = [],

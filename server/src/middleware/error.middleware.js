@@ -11,13 +11,18 @@ export function errorHandler(err, req, res, next) {
     if (status === 500)
       message = req.path.includes("attendance")
         ? "Unable to load attendance records"
-        : "Unable to complete the database request";
+        : req.path.includes("tasks")
+          ? "Unable to update task. Please try again."
+          : "Unable to complete the database request";
   }
   if (status === 500)
     console.error({
       timestamp: new Date().toISOString(),
       method: req.method,
       endpoint: req.originalUrl,
+      userId: req.user?.id,
+      employeeId: req.user?.employee_id,
+      taskId: req.params?.id,
       status,
       errorCode: err.code,
       sqlMessage: err.sqlMessage,

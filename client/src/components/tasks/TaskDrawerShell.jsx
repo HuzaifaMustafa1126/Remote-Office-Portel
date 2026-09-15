@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { listNotes } from "../../services/note.service";
 import {
   ChevronLeft,
   ChevronRight,
@@ -77,7 +79,8 @@ export default function TaskDrawerShell({
     [replyTo, setReplyTo] = useState(null),
     [mentionIds, setMentionIds] = useState([]),
     [mentionable, setMentionable] = useState([]),
-    [uploading, setUploading] = useState(0);
+    [uploading, setUploading] = useState(0),
+    [workNotes, setWorkNotes] = useState([]);
   const load = useCallback(async () => {
     if (!task) return;
     setLoading(true);
@@ -85,6 +88,11 @@ export default function TaskDrawerShell({
     try {
       const detail = await getTask(task.id);
       setData(detail);
+      if (detail.status === "COMPLETED")
+        listNotes({ relatedTaskId: detail.id, page: 1, limit: 10 })
+          .then((result) => setWorkNotes(result.rows || []))
+          .catch(() => setWorkNotes([]));
+      else setWorkNotes([]);
       markTaskRead(task.id).catch(() => {});
     } catch (e) {
       setError(e.response?.data?.message || "Unable to load task details.");
@@ -279,6 +287,24 @@ export default function TaskDrawerShell({
                 userId={user?.id}
                 management={management}
               />
+              {data.status === "COMPLETED" && (
+                <Block title="Work Notes">
+                  {workNotes.length ? (
+                    <div className="divide-y divide-border">
+                      {workNotes.map((note) => (
+                        <Link key={note.id} to={`/notes/${note.id}`} className="block py-3">
+                          <p className="text-sm font-semibold">{note.title}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{note.summary}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{note.authorName} · {date(note.createdAt)}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-muted-foreground">No work note has been added for this task.</p>}
+                  <Link to={`/notes?task=${data.id}`} className="mt-3 inline-block rounded-lg border border-border px-3 py-2 text-xs font-bold">
+                    {workNotes.length ? "Add Another Note" : "Add Work Note"}
+                  </Link>
+                </Block>
+              )}
               <Comments
                 items={data.comments}
                 value={comment}
@@ -913,7 +939,7 @@ function DrawerActions({ task, management, onAction, busy }) {
       : [["resume", "Resume Task"]];
   else if (!management && task.status === "CHANGES_REQUIRED")
     actions = [["resume", "Resume Work"]];
-  if (!actions.length) return null;
+  if (!actions.length && task.status !== "COMPLETED") return null;
   return (
     <footer className="sticky bottom-0 flex shrink-0 justify-end gap-2 border-t border-border bg-surface p-4">
       {actions.map(([type, label]) => (

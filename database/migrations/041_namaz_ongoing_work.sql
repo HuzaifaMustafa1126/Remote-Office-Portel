@@ -1,0 +1,16 @@
+ALTER TABLE employee_availability_preferences
+  MODIFY manual_status ENUM('AWAY','DO_NOT_DISTURB','IN_MEETING','NAMAZ') NOT NULL;
+
+CREATE TABLE IF NOT EXISTS ongoing_work (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  employee_id BIGINT UNSIGNED NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  description VARCHAR(1000) NULL,
+  status ENUM('ONGOING','PAUSED','COMPLETED') NOT NULL DEFAULT 'ONGOING',
+  started_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  INDEX idx_ongoing_work_employee_status(employee_id,status,updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

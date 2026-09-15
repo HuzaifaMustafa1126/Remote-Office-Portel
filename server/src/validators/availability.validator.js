@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const setAvailabilitySchema = z.object({
-  status: z.enum(["AWAY", "DO_NOT_DISTURB", "IN_MEETING"]),
+  status: z.enum(["AWAY", "DO_NOT_DISTURB", "IN_MEETING", "NAMAZ"]),
   until: z.preprocess(
     (value) => (value === "" || value === null ? undefined : value),
     z.string().datetime({ offset: true }).optional(),

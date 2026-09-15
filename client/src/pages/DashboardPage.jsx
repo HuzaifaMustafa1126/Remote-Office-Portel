@@ -18,6 +18,7 @@ import EmployeeDashboardSidebar from "../components/dashboard/EmployeeDashboardS
 import EmployeeSalaryOverview from "../components/dashboard/EmployeeSalaryOverview";
 import EmployeeMyTasks from "../components/dashboard/EmployeeMyTasks";
 import EmployeeTeamAvailability from "../components/dashboard/EmployeeTeamAvailability";
+import EmployeeOngoingWork from "../components/dashboard/EmployeeOngoingWork";
 import LiveActivityFeed from "../components/attendance/LiveActivityFeed";
 import LiveOfficeStatus from "../components/attendance/LiveOfficeStatus";
 import LiveWorkTimer from "../components/attendance/LiveWorkTimer";
@@ -321,6 +322,8 @@ export default function DashboardPage() {
     canViewLeaves = usePermission(P.LEAVE_ALL);
   const own = useAttendance({ enabled: canClock }),
     [live, setLive] = useState(null),
+    [managerLoading, setManagerLoading] = useState(canViewAll),
+    [managerError, setManagerError] = useState(""),
     [teamAvailability, setTeamAvailability] = useState(null),
     [activity, setActivity] = useState([]),
     [teamLeave, setTeamLeave] = useState([]),
@@ -377,15 +380,24 @@ export default function DashboardPage() {
     }
     if (canViewLeaves)
       tasks.push(getLeaves({ status: "PENDING" }).then(setPendingLeaves));
-    if (canViewAll)
+    if (canViewAll) {
+      setManagerLoading(true);
+      setManagerError("");
       tasks.push(
         Promise.all([attendance.getLive(), attendance.getActivity()]).then(
           ([office, events]) => {
             setLive(office);
             setActivity(events);
           },
-        ),
+        ).catch((error) => {
+          setManagerError(
+            error.response?.data?.message ||
+              "Unable to load the management dashboard.",
+          );
+          throw error;
+        }).finally(() => setManagerLoading(false)),
       );
+    }
     const results = await Promise.allSettled(tasks);
     if (results.length && results.every((r) => r.status === "rejected"))
       throw results[0].reason;
@@ -443,6 +455,7 @@ export default function DashboardPage() {
           [
             "AVAILABILITY_CHANGED",
             "BREAK_CHANGED",
+            "ONGOING_WORK_CHANGED",
             "CONNECTION_RESTORED",
           ].includes(event?.type)
         )
@@ -553,6 +566,7 @@ export default function DashboardPage() {
               />
             )}
           </div>
+          <EmployeeOngoingWork />
           <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
             <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar
@@ -563,11 +577,21 @@ export default function DashboardPage() {
           {canViewSalary && <EmployeeSalaryOverview data={salaryAccrual} />}
         </div>
       )}
-      {canViewAll && !live && (
+      {canViewAll && managerLoading && !live && (
+        <div className="grid min-h-[360px] place-items-center rounded-2xl border border-border bg-surface">
+          <div className="text-center">
+            <Loader />
+            <p className="text-sm text-muted-foreground">
+              Loading management dashboard…
+            </p>
+          </div>
+        </div>
+      )}
+      {canViewAll && !managerLoading && !live && (
         <div className="grid min-h-[360px] place-items-center rounded-2xl border border-border bg-surface">
           <div className="text-center">
             <p className="text-sm font-semibold">
-              Unable to load the management dashboard.
+              {managerError || "Unable to load the management dashboard."}
             </p>
             <button
               onClick={auto.refresh}

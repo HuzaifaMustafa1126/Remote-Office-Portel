@@ -5,13 +5,25 @@ import Header from "./Header";
 import NotificationToasts from "../components/notifications/NotificationToasts";
 import useAuth from "../hooks/useAuth";
 export default function AppLayout() {
-  const { connectionLost } = useAuth();
+  const { connectionLost, user } = useAuth();
   const [open, setOpen] = useState(false),
-    [refreshKey, setRefreshKey] = useState(0);
+    [refreshKey, setRefreshKey] = useState(0),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+      localStorage.getItem(`remoteOffice.sidebarCollapsed.${user?.id || "account"}`) === "true",
+    );
+  const toggleSidebar = () =>
+    setSidebarCollapsed((value) => {
+      const next = !value;
+      localStorage.setItem(
+        `remoteOffice.sidebarCollapsed.${user?.id || "account"}`,
+        String(next),
+      );
+      return next;
+    });
   return (
     <div>
-      <Sidebar open={open} onClose={() => setOpen(false)} />
-      <div className="min-h-screen min-w-0 lg:pl-64">
+      <Sidebar open={open} onClose={() => setOpen(false)} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+      <div className={`min-h-screen min-w-0 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
         {connectionLost && (
           <div
             role="status"
