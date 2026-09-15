@@ -47,7 +47,10 @@ export async function getPayroll(id, user, own = false) {
   const params = [id];
   if (own) params.push(user.id);
   const [items] = await pool.execute(
-    `SELECT pi.*,CONCAT(e.first_name,' ',e.last_name) employeeName,e.employee_code employeeCode FROM payroll_items pi JOIN employees e ON e.id=pi.employee_id JOIN users u ON u.employee_id=e.id WHERE pi.payroll_run_id=?${own ? " AND u.id=?" : ""} ORDER BY e.first_name`,
+    `SELECT pi.*,CONCAT(e.first_name,' ',e.last_name) employeeName,e.employee_code employeeCode,
+      COALESCE((SELECT GROUP_CONCAT(r.name ORDER BY r.name SEPARATOR ', ') FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id),'Employee') roleName
+     FROM payroll_items pi JOIN employees e ON e.id=pi.employee_id JOIN users u ON u.employee_id=e.id
+     WHERE pi.payroll_run_id=?${own ? " AND u.id=?" : ""} ORDER BY e.first_name`,
     params,
   );
   if (own && !items.length) throw new ApiError(404, "Payroll item not found");
