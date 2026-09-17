@@ -8,6 +8,7 @@ const filters = [
   ["All", {}],
   ["Unread", { unread: "true" }],
   ["Tasks", { category: "TASK" }],
+  ["Notes", { category: "NOTE" }],
   ["Leave", { category: "LEAVE" }],
   ["Attendance", { category: "ATTENDANCE" }],
   ["Breaks", { category: "BREAK" }],

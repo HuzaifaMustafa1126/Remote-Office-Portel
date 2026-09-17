@@ -284,7 +284,16 @@ DB_NAME=your_hosting_database_name
 JWT_SECRET=your_existing_production_jwt_secret
 JWT_EXPIRES_IN=8h
 CORS_ORIGIN=https://portel.abdalimarketing.com
+TRUST_PROXY_HOPS=1
+IP_DIAGNOSTICS=false
 ```
+
+`TRUST_PROXY_HOPS=1` matches Hostinger's managed reverse proxy directly in
+front of the Node process. Keep the application port inaccessible from the
+public internet. For one controlled login, `IP_DIAGNOSTICS=true` logs only
+Express/socket IP resolution plus `X-Forwarded-For` and `X-Real-IP`. If
+`req.ips` proves that Hostinger supplies an additional proxy hop, set the
+verified hop count explicitly and immediately turn diagnostics back off.
 
 On Hostinger, the active backend is normally under:
 

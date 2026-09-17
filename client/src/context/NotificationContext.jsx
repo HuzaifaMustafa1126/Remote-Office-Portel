@@ -6,24 +6,37 @@ import {
   connectNotifications,
   disconnectNotifications,
 } from "../services/socket.service";
-import { installAudioUnlockListeners,isAudioUnlocked,playNotificationSound,setSoundConfiguration } from "../services/notificationSound.service";
+import {
+  installAudioUnlockListeners,
+  isAudioUnlocked,
+  playNotificationSound,
+  setSoundConfiguration,
+} from "../services/notificationSound.service";
 export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "", category = "") =>
   category === "TASK" || type.startsWith("TASK_")
     ? "taskEnabled"
-    : category === "LEAVE" || type.startsWith("LEAVE_")
-      ? "leaveEnabled"
-      : category === "BREAK" || type.startsWith("BREAK_")
-        ? "breakEnabled"
-        : category === "CALENDAR" ? "calendarEnabled"
-          : category === "PAYROLL" ? "payrollEnabled"
-            : category === "SECURITY" ? "securityEnabled"
-              : category === "EMPLOYEE" ? "employeeEnabled"
-                : category === "SHIFT" ? "shiftEnabled"
-        : category === "ANNOUNCEMENT" || type.startsWith("ANNOUNCEMENT")
-          ? "announcementEnabled"
-          : "attendanceEnabled";
+    : category === "NOTE" || type.startsWith("NOTE_")
+      ? "noteEnabled"
+      : category === "LEAVE" || type.startsWith("LEAVE_")
+        ? "leaveEnabled"
+        : category === "BREAK" || type.startsWith("BREAK_")
+          ? "breakEnabled"
+          : category === "CALENDAR"
+            ? "calendarEnabled"
+            : category === "PAYROLL"
+              ? "payrollEnabled"
+              : category === "SECURITY"
+                ? "securityEnabled"
+                : category === "EMPLOYEE"
+                  ? "employeeEnabled"
+                  : category === "SHIFT"
+                    ? "shiftEnabled"
+                    : category === "ANNOUNCEMENT" ||
+                        type.startsWith("ANNOUNCEMENT")
+                      ? "announcementEnabled"
+                      : "attendanceEnabled";
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -33,7 +46,9 @@ export function NotificationProvider({ children }) {
     [toasts, setToasts] = useState([]);
   const [connected, setConnected] = useState(true),
     [preferences, setPreferences] = useState(null);
-  const preferencesRef = useRef(null), seen = useRef(new Set()), audioWarningShown = useRef(false);
+  const preferencesRef = useRef(null),
+    seen = useRef(new Set()),
+    audioWarningShown = useRef(false);
   useEffect(() => {
     preferencesRef.current = preferences;
   }, [preferences]);
@@ -49,15 +64,18 @@ export function NotificationProvider({ children }) {
   const play = useCallback((notification) => {
     const current = preferencesRef.current;
     if (
-      !current?.notificationsEnabled || !current?.soundEnabled || current?.doNotDisturb ||
+      !current?.notificationsEnabled ||
+      !current?.soundEnabled ||
+      current?.doNotDisturb ||
       notification.soundAllowed === 0 ||
-      !current[categoryFor(notification.type,notification.category)]
+      !current[categoryFor(notification.type, notification.category)]
     )
       return;
-    playNotificationSound(notification,current.volume).catch((error)=>{
-      if(error?.code!=="AUDIO_BLOCKED"||audioWarningShown.current)return;
-      audioWarningShown.current=true;
-      if(import.meta.env.DEV)console.debug("[AUDIO] playback blocked",{error:error.code});
+    playNotificationSound(notification, current.volume).catch((error) => {
+      if (error?.code !== "AUDIO_BLOCKED" || audioWarningShown.current) return;
+      audioWarningShown.current = true;
+      if (import.meta.env.DEV)
+        console.debug("[AUDIO] playback blocked", { error: error.code });
       window.dispatchEvent(new CustomEvent("notification:audio-blocked"));
     });
   }, []);
@@ -74,9 +92,11 @@ export function NotificationProvider({ children }) {
       return;
     }
     let active = true;
-    Promise.all([reconcile(), api.getPreferences().then(setPreferences),api.getSounds().then(setSoundConfiguration)]).catch(
-      () => {},
-    );
+    Promise.all([
+      reconcile(),
+      api.getPreferences().then(setPreferences),
+      api.getSounds().then(setSoundConfiguration),
+    ]).catch(() => {});
     const token =
       localStorage.getItem("rop_token") || sessionStorage.getItem("rop_token");
     const socket = connectNotifications(token);
@@ -87,10 +107,10 @@ export function NotificationProvider({ children }) {
     socket.on("disconnect", () => setConnected(false));
     socket.on("notification:new", (notification) => {
       if (!active) return;
-      const id=Number(notification.id);
-      if(seen.current.has(id)) return;
+      const id = Number(notification.id);
+      if (seen.current.has(id)) return;
       seen.current.add(id);
-      const showInApp=notification.inAppAllowed!==0;
+      const showInApp = notification.inAppAllowed !== 0;
       if (
         [
           "CLOCK_IN",
@@ -101,24 +121,32 @@ export function NotificationProvider({ children }) {
         ].includes(notification.type)
       )
         window.dispatchEvent(new CustomEvent("office:activity"));
-      if(showInApp) setItems((old) =>
-        [notification, ...old.filter((x) => x.id !== notification.id)].slice(
-          0,
-          10,
-        ),
-      );
-      if(showInApp&&!notification.isRead) setUnread((n) => n + 1);
-      let ownsAttention=true;
-      if(!isAudioUnlocked()) ownsAttention=false;
+      if (showInApp)
+        setItems((old) =>
+          [notification, ...old.filter((x) => x.id !== notification.id)].slice(
+            0,
+            10,
+          ),
+        );
+      if (showInApp && !notification.isRead) setUnread((n) => n + 1);
+      let ownsAttention = true;
+      if (!isAudioUnlocked()) ownsAttention = false;
       try {
-        if(ownsAttention){const key=`rop_notification_attention_${id}`, now=Date.now();
-        const previous=Number(localStorage.getItem(key)||0);
-        if(previous && now-previous<15000) ownsAttention=false;
-        else { localStorage.setItem(key,String(now)); setTimeout(()=>localStorage.removeItem(key),16000); }}
+        if (ownsAttention) {
+          const key = `rop_notification_attention_${id}`,
+            now = Date.now();
+          const previous = Number(localStorage.getItem(key) || 0);
+          if (previous && now - previous < 15000) ownsAttention = false;
+          else {
+            localStorage.setItem(key, String(now));
+            setTimeout(() => localStorage.removeItem(key), 16000);
+          }
+        }
       } catch {}
-      if (showInApp&&!document.hidden) setToasts((old) => [...old, notification]);
-      if(ownsAttention) play(notification);
-      if (showInApp&&!document.hidden)
+      if (showInApp && !document.hidden)
+        setToasts((old) => [...old, notification]);
+      if (ownsAttention) play(notification);
+      if (showInApp && !document.hidden)
         setTimeout(
           () => setToasts((old) => old.filter((x) => x.id !== notification.id)),
           7000,
@@ -130,7 +158,18 @@ export function NotificationProvider({ children }) {
         Notification.permission === "granted" &&
         document.hidden
       )
-        if(ownsAttention){const desktop=new Notification(notification.title,{body:notification.message,tag:`notification-${id}`});desktop.onclick=()=>{window.focus();if(notification.actionUrl)window.location.assign(notification.actionUrl);desktop.close();};}
+        if (ownsAttention) {
+          const desktop = new Notification(notification.title, {
+            body: notification.message,
+            tag: `notification-${id}`,
+          });
+          desktop.onclick = () => {
+            window.focus();
+            if (notification.actionUrl)
+              window.location.assign(notification.actionUrl);
+            desktop.close();
+          };
+        }
     });
     return () => {
       active = false;

@@ -1,6 +1,8 @@
 import * as service from "../services/auth.service.js";
-import { requestSecurityMeta } from "../utils/requestSecurity.js";
+import env from "../config/env.js";
+import { logIpDiagnostics, requestSecurityMeta } from "../utils/requestSecurity.js";
 export async function login(req, res) {
+  if (env.IP_DIAGNOSTICS) logIpDiagnostics(req);
   res.json({
     success: true,
     data: await service.loginUser(req.body.email, req.body.password, requestSecurityMeta(req)),

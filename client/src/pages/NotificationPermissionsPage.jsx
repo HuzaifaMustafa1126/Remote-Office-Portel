@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   Coffee,
+  NotebookPen,
   Search,
   ShieldCheck,
   WalletCards,
@@ -44,6 +45,10 @@ const categoryMeta = {
     Icon: ClipboardCheck,
     description:
       "Task assignments, updates, deadlines and task status notifications.",
+  },
+  Notes: {
+    Icon: NotebookPen,
+    description: "Published, important, updated and newly shared Notes.",
   },
   "Company & Calendar": {
     Icon: Building2,
@@ -88,6 +93,11 @@ const overrides = {
   TASK_REOPENED: "Task Reopened",
   TASK_DUE_SOON: "Task Due Soon",
   TASK_OVERDUE: "Task Overdue",
+  NOTE_TEAM_PUBLISHED: "New Team Note",
+  NOTE_CEO_PUBLISHED: "New Note for CEO",
+  NOTE_IMPORTANT_PUBLISHED: "Important Note",
+  NOTE_UPDATED: "Note Update",
+  NOTE_SHARED_TEAM: "Note Shared",
   CALENDAR_HOLIDAY_CREATED: "Holiday Created",
   CALENDAR_HOLIDAY_UPDATED: "Holiday Updated",
   CALENDAR_HOLIDAY_DELETED: "Holiday Cancelled",
@@ -112,6 +122,8 @@ const overrides = {
 const categoryFor = (type) =>
   type.startsWith("BREAK_")
     ? "Break"
+    : type.startsWith("NOTE_")
+      ? "Notes"
     : type.startsWith("LEAVE_")
       ? "Leave"
       : type.startsWith("TASK_") || type === "OPEN_TASK_CREATED"
@@ -138,6 +150,8 @@ const descriptionFor = (type) => {
   const name = friendly(type).toLowerCase();
   if (type.startsWith("TASK_"))
     return `Controls who can receive alerts when ${name}.`;
+  if (type.startsWith("NOTE_"))
+    return `Controls delivery of the ${name} notification to eligible Note viewers.`;
   if (type.startsWith("LEAVE_"))
     return `Controls who can receive the ${name} update.`;
   if (type.startsWith("SECURITY_") || type.startsWith("EMPLOYEE_"))

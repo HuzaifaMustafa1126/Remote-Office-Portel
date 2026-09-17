@@ -1,18 +1,33 @@
-import { Bell, CalendarCheck, ClipboardCheck, Coffee, DollarSign, ShieldCheck, Users } from "lucide-react";
-const icon = (type,category) =>
-  category==="CALENDAR" ? CalendarCheck
-    : category==="PAYROLL" ? DollarSign
-    : category==="SECURITY" ? ShieldCheck
-    : ["EMPLOYEE","SHIFT"].includes(category) ? Users
-    : type.startsWith("LEAVE")
+import {
+  Bell,
+  CalendarCheck,
+  ClipboardCheck,
+  Coffee,
+  DollarSign,
+  NotebookPen,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+const icon = (type, category) =>
+  category === "CALENDAR"
     ? CalendarCheck
-    : type.startsWith("BREAK")
-      ? Coffee
-      : type.startsWith("TASK")
-        ? ClipboardCheck
-        : Bell;
+    : category === "NOTE"
+      ? NotebookPen
+      : category === "PAYROLL"
+        ? DollarSign
+        : category === "SECURITY"
+          ? ShieldCheck
+          : ["EMPLOYEE", "SHIFT"].includes(category)
+            ? Users
+            : type.startsWith("LEAVE")
+              ? CalendarCheck
+              : type.startsWith("BREAK")
+                ? Coffee
+                : type.startsWith("TASK")
+                  ? ClipboardCheck
+                  : Bell;
 export default function NotificationItem({ item, onClick, compact = false }) {
-  const Icon = icon(item.type,item.category);
+  const Icon = icon(item.type, item.category);
   return (
     <button
       onClick={() => onClick(item)}
@@ -31,15 +46,19 @@ export default function NotificationItem({ item, onClick, compact = false }) {
         <span className="mt-1 block text-sm text-muted-foreground">
           {item.message}
         </span>
-        <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><span>{item.category}</span><span>•</span><span>
-          {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-            Math.min(
-              0,
-              Math.round((new Date(item.createdAt) - Date.now()) / 60000),
-            ),
-            "minute",
-          )}
-        </span></span>
+        <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{item.category}</span>
+          <span>•</span>
+          <span>
+            {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+              Math.min(
+                0,
+                Math.round((new Date(item.createdAt) - Date.now()) / 60000),
+              ),
+              "minute",
+            )}
+          </span>
+        </span>
       </span>
     </button>
   );

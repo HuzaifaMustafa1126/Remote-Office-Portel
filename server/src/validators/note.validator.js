@@ -1,4 +1,53 @@
 import { z } from "zod";
-export const listSchema=z.object({search:z.string().trim().max(200).optional(),tab:z.enum(["ALL","MY","IMPORTANT","PINNED","TASK"]).default("ALL"),visibility:z.enum(["TEAM","PRIVATE","CEO_ONLY"]).optional(),importance:z.enum(["IMPORTANT","NORMAL"]).optional(),source:z.enum(["GENERAL","TASK"]).optional(),authorEmployeeId:z.coerce.number().int().positive().optional(),dateRange:z.enum(["ALL","TODAY","WEEK","MONTH","CUSTOM"]).default("ALL"),startDate:z.string().date().optional(),endDate:z.string().date().optional(),sort:z.enum(["NEWEST","OLDEST","UPDATED","IMPORTANT"]).default("NEWEST"),relatedTaskId:z.coerce.number().int().positive().optional(),page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(20)}).strict().superRefine((v,c)=>{if(v.dateRange==="CUSTOM"&&(!v.startDate||!v.endDate))c.addIssue({code:"custom",message:"Start and end dates are required",path:["startDate"]});if(v.startDate&&v.endDate&&v.startDate>v.endDate)c.addIssue({code:"custom",message:"Start date must be before end date",path:["startDate"]})});
-const fields={title:z.string().trim().min(2).max(200),summary:z.string().trim().min(1).max(300),content:z.string().trim().min(1).max(50000),visibility:z.enum(["TEAM","PRIVATE","CEO_ONLY"]),isImportant:z.boolean().default(false),relatedTaskId:z.number().int().positive().optional().nullable()};
-export const createSchema=z.object(fields).strict();export const updateSchema=z.object(fields).strict();
+const listFields = {
+  search: z.string().trim().max(200).optional(),
+  tab: z
+    .enum(["ALL", "MY", "IMPORTANT", "PINNED", "TASK", "ARCHIVED"])
+    .default("ALL"),
+  visibility: z.enum(["TEAM", "PRIVATE", "CEO_ONLY"]).optional(),
+  importance: z.enum(["IMPORTANT", "NORMAL"]).optional(),
+  source: z.enum(["GENERAL", "TASK"]).optional(),
+  authorEmployeeId: z.coerce.number().int().positive().optional(),
+  dateRange: z.enum(["ALL", "TODAY", "WEEK", "MONTH", "CUSTOM"]).default("ALL"),
+  startDate: z.string().date().optional(),
+  endDate: z.string().date().optional(),
+  sort: z.enum(["NEWEST", "OLDEST", "UPDATED", "IMPORTANT"]).default("NEWEST"),
+  relatedTaskId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+};
+const validDates = (v, c) => {
+  if (v.dateRange === "CUSTOM" && (!v.startDate || !v.endDate))
+    c.addIssue({
+      code: "custom",
+      message: "Start and end dates are required",
+      path: ["startDate"],
+    });
+  if (v.startDate && v.endDate && v.startDate > v.endDate)
+    c.addIssue({
+      code: "custom",
+      message: "Start date must be before end date",
+      path: ["startDate"],
+    });
+};
+export const listSchema = z.object(listFields).strict().superRefine(validDates);
+const fields = {
+  title: z.string().trim().min(2).max(200),
+  summary: z.string().trim().min(1).max(300),
+  content: z.string().trim().min(1).max(50000),
+  visibility: z.enum(["TEAM", "PRIVATE", "CEO_ONLY"]),
+  isImportant: z.boolean().default(false),
+  relatedTaskId: z.number().int().positive().optional().nullable(),
+};
+export const createSchema = z.object(fields).strict();
+export const updateSchema = z
+  .object({ ...fields, notifyViewers: z.boolean().default(false) })
+  .strict();
+export const exportSchema = z
+  .object({
+    ...listFields,
+    mode: z.enum(["ALL", "MY", "IMPORTANT", "TASK", "FILTERED", "ARCHIVED"]),
+  })
+  .omit({ page: true, limit: true })
+  .strict()
+  .superRefine(validDates);

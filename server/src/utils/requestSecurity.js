@@ -1,6 +1,13 @@
 export function normalizeIp(value = "") {
   const ip = String(value || "").trim();
-  return ip.startsWith("::ffff:") ? ip.slice(7) : ip || null;
+  return ip.toLowerCase().startsWith("::ffff:") ? ip.slice(7) : ip || null;
+}
+
+export function getClientIp(req) {
+  // req.ip is calculated by Express/proxy-addr from the configured trusted
+  // proxy chain. Never read forwarding headers directly for authentication
+  // or security records.
+  return normalizeIp(req.ip || req.socket?.remoteAddress);
 }
 
 export function parseUserAgent(value = "") {
@@ -26,5 +33,15 @@ export function parseUserAgent(value = "") {
 }
 
 export function requestSecurityMeta(req) {
-  return { ip: normalizeIp(req.ip || req.socket?.remoteAddress), ...parseUserAgent(req.get?.("user-agent")) };
+  return { ip: getClientIp(req), ...parseUserAgent(req.get?.("user-agent")) };
+}
+
+export function logIpDiagnostics(req) {
+  console.info("[IP_DIAGNOSTICS]", {
+    expressIp: req.ip,
+    expressIps: req.ips,
+    socketRemoteAddress: req.socket?.remoteAddress,
+    xForwardedFor: req.get?.("x-forwarded-for") || null,
+    xRealIp: req.get?.("x-real-ip") || null,
+  });
 }

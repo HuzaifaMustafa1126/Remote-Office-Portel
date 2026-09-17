@@ -15,7 +15,8 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().min(1).default("8h"),
   FRONTEND_URL: z.string().url().optional(),
   CORS_ORIGIN: z.string().optional(),
-  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
+  IP_DIAGNOSTICS: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(10000),
   DB_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
   DB_QUEUE_LIMIT: z.coerce.number().int().min(1).max(10000).default(100),
@@ -62,4 +63,10 @@ const CORS_ORIGINS = (configuredOrigins ?? "http://localhost:5173")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-export default Object.freeze({ ...parsed.data, CORS_ORIGINS });
+export default Object.freeze({
+  ...parsed.data,
+  // Hostinger's managed Node application proxy is the single direct peer of
+  // this process. Local development trusts no forwarding hop.
+  TRUST_PROXY_HOPS: parsed.data.TRUST_PROXY_HOPS ?? (parsed.data.NODE_ENV === "production" ? 1 : 0),
+  CORS_ORIGINS,
+});

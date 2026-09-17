@@ -13,6 +13,7 @@ export function categoryFor(type = "") {
   if (prefix === "LEAVE") return "LEAVE";
   if (["CALENDAR", "HOLIDAY"].includes(prefix)) return "CALENDAR";
   if (prefix === "TASK" || type === "OPEN_TASK_CREATED") return "TASK";
+  if (prefix === "NOTE") return "NOTE";
   if (["PAYROLL", "PAYSLIP", "SALARY"].includes(prefix)) return "PAYROLL";
   if (prefix === "SECURITY") return "SECURITY";
   if (prefix === "EMPLOYEE") return "EMPLOYEE";
@@ -24,7 +25,7 @@ export function categoryFor(type = "") {
 const categoryPreference = {
   ATTENDANCE: "attendance_notifications", BREAK: "break_notifications",
   LEAVE: "leave_notifications", CALENDAR: "calendar_notifications",
-  TASK: "task_notifications", PAYROLL: "payroll_notifications",
+  TASK: "task_notifications", NOTE: "note_notifications", PAYROLL: "payroll_notifications",
   SECURITY: "security_notifications", EMPLOYEE: "employee_notifications",
   SHIFT: "shift_notifications", ANNOUNCEMENT: "announcement_notifications",
   SYSTEM: "announcement_notifications",
@@ -194,7 +195,7 @@ export async function getPreferences(userId) {
   );
   const [[row]] = await pool.execute(
     `SELECT notifications_enabled AS notificationsEnabled,in_app_enabled AS inAppEnabled,browser_notifications AS desktopEnabled,sound_enabled AS soundEnabled,do_not_disturb AS doNotDisturb,volume,
-     task_notifications AS taskEnabled,
+     task_notifications AS taskEnabled,note_notifications AS noteEnabled,
      leave_notifications AS leaveEnabled,break_notifications AS breakEnabled,
      attendance_notifications AS attendanceEnabled,announcement_notifications AS announcementEnabled,
      calendar_notifications AS calendarEnabled,payroll_notifications AS payrollEnabled,
@@ -214,8 +215,8 @@ export async function updatePreferences(userId, data) {
     [userId],
   );
   await pool.execute(
-    `INSERT INTO notification_preferences(user_id,notifications_enabled,in_app_enabled,browser_notifications,sound_enabled,do_not_disturb,volume,task_notifications,leave_notifications,break_notifications,attendance_notifications,announcement_notifications,calendar_notifications,payroll_notifications,security_notifications,employee_notifications,shift_notifications)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE notifications_enabled=VALUES(notifications_enabled),in_app_enabled=VALUES(in_app_enabled),browser_notifications=VALUES(browser_notifications),sound_enabled=VALUES(sound_enabled),do_not_disturb=VALUES(do_not_disturb),volume=VALUES(volume),task_notifications=VALUES(task_notifications),leave_notifications=VALUES(leave_notifications),break_notifications=VALUES(break_notifications),attendance_notifications=VALUES(attendance_notifications),announcement_notifications=VALUES(announcement_notifications),calendar_notifications=VALUES(calendar_notifications),payroll_notifications=VALUES(payroll_notifications),security_notifications=VALUES(security_notifications),employee_notifications=VALUES(employee_notifications),shift_notifications=VALUES(shift_notifications)`,
+    `INSERT INTO notification_preferences(user_id,notifications_enabled,in_app_enabled,browser_notifications,sound_enabled,do_not_disturb,volume,task_notifications,note_notifications,leave_notifications,break_notifications,attendance_notifications,announcement_notifications,calendar_notifications,payroll_notifications,security_notifications,employee_notifications,shift_notifications)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE notifications_enabled=VALUES(notifications_enabled),in_app_enabled=VALUES(in_app_enabled),browser_notifications=VALUES(browser_notifications),sound_enabled=VALUES(sound_enabled),do_not_disturb=VALUES(do_not_disturb),volume=VALUES(volume),task_notifications=VALUES(task_notifications),note_notifications=VALUES(note_notifications),leave_notifications=VALUES(leave_notifications),break_notifications=VALUES(break_notifications),attendance_notifications=VALUES(attendance_notifications),announcement_notifications=VALUES(announcement_notifications),calendar_notifications=VALUES(calendar_notifications),payroll_notifications=VALUES(payroll_notifications),security_notifications=VALUES(security_notifications),employee_notifications=VALUES(employee_notifications),shift_notifications=VALUES(shift_notifications)`,
     [
       userId,
       data.notificationsEnabled,
@@ -225,6 +226,7 @@ export async function updatePreferences(userId, data) {
       data.doNotDisturb,
       data.volume,
       data.taskEnabled,
+      data.noteEnabled,
       data.leaveEnabled,
       data.breakEnabled,
       data.attendanceEnabled,
