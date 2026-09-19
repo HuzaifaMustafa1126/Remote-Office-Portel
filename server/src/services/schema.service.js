@@ -58,7 +58,16 @@ const requiredColumns = {
   employee_salary_profiles: ["change_reason"],
   attendance_breaks: ["paused_task_id"],
   notification_preferences: ["availability_notifications"],
-  auth_sessions: ["browser", "operating_system", "device_type", "login_at", "logout_at", "ended_reason", "is_new_ip", "is_new_device"],
+  auth_sessions: [
+    "browser",
+    "operating_system",
+    "device_type",
+    "login_at",
+    "logout_at",
+    "ended_reason",
+    "is_new_ip",
+    "is_new_device",
+  ],
 };
 const requiredMigrations = [
   "014_employee_password_archive.sql",

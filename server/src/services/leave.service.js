@@ -6,7 +6,11 @@ import {
   periodForDate,
   payrollPeriodForDate,
 } from "../utils/payrollPeriod.js";
-import { notifyByPolicy, notifyRoles, notifyUser } from "./notification.service.js";
+import {
+  notifyByPolicy,
+  notifyRoles,
+  notifyUser,
+} from "./notification.service.js";
 const base = `SELECT lr.id,lr.employee_id AS employeeId,lr.leave_type AS leaveType,lr.start_date AS startDate,lr.end_date AS endDate,lr.total_days AS totalDays,lr.reason,lr.status,lr.reviewed_by AS reviewedBy,lr.reviewed_at AS reviewedAt,lr.review_comment AS reviewComment,lr.created_at AS createdAt,CONCAT(e.first_name,' ',e.last_name) AS employeeName,e.employee_code AS employeeCode,e.department FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id`;
 async function tx(fn) {
   const c = await pool.getConnection();
@@ -220,7 +224,7 @@ export async function getLeave(id) {
   return { ...rows[0], days };
 }
 export async function cancelLeave(id, user) {
-  const result=await tx(async (c) => {
+  const result = await tx(async (c) => {
     const [[r]] = await c.execute(
       `SELECT lr.*,CONCAT(e.first_name,' ',e.last_name) name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=? FOR UPDATE`,
       [id],
@@ -243,10 +247,16 @@ export async function cancelLeave(id, user) {
       entityId: id,
       description: `${r.name} cancelled a leave request.`,
     });
-    return { id, status: "CANCELLED", name:r.name };
+    return { id, status: "CANCELLED", name: r.name };
   });
-  await notifyByPolicy("LEAVE_CANCELLED",user,{title:"Leave Request Cancelled",message:`${result.name} cancelled a leave request.`,referenceType:"LEAVE",referenceId:Number(id),actionUrl:`/leave-requests?open=${id}`});
-  return {id:result.id,status:result.status};
+  await notifyByPolicy("LEAVE_CANCELLED", user, {
+    title: "Leave Request Cancelled",
+    message: `${result.name} cancelled a leave request.`,
+    referenceType: "LEAVE",
+    referenceId: Number(id),
+    actionUrl: `/leave-requests?open=${id}`,
+  });
+  return { id: result.id, status: result.status };
 }
 export async function reviewLeave(id, status, comment, reviewer) {
   const result = await tx(async (c) => {

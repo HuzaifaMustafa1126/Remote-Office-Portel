@@ -27,11 +27,16 @@ export const assignRoleSchema = z.object({
 });
 export const resetPasswordSchema = z
   .object({
-    newPassword: z.string().min(8, "Password must contain at least 8 characters.").max(72),
+    newPassword: z
+      .string()
+      .min(8, "Password must contain at least 8 characters.")
+      .max(72),
     confirmPassword: z.string().min(1),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords do not match.",
     path: ["confirmPassword"],
   });
-export const permissionOverrideSchema=z.object({effect:z.enum(['INHERIT','ALLOW','DENY'])}).strict();
+export const permissionOverrideSchema = z
+  .object({ effect: z.enum(["INHERIT", "ALLOW", "DENY"]) })
+  .strict();

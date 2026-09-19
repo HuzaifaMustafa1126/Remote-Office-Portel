@@ -2,14 +2,11 @@ import ApiError from "../utils/ApiError.js";
 
 export async function startTaskSession(
   executor,
-  {
-    taskId,
-    employeeId,
-    switchExisting = false,
-    expectedActiveTaskId = null,
-  },
+  { taskId, employeeId, switchExisting = false, expectedActiveTaskId = null },
 ) {
-  await executor.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [employeeId]);
+  await executor.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+    employeeId,
+  ]);
   const [[active]] = await executor.execute(
     "SELECT id,task_id taskId FROM task_work_sessions WHERE employee_id=? AND state='ACTIVE' LIMIT 1 FOR UPDATE",
     [employeeId],
@@ -72,7 +69,11 @@ export async function startTaskSession(
     };
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      throw new ApiError(409, "You already have another task in progress.", "TASK_SESSION_ACTIVE");
+      throw new ApiError(
+        409,
+        "You already have another task in progress.",
+        "TASK_SESSION_ACTIVE",
+      );
     }
     throw error;
   }
@@ -93,7 +94,12 @@ export async function endTaskSession(
     params,
   );
   if (!sessions.length) {
-    if (required) throw new ApiError(409, "No active work session exists for this task.", "TASK_SESSION_MISSING");
+    if (required)
+      throw new ApiError(
+        409,
+        "No active work session exists for this task.",
+        "TASK_SESSION_MISSING",
+      );
     return [];
   }
   await executor.execute(
@@ -104,7 +110,9 @@ export async function endTaskSession(
 }
 
 export async function getTaskTimeTracking(executor, taskId) {
-  const [[clock]] = await executor.execute("SELECT CURRENT_TIMESTAMP serverTime");
+  const [[clock]] = await executor.execute(
+    "SELECT CURRENT_TIMESTAMP serverTime",
+  );
   const [[totals]] = await executor.execute(
     `SELECT
       COALESCE(SUM(CASE WHEN state='ENDED' THEN COALESCE(duration_seconds,GREATEST(0,TIMESTAMPDIFF(SECOND,started_at,ended_at))) ELSE 0 END),0) completedSeconds,
@@ -130,7 +138,9 @@ export async function getTaskTimeTracking(executor, taskId) {
     totalSeconds: completedSeconds + activeSeconds,
     isRunning: Boolean(totals.activeSessionStartedAt),
     activeSessionStartedAt: totals.activeSessionStartedAt || null,
-    activeEmployeeId: totals.activeEmployeeId ? Number(totals.activeEmployeeId) : null,
+    activeEmployeeId: totals.activeEmployeeId
+      ? Number(totals.activeEmployeeId)
+      : null,
     serverTime: clock.serverTime,
     contributors: contributors.map((row) => ({
       employeeId: Number(row.employeeId),
@@ -148,7 +158,12 @@ export async function pauseActiveTask(executor, employeeId, reason) {
     [employeeId],
   );
   if (!session) return null;
-  await endTaskSession(executor, { taskId: session.taskId, employeeId, reason, required: false });
+  await endTaskSession(executor, {
+    taskId: session.taskId,
+    employeeId,
+    reason,
+    required: false,
+  });
   await executor.execute(
     "INSERT INTO task_activities(task_id,event_type,previous_status,new_status,metadata)SELECT id,'WORK_SESSION_PAUSED',status,status,? FROM tasks WHERE id=?",
     [JSON.stringify({ reason, employeeId }), session.taskId],

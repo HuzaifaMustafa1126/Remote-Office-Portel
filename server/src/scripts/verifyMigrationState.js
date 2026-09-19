@@ -102,9 +102,13 @@ console.log(
   ),
 );
 await connection.end();
-if(
-  database?.collation!=="utf8mb4_unicode_ci"||
-  !ongoingWork?.tableExists||!ongoingWork?.namazExists||
-  Object.values(recentFeatures).some((value) => !value)||
-  missingMigrations.length||wrongTables.length||wrongColumns.length
-) process.exitCode=2;
+if (
+  database?.collation !== "utf8mb4_unicode_ci" ||
+  !ongoingWork?.tableExists ||
+  !ongoingWork?.namazExists ||
+  Object.values(recentFeatures).some((value) => !value) ||
+  missingMigrations.length ||
+  wrongTables.length ||
+  wrongColumns.length
+)
+  process.exitCode = 2;

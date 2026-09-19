@@ -388,7 +388,17 @@ export async function updateEmployee(id, data, actor) {
 
 export async function setEmployeeStatus(id, status, actor) {
   const employee = await getEmployee(id);
-  if(status==='INACTIVE'){const[[tasks]]=await pool.execute("SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",[id]);if(Number(tasks.total))throw new ApiError(409,`Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deactivation.`);}
+  if (status === "INACTIVE") {
+    const [[tasks]] = await pool.execute(
+      "SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",
+      [id],
+    );
+    if (Number(tasks.total))
+      throw new ApiError(
+        409,
+        `Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deactivation.`,
+      );
+  }
 
   await pool.execute(
     `
@@ -406,7 +416,8 @@ export async function setEmployeeStatus(id, status, actor) {
   await logAudit({
     userId: actor.id,
     employeeId: actor.employee_id,
-    action: status === "INACTIVE" ? "EMPLOYEE_DEACTIVATED" : "EMPLOYEE_ACTIVATED",
+    action:
+      status === "INACTIVE" ? "EMPLOYEE_DEACTIVATED" : "EMPLOYEE_ACTIVATED",
     entityType: "EMPLOYEE",
     entityId: id,
     description: `Employee ${employee.firstName} ${employee.lastName} was ${
@@ -419,41 +430,106 @@ export async function setEmployeeStatus(id, status, actor) {
 
 export async function resetEmployeePassword(id, data, actor) {
   const employee = await getEmployee(id);
-  const [[user]] = await pool.execute("SELECT id FROM users WHERE employee_id=? LIMIT 1", [id]);
+  const [[user]] = await pool.execute(
+    "SELECT id FROM users WHERE employee_id=? LIMIT 1",
+    [id],
+  );
   if (!user) throw new ApiError(404, "User account not found");
   const hash = await bcrypt.hash(data.newPassword, 12);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.execute("UPDATE users SET password_hash=?,password_changed_at=CURRENT_TIMESTAMP,must_change_password=TRUE WHERE id=?", [hash, user.id]);
-    await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'", [user.id]);
+    await conn.execute(
+      "UPDATE users SET password_hash=?,password_changed_at=CURRENT_TIMESTAMP,must_change_password=TRUE WHERE id=?",
+      [hash, user.id],
+    );
+    await conn.execute(
+      "UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'",
+      [user.id],
+    );
     await conn.commit();
-  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
-  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_PASSWORD_RESET", entityType: "EMPLOYEE", entityId: id, description: `Password was reset for ${employee.firstName} ${employee.lastName}; a password change is required at next login.` });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+  await logAudit({
+    userId: actor.id,
+    employeeId: actor.employee_id,
+    action: "EMPLOYEE_PASSWORD_RESET",
+    entityType: "EMPLOYEE",
+    entityId: id,
+    description: `Password was reset for ${employee.firstName} ${employee.lastName}; a password change is required at next login.`,
+  });
 }
 
 export async function deleteEmployee(id, actor) {
   const employee = await getEmployee(id);
-  if (Number(actor.employee_id) === Number(id)) throw new ApiError(400, "You cannot delete your own account.");
-  const[[tasks]]=await pool.execute("SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",[id]);if(Number(tasks.total))throw new ApiError(409,`Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deletion.`);
+  if (Number(actor.employee_id) === Number(id))
+    throw new ApiError(400, "You cannot delete your own account.");
+  const [[tasks]] = await pool.execute(
+    "SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",
+    [id],
+  );
+  if (Number(tasks.total))
+    throw new ApiError(
+      409,
+      `Employee has ${tasks.total} unfinished task(s). Reassign or resolve them before deletion.`,
+    );
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[user]] = await conn.execute("SELECT id FROM users WHERE employee_id=? LIMIT 1", [id]);
-    if (user) await conn.execute("UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'", [user.id]);
-    await conn.execute("DELETE FROM payroll_adjustments WHERE employee_id=?", [id]);
+    const [[user]] = await conn.execute(
+      "SELECT id FROM users WHERE employee_id=? LIMIT 1",
+      [id],
+    );
+    if (user)
+      await conn.execute(
+        "UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'",
+        [user.id],
+      );
+    await conn.execute("DELETE FROM payroll_adjustments WHERE employee_id=?", [
+      id,
+    ]);
     await conn.execute("DELETE FROM payroll_items WHERE employee_id=?", [id]);
     await conn.execute("DELETE FROM leave_requests WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM attendance_records WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM employee_shift_assignments WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM employee_work_settings WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM employee_salary_profiles WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM audit_logs WHERE employee_id=? OR (entity_type='EMPLOYEE' AND entity_id=?)", [id, id]);
+    await conn.execute("DELETE FROM attendance_records WHERE employee_id=?", [
+      id,
+    ]);
+    await conn.execute(
+      "DELETE FROM employee_shift_assignments WHERE employee_id=?",
+      [id],
+    );
+    await conn.execute(
+      "DELETE FROM employee_work_settings WHERE employee_id=?",
+      [id],
+    );
+    await conn.execute(
+      "DELETE FROM employee_salary_profiles WHERE employee_id=?",
+      [id],
+    );
+    await conn.execute(
+      "DELETE FROM audit_logs WHERE employee_id=? OR (entity_type='EMPLOYEE' AND entity_id=?)",
+      [id, id],
+    );
     if (user) await conn.execute("DELETE FROM users WHERE id=?", [user.id]);
     await conn.execute("DELETE FROM employees WHERE id=?", [id]);
     await conn.commit();
-  } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
-  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "EMPLOYEE_DELETED", entityType: "EMPLOYEE", entityId: id, description: `Employee ${employee.firstName} ${employee.lastName} and all associated records were permanently deleted.` });
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+  await logAudit({
+    userId: actor.id,
+    employeeId: actor.employee_id,
+    action: "EMPLOYEE_DELETED",
+    entityType: "EMPLOYEE",
+    entityId: id,
+    description: `Employee ${employee.firstName} ${employee.lastName} and all associated records were permanently deleted.`,
+  });
 }
 
 export async function assignRole(id, roleId, actor) {

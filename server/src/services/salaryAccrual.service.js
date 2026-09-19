@@ -57,12 +57,13 @@ export async function getEmployeeSalaryAccrual(
       [date],
     );
     const sunday = cursor.getUTCDay() === 0,
-      off =
-        calendar
-          ? calendar.dayType === "WORKING_DAY" ? null : calendar.dayType
-          : sunday
-            ? "WEEKLY_OFF"
-            : null;
+      off = calendar
+        ? calendar.dayType === "WORKING_DAY"
+          ? null
+          : calendar.dayType
+        : sunday
+          ? "WEEKLY_OFF"
+          : null;
     if (off) {
       paidOffDays++;
       validPaidDays++;

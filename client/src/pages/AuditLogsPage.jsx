@@ -5,14 +5,21 @@ import {
   KeyRound,
   ShieldCheck,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import Button from "../components/common/Button";
 import EmptyState from "../components/common/EmptyState";
 import Loader from "../components/common/Loader";
 import PageHeader from "../components/common/PageHeader";
-import { listAuditLogs } from "../services/audit.service";
+import {
+  cleanupAuditHistory,
+  listAuditLogs,
+  previewAuditCleanup,
+} from "../services/audit.service";
 import { errorMessage } from "../utils/helpers";
+import useAuth from "../hooks/useAuth";
+import HistoryCleanupModal from "../components/security/HistoryCleanupModal";
 const labels = {
   LOGIN_SUCCESS: "Login Success",
   LOGIN_FAILED: "Login Failed",
@@ -95,6 +102,8 @@ function Summary({ icon: Icon, label, value }) {
   );
 }
 export default function AuditLogsPage() {
+  const { user } = useAuth();
+  const isCeo = user?.roles?.some((role) => role.toUpperCase() === "CEO");
   const [filters, setFilters] = useState({
       search: "",
       category: "",
@@ -105,7 +114,9 @@ export default function AuditLogsPage() {
       limit: 20,
     }),
     [result, setResult] = useState(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [cleanupOpen, setCleanupOpen] = useState(false),
+    [notice, setNotice] = useState("");
   const load = () =>
     listAuditLogs(filters)
       .then((r) => {
@@ -140,7 +151,15 @@ export default function AuditLogsPage() {
       <PageHeader
         title="Audit Logs"
         description="Monitor important system activity and user actions."
+        action={
+          isCeo ? (
+            <Button onClick={() => setCleanupOpen(true)}>
+              <Trash2 size={16} /> Clean History
+            </Button>
+          ) : null
+        }
       />
+      {notice && <p className="mb-4 rounded-xl bg-success-soft p-3 text-sm text-success">{notice}</p>}
       {result && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Summary
@@ -344,6 +363,19 @@ export default function AuditLogsPage() {
           </div>
         )}
       </section>
+      {cleanupOpen && (
+        <HistoryCleanupModal
+          kind="AUDIT"
+          preview={previewAuditCleanup}
+          remove={cleanupAuditHistory}
+          onClose={() => setCleanupOpen(false)}
+          onDone={(data) => {
+            setCleanupOpen(false);
+            setNotice(`${data.recordsDeleted} audit event(s) were permanently deleted.`);
+            setFilters((current) => ({ ...current, page: 1 }));
+          }}
+        />
+      )}
     </>
   );
 }

@@ -8,6 +8,10 @@ export const setAvailabilitySchema = z.object({
   ),
   note: z.preprocess(
     (value) => (value === "" || value === null ? undefined : value),
-    z.string().trim().max(80, "Status note must be 80 characters or fewer").optional(),
+    z
+      .string()
+      .trim()
+      .max(80, "Status note must be 80 characters or fewer")
+      .optional(),
   ),
 });

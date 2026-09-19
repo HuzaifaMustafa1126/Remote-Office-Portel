@@ -47,12 +47,10 @@ export const exportDocx = async (req, res) => {
     .send(out.buffer);
 };
 export const addImage = async (req, res) =>
-  res
-    .status(201)
-    .json({
-      success: true,
-      data: await s.addImage(req.params.id, req.fileInfo, req.body, req.user),
-    });
+  res.status(201).json({
+    success: true,
+    data: await s.addImage(req.params.id, req.fileInfo, req.body, req.user),
+  });
 export const imageContent = async (req, res) => {
   const f = await s.imageContent(req.params.id, req.params.imageId, req.user);
   res

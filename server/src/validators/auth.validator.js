@@ -10,7 +10,10 @@ export const loginSchema = z.object({
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().max(72).optional(),
-    newPassword: z.string().min(8, "Password must contain at least 8 characters.").max(72),
+    newPassword: z
+      .string()
+      .min(8, "Password must contain at least 8 characters.")
+      .max(72),
     confirmPassword: z.string().min(1),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {

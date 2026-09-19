@@ -1,2 +1,13 @@
-import{Router}from"express";import*as c from"../controllers/ongoingWork.controller.js";import*as v from"../validators/ongoingWork.validator.js";import{validate}from"../middleware/validate.middleware.js";import asyncHandler from"../utils/asyncHandler.js";
-const r=Router();r.get("/me",asyncHandler(c.mine));r.get("/team",asyncHandler(c.team));r.post("/",validate(v.writeSchema),asyncHandler(c.create));r.put("/:id",validate(v.writeSchema),asyncHandler(c.update));r.patch("/:id/status",validate(v.statusSchema),asyncHandler(c.status));r.delete("/:id",asyncHandler(c.remove));export default r;
+import { Router } from "express";
+import * as c from "../controllers/ongoingWork.controller.js";
+import * as v from "../validators/ongoingWork.validator.js";
+import { validate } from "../middleware/validate.middleware.js";
+import asyncHandler from "../utils/asyncHandler.js";
+const r = Router();
+r.get("/me", asyncHandler(c.mine));
+r.get("/team", asyncHandler(c.team));
+r.post("/", validate(v.writeSchema), asyncHandler(c.create));
+r.put("/:id", validate(v.writeSchema), asyncHandler(c.update));
+r.patch("/:id/status", validate(v.statusSchema), asyncHandler(c.status));
+r.delete("/:id", asyncHandler(c.remove));
+export default r;

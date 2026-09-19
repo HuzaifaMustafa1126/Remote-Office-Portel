@@ -1,3 +1,55 @@
-import pool from '../config/database.js';
-export async function list(){const [rows]=await pool.execute(`SELECT id,event_type eventType,enabled,audience_type audienceType,mandatory,notify_actor notifyActor,in_app_enabled inAppEnabled,desktop_enabled desktopEnabled,sound_enabled soundEnabled,push_enabled pushEnabled FROM notification_policies ORDER BY id`);return rows.map(r=>({...r,enabled:Boolean(r.enabled),mandatory:Boolean(r.mandatory),notifyActor:Boolean(r.notifyActor),inAppEnabled:Boolean(r.inAppEnabled),desktopEnabled:Boolean(r.desktopEnabled),soundEnabled:Boolean(r.soundEnabled),pushEnabled:Boolean(r.pushEnabled)}));}
-export async function update(data,actor){const c=await pool.getConnection();try{await c.beginTransaction();for(const p of data.policies)await c.execute(`UPDATE notification_policies SET enabled=?,audience_type=?,mandatory=?,notify_actor=?,in_app_enabled=?,desktop_enabled=?,sound_enabled=?,push_enabled=?,updated_by=? WHERE id=?`,[p.enabled,p.audienceType,p.mandatory,p.notifyActor,p.inAppEnabled,p.desktopEnabled,p.soundEnabled,p.pushEnabled,actor.id,p.id]);await c.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,description,new_values) VALUES(?,?,?,'NOTIFICATION_POLICY',?,?)",[actor.id,actor.employee_id,'NOTIFICATION_POLICY_UPDATED','Company notification policies updated.',JSON.stringify(data.policies)]);await c.commit();return list();}catch(e){await c.rollback();throw e;}finally{c.release();}}
+import pool from "../config/database.js";
+export async function list() {
+  const [rows] = await pool.execute(
+    `SELECT id,event_type eventType,enabled,audience_type audienceType,mandatory,notify_actor notifyActor,in_app_enabled inAppEnabled,desktop_enabled desktopEnabled,sound_enabled soundEnabled,push_enabled pushEnabled FROM notification_policies ORDER BY id`,
+  );
+  return rows.map((r) => ({
+    ...r,
+    enabled: Boolean(r.enabled),
+    mandatory: Boolean(r.mandatory),
+    notifyActor: Boolean(r.notifyActor),
+    inAppEnabled: Boolean(r.inAppEnabled),
+    desktopEnabled: Boolean(r.desktopEnabled),
+    soundEnabled: Boolean(r.soundEnabled),
+    pushEnabled: Boolean(r.pushEnabled),
+  }));
+}
+export async function update(data, actor) {
+  const c = await pool.getConnection();
+  try {
+    await c.beginTransaction();
+    for (const p of data.policies)
+      await c.execute(
+        `UPDATE notification_policies SET enabled=?,audience_type=?,mandatory=?,notify_actor=?,in_app_enabled=?,desktop_enabled=?,sound_enabled=?,push_enabled=?,updated_by=? WHERE id=?`,
+        [
+          p.enabled,
+          p.audienceType,
+          p.mandatory,
+          p.notifyActor,
+          p.inAppEnabled,
+          p.desktopEnabled,
+          p.soundEnabled,
+          p.pushEnabled,
+          actor.id,
+          p.id,
+        ],
+      );
+    await c.execute(
+      "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,description,new_values) VALUES(?,?,?,'NOTIFICATION_POLICY',?,?)",
+      [
+        actor.id,
+        actor.employee_id,
+        "NOTIFICATION_POLICY_UPDATED",
+        "Company notification policies updated.",
+        JSON.stringify(data.policies),
+      ],
+    );
+    await c.commit();
+    return list();
+  } catch (e) {
+    await c.rollback();
+    throw e;
+  } finally {
+    c.release();
+  }
+}

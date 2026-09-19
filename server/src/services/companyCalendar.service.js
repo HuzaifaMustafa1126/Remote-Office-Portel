@@ -3,7 +3,12 @@ import ApiError from "../utils/ApiError.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
 import { recalculatePayrollPeriodsForDates } from "./leave.service.js";
 import { notifyByPolicy } from "./notification.service.js";
-const OFF_DAY_TYPES = ["WEEKLY_OFF", "PUBLIC_HOLIDAY", "COMPANY_HOLIDAY", "SPECIAL_OFF_DAY"];
+const OFF_DAY_TYPES = [
+  "WEEKLY_OFF",
+  "PUBLIC_HOLIDAY",
+  "COMPANY_HOLIDAY",
+  "SPECIAL_OFF_DAY",
+];
 async function reconcile(c, dates) {
   const employees = new Set();
   for (const date of dates) {
@@ -82,7 +87,7 @@ export async function createDays(data, user) {
     dates.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-  const result=await transaction(async (c) => {
+  const result = await transaction(async (c) => {
     for (const date of dates)
       await c.execute(
         `INSERT INTO company_calendar_days(calendar_date,day_type,title,description,created_by,status) VALUES(?,?,?,?,?,'ACTIVE') ON DUPLICATE KEY UPDATE day_type=VALUES(day_type),title=VALUES(title),description=VALUES(description),created_by=VALUES(created_by),status='ACTIVE'`,
@@ -104,11 +109,17 @@ export async function createDays(data, user) {
     );
     return { datesCreated: dates.length };
   });
-  await notifyByPolicy("CALENDAR_HOLIDAY_CREATED",user,{title:"Company Calendar Updated",message:`${data.title} has been added for ${data.startDate}${data.endDate!==data.startDate?` to ${data.endDate}`:""}.`,referenceType:"COMPANY_CALENDAR",actionUrl:"/company-calendar",eventKey:`CALENDAR_HOLIDAY_CREATED:${data.startDate}:${data.endDate}:${data.dayType}`});
+  await notifyByPolicy("CALENDAR_HOLIDAY_CREATED", user, {
+    title: "Company Calendar Updated",
+    message: `${data.title} has been added for ${data.startDate}${data.endDate !== data.startDate ? ` to ${data.endDate}` : ""}.`,
+    referenceType: "COMPANY_CALENDAR",
+    actionUrl: "/company-calendar",
+    eventKey: `CALENDAR_HOLIDAY_CREATED:${data.startDate}:${data.endDate}:${data.dayType}`,
+  });
   return result;
 }
 export async function updateDay(id, data, user) {
-  const result=await transaction(async (c) => {
+  const result = await transaction(async (c) => {
     const [[old]] = await c.execute(
       `SELECT calendar_date FROM company_calendar_days WHERE id=? FOR UPDATE`,
       [id],
@@ -136,11 +147,18 @@ export async function updateDay(id, data, user) {
     );
     return { id };
   });
-  await notifyByPolicy("CALENDAR_HOLIDAY_UPDATED",user,{title:"Company Holiday Updated",message:`${data.title} details were updated.`,referenceType:"COMPANY_CALENDAR",referenceId:Number(id),actionUrl:"/company-calendar",eventKey:`CALENDAR_HOLIDAY_UPDATED:${id}:${data.calendarDate}:${data.dayType}`});
+  await notifyByPolicy("CALENDAR_HOLIDAY_UPDATED", user, {
+    title: "Company Holiday Updated",
+    message: `${data.title} details were updated.`,
+    referenceType: "COMPANY_CALENDAR",
+    referenceId: Number(id),
+    actionUrl: "/company-calendar",
+    eventKey: `CALENDAR_HOLIDAY_UPDATED:${id}:${data.calendarDate}:${data.dayType}`,
+  });
   return result;
 }
 export async function cancelDay(id, user) {
-  const result=await transaction(async (c) => {
+  const result = await transaction(async (c) => {
     const [[row]] = await c.execute(
       `SELECT calendar_date,title FROM company_calendar_days WHERE id=? FOR UPDATE`,
       [id],
@@ -160,8 +178,20 @@ export async function cancelDay(id, user) {
         `${row.title} was cancelled in the company calendar.`,
       ],
     );
-    return { id, status: "CANCELLED", title:row.title, date:row.calendar_date };
+    return {
+      id,
+      status: "CANCELLED",
+      title: row.title,
+      date: row.calendar_date,
+    };
   });
-  await notifyByPolicy("CALENDAR_HOLIDAY_DELETED",user,{title:"Company Holiday Cancelled",message:`${result.title} on ${result.date} has been cancelled.`,referenceType:"COMPANY_CALENDAR",referenceId:Number(id),actionUrl:"/company-calendar",eventKey:`CALENDAR_HOLIDAY_DELETED:${id}`});
-  return {id:result.id,status:result.status};
+  await notifyByPolicy("CALENDAR_HOLIDAY_DELETED", user, {
+    title: "Company Holiday Cancelled",
+    message: `${result.title} on ${result.date} has been cancelled.`,
+    referenceType: "COMPANY_CALENDAR",
+    referenceId: Number(id),
+    actionUrl: "/company-calendar",
+    eventKey: `CALENDAR_HOLIDAY_DELETED:${id}`,
+  });
+  return { id: result.id, status: result.status };
 }

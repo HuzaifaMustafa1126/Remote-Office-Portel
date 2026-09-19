@@ -425,7 +425,10 @@ export async function transition(id, data, user) {
         task.status !== "IN_PROGRESS" ||
         data.status !== "IN_PROGRESS"
       )
-        throw new ApiError(409, "Only your running In Progress task can be paused.");
+        throw new ApiError(
+          409,
+          "Only your running In Progress task can be paused.",
+        );
       await endTaskSession(c, {
         taskId: id,
         employeeId: task.assignee_employee_id,

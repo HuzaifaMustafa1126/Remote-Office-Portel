@@ -16,7 +16,8 @@ export function resolveEmployeeAvailability(row, now = new Date()) {
   const until = row.manualStatusUntil ? new Date(row.manualStatusUntil) : null;
   const manualValid =
     row.manualStatus &&
-    (!until || (Number.isFinite(until.getTime()) && until.getTime() > now.getTime()));
+    (!until ||
+      (Number.isFinite(until.getTime()) && until.getTime() > now.getTime()));
   if (Boolean(row.activeBreak)) return AVAILABILITY.ON_BREAK;
   if (manualValid && row.manualStatus === AVAILABILITY.NAMAZ)
     return AVAILABILITY.NAMAZ;
@@ -24,8 +25,8 @@ export function resolveEmployeeAvailability(row, now = new Date()) {
   const timeoutMs = Number(row.timeoutMinutes || 5) * 60_000;
   const present = Boolean(
     lastSeen &&
-      Number.isFinite(lastSeen.getTime()) &&
-      now.getTime() - lastSeen.getTime() <= timeoutMs,
+    Number.isFinite(lastSeen.getTime()) &&
+    now.getTime() - lastSeen.getTime() <= timeoutMs,
   );
   if (!present) return AVAILABILITY.OFFLINE;
   return manualValid && Object.hasOwn(AVAILABILITY, row.manualStatus)
@@ -88,9 +89,17 @@ function publicRow(row) {
     department: row.department,
     role: row.role,
     availability,
-    attendance: row.clockedIn ? (row.activeBreak ? "ON_BREAK" : "CLOCKED_IN") : "CLOCKED_OUT",
-    statusUntil: manualActive && availability !== "OFFLINE" && availability !== "ON_BREAK" ? row.manualStatusUntil : null,
-    statusNote: manualActive && availability !== "OFFLINE" ? row.statusNote : null,
+    attendance: row.clockedIn
+      ? row.activeBreak
+        ? "ON_BREAK"
+        : "CLOCKED_IN"
+      : "CLOCKED_OUT",
+    statusUntil:
+      manualActive && availability !== "OFFLINE" && availability !== "ON_BREAK"
+        ? row.manualStatusUntil
+        : null,
+    statusNote:
+      manualActive && availability !== "OFFLINE" ? row.statusNote : null,
     lastSeenAt: row.lastSeenAt,
     ongoingWorkTitle: row.ongoingWorkTitle || null,
     ongoingWorkStatus: row.ongoingWorkStatus || null,
@@ -119,7 +128,8 @@ export function availabilityNotificationContent(
   newStatus,
   context,
 ) {
-  if (oldStatus === newStatus || newStatus === AVAILABILITY.OFFLINE) return null;
+  if (oldStatus === newStatus || newStatus === AVAILABILITY.OFFLINE)
+    return null;
   if (newStatus === AVAILABILITY.ON_BREAK)
     return {
       title: `${employeeName} Started a Break`,
@@ -138,7 +148,8 @@ export function availabilityNotificationContent(
       ? `${employeeName} is Away for Namaz`
       : `${employeeName} is ${statusLabels[newStatus]}`;
   const from =
-    oldStatus && ![AVAILABILITY.ONLINE, AVAILABILITY.OFFLINE].includes(oldStatus)
+    oldStatus &&
+    ![AVAILABILITY.ONLINE, AVAILABILITY.OFFLINE].includes(oldStatus)
       ? ` from ${statusLabels[oldStatus]}`
       : "";
   return {
@@ -182,7 +193,9 @@ export async function notifyAvailabilityChanged({
 export async function getTeamAvailability() {
   const rows = await baseRows();
   const employees = rows.map(publicRow);
-  const counts = Object.fromEntries(Object.values(AVAILABILITY).map((key) => [key, 0]));
+  const counts = Object.fromEntries(
+    Object.values(AVAILABILITY).map((key) => [key, 0]),
+  );
   for (const employee of employees) counts[employee.availability] += 1;
   return {
     counts,
@@ -193,7 +206,8 @@ export async function getTeamAvailability() {
 }
 
 export async function getMyAvailability(user) {
-  if (!user.employee_id) throw new ApiError(403, "This account is not linked to an employee");
+  if (!user.employee_id)
+    throw new ApiError(403, "This account is not linked to an employee");
   const rows = await baseRows(pool, user.employee_id);
   if (!rows[0]) throw new ApiError(404, "Employee is unavailable");
   return {
@@ -204,9 +218,11 @@ export async function getMyAvailability(user) {
 }
 
 export async function setManualAvailability(data, user) {
-  if (!user.employee_id) throw new ApiError(403, "This account is not linked to an employee");
+  if (!user.employee_id)
+    throw new ApiError(403, "This account is not linked to an employee");
   const until = data.until ? new Date(data.until) : null;
-  if (until && until <= new Date()) throw new ApiError(400, "Availability end time must be in the future");
+  if (until && until <= new Date())
+    throw new ApiError(400, "Availability end time must be in the future");
   const connection = await pool.getConnection();
   let before, after, auditId;
   try {
@@ -255,7 +271,8 @@ export async function setManualAvailability(data, user) {
 }
 
 export async function clearManualAvailability(user) {
-  if (!user.employee_id) throw new ApiError(403, "This account is not linked to an employee");
+  if (!user.employee_id)
+    throw new ApiError(403, "This account is not linked to an employee");
   const connection = await pool.getConnection();
   let before, after, auditId;
   try {

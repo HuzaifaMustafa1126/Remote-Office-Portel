@@ -4,11 +4,20 @@ import * as c from "../controllers/auth.controller.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
-import { changePasswordSchema, loginSchema } from "../validators/auth.validator.js";
+import {
+  changePasswordSchema,
+  loginSchema,
+} from "../validators/auth.validator.js";
 const r = Router();
 r.post("/login", validate(loginSchema), asyncHandler(c.login));
 r.get("/me", authenticate, asyncHandler(c.me));
-r.post("/heartbeat",authenticate,asyncHandler(c.heartbeat));
-r.post("/logout",authenticate,asyncHandler(c.logout));
-r.patch("/change-password", authenticate, requireDeviceAccess, validate(changePasswordSchema), asyncHandler(c.changePassword));
+r.post("/heartbeat", authenticate, asyncHandler(c.heartbeat));
+r.post("/logout", authenticate, asyncHandler(c.logout));
+r.patch(
+  "/change-password",
+  authenticate,
+  requireDeviceAccess,
+  validate(changePasswordSchema),
+  asyncHandler(c.changePassword),
+);
 export default r;

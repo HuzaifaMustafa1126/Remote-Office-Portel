@@ -1,6 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
-import { logAudit } from "./audit.service.js";
+import { cleanupCriteria, logAudit } from "./audit.service.js";
 
 export async function loginSignals(userId, meta, executor = pool) {
   const [[history]] = await executor.execute(
@@ -8,7 +8,13 @@ export async function loginSignals(userId, meta, executor = pool) {
       SUM(ip_address=?) knownIp,
       SUM(browser=? AND operating_system=? AND device_type=?) knownDevice
      FROM auth_sessions WHERE user_id=?`,
-    [meta.ip || null, meta.browser || "Unknown", meta.operatingSystem || "Unknown", meta.deviceType || "UNKNOWN", userId],
+    [
+      meta.ip || null,
+      meta.browser || "Unknown",
+      meta.operatingSystem || "Unknown",
+      meta.deviceType || "UNKNOWN",
+      userId,
+    ],
   );
   const hasHistory = Number(history.priorCount) > 0;
   return {
@@ -18,7 +24,10 @@ export async function loginSignals(userId, meta, executor = pool) {
 }
 
 export async function recordFailedLogin(identifier, user, meta) {
-  const safeIdentifier = String(identifier || "").trim().toLowerCase().slice(0, 190);
+  const safeIdentifier = String(identifier || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 190);
   const [[recent]] = await pool.execute(
     `SELECT COUNT(*) attempts FROM login_failed_attempts
      WHERE attempted_at>=DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE)
@@ -30,7 +39,17 @@ export async function recordFailedLogin(identifier, user, meta) {
     `INSERT INTO login_failed_attempts
       (attempted_identifier,user_id,employee_id,ip_address,user_agent,browser,operating_system,device_type,suspicious)
      VALUES(?,?,?,?,?,?,?,?,?)`,
-    [safeIdentifier, user?.id || null, user?.employee_id || null, meta.ip || null, meta.userAgent || null, meta.browser || "Unknown", meta.operatingSystem || "Unknown", meta.deviceType || "UNKNOWN", suspicious],
+    [
+      safeIdentifier,
+      user?.id || null,
+      user?.employee_id || null,
+      meta.ip || null,
+      meta.userAgent || null,
+      meta.browser || "Unknown",
+      meta.operatingSystem || "Unknown",
+      meta.deviceType || "UNKNOWN",
+      suspicious,
+    ],
   );
   return suspicious;
 }
@@ -43,29 +62,45 @@ const resolvedStatus = `CASE
   ELSE 'REVOKED' END`;
 
 function clauses(filters, failed = false) {
-  const where = [], params = [];
+  const where = [],
+    params = [];
   if (filters.search) {
     const q = `%${filters.search}%`;
-    where.push(failed ? "(f.attempted_identifier LIKE ? OR f.ip_address LIKE ? OR CONCAT(e.first_name,' ',e.last_name) LIKE ?)" : "(u.email LIKE ? OR s.ip_address LIKE ? OR CONCAT(e.first_name,' ',e.last_name) LIKE ?)");
-    params.push(q,q,q);
+    where.push(
+      failed
+        ? "(f.attempted_identifier LIKE ? OR f.ip_address LIKE ? OR CONCAT(e.first_name,' ',e.last_name) LIKE ?)"
+        : "(u.email LIKE ? OR s.ip_address LIKE ? OR CONCAT(e.first_name,' ',e.last_name) LIKE ?)",
+    );
+    params.push(q, q, q);
   }
   const dateColumn = failed ? "f.attempted_at" : "s.login_at";
-  if (filters.from) { where.push(`${dateColumn}>=?`); params.push(`${filters.from} 00:00:00`); }
-  if (filters.to) { where.push(`${dateColumn}<DATE_ADD(?,INTERVAL 1 DAY)`); params.push(`${filters.to} 00:00:00`); }
+  if (filters.from) {
+    where.push(`${dateColumn}>=?`);
+    params.push(`${filters.from} 00:00:00`);
+  }
+  if (filters.to) {
+    where.push(`${dateColumn}<DATE_ADD(?,INTERVAL 1 DAY)`);
+    params.push(`${filters.to} 00:00:00`);
+  }
   if (filters.signal) {
     if (failed) {
       if (filters.signal === "SUSPICIOUS") where.push("f.suspicious=TRUE");
       else where.push("FALSE");
     } else if (filters.signal === "NEW_IP") where.push("s.is_new_ip=TRUE");
-    else if (filters.signal === "NEW_DEVICE") where.push("s.is_new_device=TRUE");
+    else if (filters.signal === "NEW_DEVICE")
+      where.push("s.is_new_device=TRUE");
     else where.push("FALSE");
   }
-  if (!failed && filters.status && filters.status !== "FAILED") { where.push(`${resolvedStatus}=?`); params.push(filters.status); }
+  if (!failed && filters.status && filters.status !== "FAILED") {
+    where.push(`${resolvedStatus}=?`);
+    params.push(filters.status);
+  }
   return { sql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
 }
 
 export async function list(filters) {
-  const sessionFilter = clauses(filters, false), failedFilter = clauses(filters, true);
+  const sessionFilter = clauses(filters, false),
+    failedFilter = clauses(filters, true);
   const sessions = `SELECT s.id sessionId,'SESSION' recordType,u.email accountIdentifier,
     u.employee_id employeeId,COALESCE(CONCAT(e.first_name,' ',e.last_name),u.email) employeeName,
     GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ', ') role,
@@ -83,14 +118,35 @@ export async function list(filters) {
    FROM login_failed_attempts f LEFT JOIN employees e ON e.id=f.employee_id ${failedFilter.sql}`;
   const includeSessions = filters.status !== "FAILED";
   const includeFailures = !filters.status || filters.status === "FAILED";
-  const parts = [], params = [];
-  if (includeSessions) { parts.push(sessions); params.push(...sessionFilter.params); }
-  if (includeFailures) { parts.push(failures); params.push(...failedFilter.params); }
+  const parts = [],
+    params = [];
+  if (includeSessions) {
+    parts.push(sessions);
+    params.push(...sessionFilter.params);
+  }
+  if (includeFailures) {
+    parts.push(failures);
+    params.push(...failedFilter.params);
+  }
   const union = parts.join(" UNION ALL ");
   const offset = (filters.page - 1) * filters.limit;
-  const [[count]] = await pool.execute(`SELECT COUNT(*) total FROM (${union}) security_rows`, params);
-  const [rows] = await pool.execute(`${union} ORDER BY occurredAt DESC LIMIT ? OFFSET ?`, [...params, filters.limit, offset]);
-  return { rows, meta: { page: filters.page, limit: filters.limit, total: Number(count.total), pages: Math.max(1,Math.ceil(Number(count.total)/filters.limit)) } };
+  const [[count]] = await pool.execute(
+    `SELECT COUNT(*) total FROM (${union}) security_rows`,
+    params,
+  );
+  const [rows] = await pool.execute(
+    `${union} ORDER BY occurredAt DESC LIMIT ? OFFSET ?`,
+    [...params, filters.limit, offset],
+  );
+  return {
+    rows,
+    meta: {
+      page: filters.page,
+      limit: filters.limit,
+      total: Number(count.total),
+      pages: Math.max(1, Math.ceil(Number(count.total) / filters.limit)),
+    },
+  };
 }
 
 export async function summary() {
@@ -108,7 +164,12 @@ export async function summary() {
      FROM auth_sessions s JOIN users u ON u.id=s.user_id LEFT JOIN employees e ON e.id=u.employee_id
      ORDER BY s.login_at DESC LIMIT 6`,
   );
-  return { stats: Object.fromEntries(Object.entries(stats).map(([key,value]) => [key,Number(value || 0)])), recent };
+  return {
+    stats: Object.fromEntries(
+      Object.entries(stats).map(([key, value]) => [key, Number(value || 0)]),
+    ),
+    recent,
+  };
 }
 
 export async function revoke(sessionId, actor) {
@@ -117,7 +178,91 @@ export async function revoke(sessionId, actor) {
      WHERE id=? AND status='ACTIVE' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP`,
     [sessionId],
   );
-  if (!result.affectedRows) throw new ApiError(409,"This session is no longer active");
-  await logAudit({ userId: actor.id, employeeId: actor.employee_id, action: "SESSION_REVOKED", entityType: "AUTH_SESSION", description: "An administrator terminated an active login session." });
+  if (!result.affectedRows)
+    throw new ApiError(409, "This session is no longer active");
+  await logAudit({
+    userId: actor.id,
+    employeeId: actor.employee_id,
+    action: "SESSION_REVOKED",
+    entityType: "AUTH_SESSION",
+    description: "An administrator terminated an active login session.",
+  });
   return { revoked: true };
+}
+
+const historicalSession =
+  "NOT(status='ACTIVE' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP)";
+
+export async function previewLoginSecurityCleanup(data) {
+  const sessions = cleanupCriteria(data, "login_at");
+  const failures = cleanupCriteria(data, "attempted_at");
+  const [[counts]] = await pool.execute(
+    `SELECT
+      (SELECT COUNT(*) FROM auth_sessions) +
+        (SELECT COUNT(*) FROM login_failed_attempts) totalRecords,
+      (SELECT COUNT(*) FROM auth_sessions WHERE ${historicalSession} AND ${sessions.sql}) +
+        (SELECT COUNT(*) FROM login_failed_attempts WHERE ${failures.sql}) recordsToDelete,
+      (SELECT COUNT(*) FROM auth_sessions
+       WHERE status='ACTIVE' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP) activeSessionsProtected`,
+    [...sessions.params, ...failures.params],
+  );
+  return {
+    totalRecords: Number(counts.totalRecords || 0),
+    recordsToDelete: Number(counts.recordsToDelete || 0),
+    activeSessionsProtected: Number(counts.activeSessionsProtected || 0),
+    recordsToKeep:
+      Number(counts.totalRecords || 0) - Number(counts.recordsToDelete || 0),
+    criteria: sessions.label,
+  };
+}
+
+export async function cleanupLoginSecurityHistory(data, actor) {
+  const sessions = cleanupCriteria(data, "login_at");
+  const failures = cleanupCriteria(data, "attempted_at");
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [sessionDelete] = await connection.execute(
+      `DELETE FROM auth_sessions WHERE ${historicalSession} AND ${sessions.sql}`,
+      sessions.params,
+    );
+    const [failureDelete] = await connection.execute(
+      `DELETE FROM login_failed_attempts WHERE ${failures.sql}`,
+      failures.params,
+    );
+    const recordsDeleted =
+      Number(sessionDelete.affectedRows || 0) +
+      Number(failureDelete.affectedRows || 0);
+    const [[protectedCount]] = await connection.execute(
+      `SELECT COUNT(*) total FROM auth_sessions
+       WHERE status='ACTIVE' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP`,
+    );
+    await connection.execute(
+      `INSERT INTO audit_logs
+       (user_id,employee_id,action,entity_type,description,new_values)
+       VALUES(?,?,'SECURITY_HISTORY_CLEANUP','LOGIN_SECURITY',?,?)`,
+      [
+        actor.id,
+        actor.employee_id,
+        `Login Security history cleanup permanently deleted ${recordsDeleted} historical record(s) ${sessions.label}.`,
+        JSON.stringify({
+          category: "LOGIN_SECURITY",
+          recordsDeleted,
+          activeSessionsProtected: Number(protectedCount.total || 0),
+          criteria: sessions.label,
+        }),
+      ],
+    );
+    await connection.commit();
+    return {
+      recordsDeleted,
+      activeSessionsProtected: Number(protectedCount.total || 0),
+      criteria: sessions.label,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }

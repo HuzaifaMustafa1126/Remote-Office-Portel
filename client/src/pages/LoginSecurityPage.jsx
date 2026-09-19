@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Search, Trash2, X } from "lucide-react";
 import PageHeader from "../components/common/PageHeader";
 import ResponsiveTable from "../components/common/ResponsiveTable";
 import Loader from "../components/common/Loader";
@@ -7,6 +7,8 @@ import * as security from "../services/loginSecurity.service";
 import { errorMessage } from "../utils/helpers";
 import usePermission from "../hooks/usePermission";
 import { PERMISSIONS as P } from "../utils/permissions";
+import useAuth from "../hooks/useAuth";
+import HistoryCleanupModal from "../components/security/HistoryCleanupModal";
 
 const when = (value) =>
   value
@@ -54,11 +56,15 @@ function Summary({ data }) {
 }
 
 export default function LoginSecurityPage() {
+  const { user } = useAuth();
+  const isCeo = user?.roles?.some((role) => role.toUpperCase() === "CEO");
   const canRevoke = usePermission(P.SECURITY_REVOKE),
     [summary, setSummary] = useState(null),
     [result, setResult] = useState(null),
     [selected, setSelected] = useState(null),
     [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [cleanupOpen, setCleanupOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [filters, setFilters] = useState({
       search: "",
@@ -105,7 +111,15 @@ export default function LoginSecurityPage() {
       <PageHeader
         title="Login Security"
         description="Review authentication sessions, failed attempts, and conservative new-login signals."
+        action={
+          isCeo ? (
+            <button onClick={() => setCleanupOpen(true)} className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2.5 text-sm font-bold text-background">
+              <Trash2 size={16} /> Clean History
+            </button>
+          ) : null
+        }
       />
+      {notice && <p className="my-4 rounded-xl bg-success-soft p-3 text-sm text-success">{notice}</p>}
       {summary && <Summary data={summary.stats} />}{" "}
       {error && (
         <p
@@ -332,6 +346,19 @@ export default function LoginSecurityPage() {
             )}
           </section>
         </div>
+      )}
+      {cleanupOpen && (
+        <HistoryCleanupModal
+          kind="LOGIN_SECURITY"
+          preview={security.previewCleanup}
+          remove={security.cleanup}
+          onClose={() => setCleanupOpen(false)}
+          onDone={(data) => {
+            setCleanupOpen(false);
+            setNotice(`${data.recordsDeleted} historical record(s) were permanently deleted. ${data.activeSessionsProtected} active session(s) were protected.`);
+            setFilters((current) => ({ ...current, page: 1 }));
+          }}
+        />
       )}
     </>
   );

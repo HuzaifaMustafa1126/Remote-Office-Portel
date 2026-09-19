@@ -20,27 +20,86 @@ export async function transition(req, res) {
   });
 }
 export async function comment(req, res) {
+  res.status(201).json({
+    success: true,
+    data: await s.addComment(req.params.id, req.body, req.user),
+  });
+}
+export async function editComment(req, res) {
+  res.json({
+    success: true,
+    data: await s.editComment(
+      req.params.id,
+      req.params.commentId,
+      req.body.content,
+      req.user,
+    ),
+  });
+}
+export async function deleteComment(req, res) {
+  res.json({
+    success: true,
+    data: await s.deleteComment(req.params.id, req.params.commentId, req.user),
+  });
+}
+export async function mentionableUsers(req, res) {
+  res.json({
+    success: true,
+    data: await s.mentionableUsers(
+      req.params.id,
+      req.validatedQuery.search,
+      req.user,
+    ),
+  });
+}
+export async function markRead(req, res) {
+  res.json({
+    success: true,
+    data: await s.markTaskRead(req.params.id, req.user),
+  });
+}
+export async function uploadAttachment(req, res) {
   res
     .status(201)
     .json({
       success: true,
-      data: await s.addComment(req.params.id, req.body, req.user),
+      data: await s.uploadAttachment(
+        req.params.id,
+        req.fileInfo,
+        req.body,
+        req.user,
+      ),
     });
 }
-export async function editComment(req,res){res.json({success:true,data:await s.editComment(req.params.id,req.params.commentId,req.body.content,req.user)})}
-export async function deleteComment(req,res){res.json({success:true,data:await s.deleteComment(req.params.id,req.params.commentId,req.user)})}
-export async function mentionableUsers(req,res){res.json({success:true,data:await s.mentionableUsers(req.params.id,req.validatedQuery.search,req.user)})}
-export async function markRead(req,res){res.json({success:true,data:await s.markTaskRead(req.params.id,req.user)})}
-export async function uploadAttachment(req,res){res.status(201).json({success:true,data:await s.uploadAttachment(req.params.id,req.fileInfo,req.body,req.user)})}
-export async function attachmentContent(req,res){const file=await s.getAttachmentContent(req.params.id,req.params.attachmentId,req.user);res.type(file.mimeType).set("Content-Disposition",`${req.query.download==='1'?'attachment':'inline'}; filename*=UTF-8''${encodeURIComponent(file.originalFilename)}`).send(file.buffer)}
-export async function deleteAttachment(req,res){res.json({success:true,data:await s.deleteAttachment(req.params.id,req.params.attachmentId,req.user)})}
-export async function image(req, res) {
+export async function attachmentContent(req, res) {
+  const file = await s.getAttachmentContent(
+    req.params.id,
+    req.params.attachmentId,
+    req.user,
+  );
   res
-    .status(201)
-    .json({
-      success: true,
-      data: await s.addImage(req.params.id, req.body, req.user),
-    });
+    .type(file.mimeType)
+    .set(
+      "Content-Disposition",
+      `${req.query.download === "1" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.originalFilename)}`,
+    )
+    .send(file.buffer);
+}
+export async function deleteAttachment(req, res) {
+  res.json({
+    success: true,
+    data: await s.deleteAttachment(
+      req.params.id,
+      req.params.attachmentId,
+      req.user,
+    ),
+  });
+}
+export async function image(req, res) {
+  res.status(201).json({
+    success: true,
+    data: await s.addImage(req.params.id, req.body, req.user),
+  });
 }
 export async function settings(req, res) {
   res.json({ success: true, data: await s.getSettings() });
@@ -100,17 +159,15 @@ export async function assignees(req, res) {
   res.json({ success: true, data: await s.listAssignableEmployees() });
 }
 export async function uploadReference(req, res) {
-  res
-    .status(201)
-    .json({
-      success: true,
-      data: await s.uploadReferenceImage(
-        req.params.id,
-        req.fileInfo,
-        req.body,
-        req.user,
-      ),
-    });
+  res.status(201).json({
+    success: true,
+    data: await s.uploadReferenceImage(
+      req.params.id,
+      req.fileInfo,
+      req.body,
+      req.user,
+    ),
+  });
 }
 export async function removeImage(req, res) {
   res.json({
@@ -122,30 +179,26 @@ export async function claimStatus(req, res) {
   res.json({ success: true, data: await s.getClaimStatus(req.user) });
 }
 export async function uploadSubmission(req, res) {
-  res
-    .status(201)
-    .json({
-      success: true,
-      data: await s.uploadSubmissionImage(
-        req.params.id,
-        req.fileInfo,
-        req.body,
-        req.user,
-      ),
-    });
+  res.status(201).json({
+    success: true,
+    data: await s.uploadSubmissionImage(
+      req.params.id,
+      req.fileInfo,
+      req.body,
+      req.user,
+    ),
+  });
 }
 export async function uploadChanges(req, res) {
-  res
-    .status(201)
-    .json({
-      success: true,
-      data: await s.uploadChangesImage(
-        req.params.id,
-        req.fileInfo,
-        req.body,
-        req.user,
-      ),
-    });
+  res.status(201).json({
+    success: true,
+    data: await s.uploadChangesImage(
+      req.params.id,
+      req.fileInfo,
+      req.body,
+      req.user,
+    ),
+  });
 }
 export async function imageContent(req, res) {
   const image = await s.getImageContent(
@@ -162,7 +215,10 @@ export async function imageContent(req, res) {
     .send(image.buffer);
 }
 export async function managementList(req, res) {
-  res.json({ success: true, data: await s.listManagement(req.validatedQuery,req.user) });
+  res.json({
+    success: true,
+    data: await s.listManagement(req.validatedQuery, req.user),
+  });
 }
 export async function deadline(req, res) {
   res.json({
@@ -173,5 +229,19 @@ export async function deadline(req, res) {
 export async function bulk(req, res) {
   res.json({ success: true, data: await s.bulk(req.body, req.user) });
 }
-export async function analytics(req,res){res.json({success:true,data:await s.analytics(req.validatedQuery,req.user)})}
-export async function employeePerformance(req,res){res.json({success:true,data:await s.employeePerformance(req.params.employeeId,req.validatedQuery,req.user)})}
+export async function analytics(req, res) {
+  res.json({
+    success: true,
+    data: await s.analytics(req.validatedQuery, req.user),
+  });
+}
+export async function employeePerformance(req, res) {
+  res.json({
+    success: true,
+    data: await s.employeePerformance(
+      req.params.employeeId,
+      req.validatedQuery,
+      req.user,
+    ),
+  });
+}

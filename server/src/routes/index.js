@@ -28,16 +28,21 @@ import ongoingWork from "./ongoingWork.routes.js";
 import pool from "../config/database.js";
 import asyncHandler from "../utils/asyncHandler.js";
 const r = Router();
-r.get("/health", (req, res) => res.json({
-  success: true,
-  status: "ok",
-  timestamp: new Date().toISOString(),
-  uptime: process.uptime(),
-}));
-r.get("/health/database", asyncHandler(async (req, res) => {
-  await pool.query({ sql: "SELECT 1", timeout: 5000 });
-  res.json({ success: true, status: "ok", database: "connected" });
-}));
+r.get("/health", (req, res) =>
+  res.json({
+    success: true,
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  }),
+);
+r.get(
+  "/health/database",
+  asyncHandler(async (req, res) => {
+    await pool.query({ sql: "SELECT 1", timeout: 5000 });
+    res.json({ success: true, status: "ok", database: "connected" });
+  }),
+);
 r.use("/auth", auth);
 r.use(authenticate);
 r.use(requireDeviceAccess);

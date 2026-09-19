@@ -17,6 +17,7 @@
     "test:notes": "node --test test/noteNotification.test.js && node test/noteReply.smoke.mjs",
     "test:availability": "node --test test/availabilityNotification.test.js",
     "test:task-switch": "node test/taskSwitch.smoke.mjs",
+    "test:history-cleanup": "node test/historyCleanup.test.mjs",
     "seed:admin": "node src/scripts/seedAdmin.js",
     "migrate": "node src/scripts/migrate.js",
     "migrations:audit": "node src/scripts/auditMigrationHistory.js",

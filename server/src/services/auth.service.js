@@ -101,12 +101,19 @@ export async function loginUser(email, password, meta = {}) {
         });
         if (signals.isNewIp || signals.isNewDevice)
           await notifyRoles(["CEO", "ADMIN"], {
-            type: signals.isNewDevice ? "SECURITY_NEW_DEVICE" : "SECURITY_NEW_IP",
-            title: signals.isNewDevice ? "New device detected" : "New IP detected",
+            type: signals.isNewDevice
+              ? "SECURITY_NEW_DEVICE"
+              : "SECURITY_NEW_IP",
+            title: signals.isNewDevice
+              ? "New device detected"
+              : "New IP detected",
             message: `${profile.name || profile.email} signed in from a new ${signals.isNewDevice ? "device" : "network"}.`,
-            referenceType: "EMPLOYEE", referenceId: user.employee_id,
-            actionUrl: "/login-security", eventKey: `SECURITY_LOGIN_SIGNAL:${sessionId}`,
-            priority: "WARNING", delivery: { desktop: true, sound: true },
+            referenceType: "EMPLOYEE",
+            referenceId: user.employee_id,
+            actionUrl: "/login-security",
+            eventKey: `SECURITY_LOGIN_SIGNAL:${sessionId}`,
+            priority: "WARNING",
+            delivery: { desktop: true, sound: true },
           });
       } catch (error) {
         // A notification outage must not reject an already committed login.
@@ -179,7 +186,11 @@ export async function heartbeat(sessionId) {
      FROM auth_sessions s WHERE s.id=?`,
     [sessionId],
   );
-  return { ...row, presenceRecorded: true, activeTaskSession: Boolean(row.activeTaskSession) };
+  return {
+    ...row,
+    presenceRecorded: true,
+    activeTaskSession: Boolean(row.activeTaskSession),
+  };
 }
 export async function logoutSession(sessionId, user) {
   const c = await pool.getConnection();

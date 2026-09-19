@@ -1,4 +1,85 @@
 import pool from "../config/database.js";
+import ApiError from "../utils/ApiError.js";
+
+const cleanupCriteria = (data, column = "created_at") => {
+  if (data.mode === "ALL")
+    return { sql: "1=1", params: [], label: "all eligible history" };
+  if (data.mode === "CUSTOM")
+    return {
+      sql: `${column}<?`,
+      params: [`${data.beforeDate} 00:00:00`],
+      label: `before ${data.beforeDate}`,
+    };
+  const intervals = {
+    "30_DAYS": [30, "older than 30 days"],
+    "90_DAYS": [90, "older than 90 days"],
+    "6_MONTHS": [180, "older than 6 months"],
+    "1_YEAR": [365, "older than 1 year"],
+  };
+  const [days, label] = intervals[data.mode] || [];
+  if (!days) throw new ApiError(400, "Invalid cleanup period.");
+  return {
+    sql: `${column}<DATE_SUB(CURRENT_TIMESTAMP,INTERVAL ? DAY)`,
+    params: [days],
+    label,
+  };
+};
+
+export async function previewAuditCleanup(data) {
+  const criteria = cleanupCriteria(data);
+  const [[counts]] = await pool.execute(
+    `SELECT
+       SUM(action<>'SECURITY_HISTORY_CLEANUP' AND ${criteria.sql}) recordsToDelete,
+       SUM(NOT(action<>'SECURITY_HISTORY_CLEANUP' AND ${criteria.sql})) recordsToKeep,
+       COUNT(*) totalRecords
+     FROM audit_logs`,
+    [...criteria.params, ...criteria.params],
+  );
+  return {
+    recordsToDelete: Number(counts.recordsToDelete || 0),
+    recordsToKeep: Number(counts.recordsToKeep || 0),
+    totalRecords: Number(counts.totalRecords || 0),
+    criteria: criteria.label,
+  };
+}
+
+export async function cleanupAuditHistory(data, actor) {
+  const criteria = cleanupCriteria(data);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [deleted] = await connection.execute(
+      `DELETE FROM audit_logs
+       WHERE action<>'SECURITY_HISTORY_CLEANUP' AND ${criteria.sql}`,
+      criteria.params,
+    );
+    const count = Number(deleted.affectedRows || 0);
+    await connection.execute(
+      `INSERT INTO audit_logs
+       (user_id,employee_id,action,entity_type,description,new_values)
+       VALUES(?,?,'SECURITY_HISTORY_CLEANUP','SYSTEM',?,?)`,
+      [
+        actor.id,
+        actor.employee_id,
+        `Audit history cleanup permanently deleted ${count} event(s) ${criteria.label}.`,
+        JSON.stringify({
+          category: "AUDIT_LOGS",
+          recordsDeleted: count,
+          criteria: criteria.label,
+        }),
+      ],
+    );
+    await connection.commit();
+    return { recordsDeleted: count, criteria: criteria.label };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export { cleanupCriteria };
 export async function logAudit({
   userId = null,
   employeeId = null,
