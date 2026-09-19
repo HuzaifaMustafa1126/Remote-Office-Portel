@@ -90,19 +90,31 @@ export default function NotesPage() {
     [confirmation, setConfirmation] = useState(null),
     [actionBusy, setActionBusy] = useState(false),
     [notice, setNotice] = useState("");
+  const loadVersion = useRef(0);
   useEffect(() => {
-    const closeMenus = () => { setMenuId(null); setExportOpen(false); };
+    const closeMenus = () => {
+      setMenuId(null);
+      setExportOpen(false);
+    };
     const key = (event) => event.key === "Escape" && closeMenus();
     document.addEventListener("click", closeMenus);
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("click", closeMenus); document.removeEventListener("keydown", key); };
+    return () => {
+      document.removeEventListener("click", closeMenus);
+      document.removeEventListener("keydown", key);
+    };
   }, []);
-  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 4000); return () => clearTimeout(timer); }, [notice]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   useEffect(() => {
     const t = setTimeout(() => setQuery(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
   const load = useCallback(() => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError("");
     api
@@ -120,9 +132,11 @@ export default function NotesPage() {
         page,
         limit: 20,
       })
-      .then(setData)
-      .catch((e) => setError(errorMessage(e)))
-      .finally(() => setLoading(false));
+      .then((result) => version === loadVersion.current && setData(result))
+      .catch(
+        (e) => version === loadVersion.current && setError(errorMessage(e)),
+      )
+      .finally(() => version === loadVersion.current && setLoading(false));
   }, [
     query,
     visibility,
@@ -179,7 +193,11 @@ export default function NotesPage() {
           reconcileNotifications().catch(() => {});
         })
         .catch((e) => {
-          setError(e?.response?.status === 403 ? "This note is no longer available to you." : "This note is no longer available.");
+          setError(
+            e?.response?.status === 403
+              ? "This note is no longer available to you."
+              : "This note is no longer available.",
+          );
           navigate("/notes", { replace: true });
         });
   }, [noteId, navigate, reconcileNotifications, tab]);
@@ -200,33 +218,101 @@ export default function NotesPage() {
       navigate("/notes");
     };
   const exportSelection = async (mode) => {
-    setExportOpen(false); setExporting(true); setNotice("");
+    setExportOpen(false);
+    setExporting(true);
+    setNotice("");
     try {
-      const filtered = { search: query || undefined, tab, visibility: visibility || undefined, importance: importance || undefined, source: source || undefined, authorEmployeeId: author || undefined, dateRange, startDate: startDate || undefined, endDate: endDate || undefined, sort };
-      const { blob, filename } = await api.exportNotes({ ...(mode === "FILTERED" ? filtered : {}), mode });
-      const url = URL.createObjectURL(blob), anchor = document.createElement("a");
-      anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const filtered = {
+        search: query || undefined,
+        tab,
+        visibility: visibility || undefined,
+        importance: importance || undefined,
+        source: source || undefined,
+        authorEmployeeId: author || undefined,
+        dateRange,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        sort,
+      };
+      const { blob, filename } = await api.exportNotes({
+        ...(mode === "FILTERED" ? filtered : {}),
+        mode,
+      });
+      const url = URL.createObjectURL(blob),
+        anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       setNotice("Notes exported successfully.");
-    } catch (e) { setNotice(e.exportMessage === "No notes available to export." ? e.exportMessage : "Unable to export. Please try again."); }
-    finally { setExporting(false); }
+    } catch (e) {
+      setNotice(
+        e.exportMessage === "No notes available to export."
+          ? e.exportMessage
+          : "Unable to export. Please try again.",
+      );
+    } finally {
+      setExporting(false);
+    }
   };
   const completeAction = async () => {
-    const { kind, note } = confirmation; setActionBusy(true); setNotice("");
+    const { kind, note } = confirmation;
+    setActionBusy(true);
+    setNotice("");
     try {
       if (kind === "archive") await api.archiveNote(note.id);
       else await api.deleteNote(note.id);
-      setNotice(kind === "archive" ? "Note archived successfully." : "Note deleted permanently.");
-      setConfirmation(null); setSelected(null);
-      if (data.rows.length === 1 && page > 1) setPage((value) => value - 1); else load();
+      setNotice(
+        kind === "archive"
+          ? "Note archived successfully."
+          : "Note deleted permanently.",
+      );
+      setConfirmation(null);
+      setSelected(null);
+      if (data.rows.length === 1 && page > 1) setPage((value) => value - 1);
+      else load();
     } catch (error) {
       const status = error.response?.status;
-      if (status === 403) setNotice(kind === "archive" ? "You don't have permission to archive this note." : "You don't have permission to delete this note.");
+      if (status === 403)
+        setNotice(
+          kind === "archive"
+            ? "You don't have permission to archive this note."
+            : "You don't have permission to delete this note.",
+        );
       else if (status === 404) setNotice("Note not found.");
-      else setNotice(kind === "archive" ? "Unable to archive note. Please try again." : "Unable to delete note. Please try again.");
+      else
+        setNotice(
+          kind === "archive"
+            ? "Unable to archive note. Please try again."
+            : "Unable to delete note. Please try again.",
+        );
+    } finally {
+      setActionBusy(false);
     }
-    finally { setActionBusy(false); }
   };
-  const restore = async (note) => { setMenuId(null); try { await api.restoreNote(note.id); setNotice("Note restored successfully."); if (data.rows.length === 1 && page > 1) setPage((value) => value - 1); else load(); } catch (error) { setNotice(error.response?.status === 403 ? "You don't have permission to restore this note." : error.response?.status === 404 ? "Note not found." : "Unable to restore note. Please try again."); } };
+  const restore = async (note) => {
+    if (actionBusy) return;
+    setMenuId(null);
+    setActionBusy(true);
+    try {
+      await api.restoreNote(note.id);
+      setNotice("Note restored successfully.");
+      if (data.rows.length === 1 && page > 1) setPage((value) => value - 1);
+      else load();
+    } catch (error) {
+      setNotice(
+        error.response?.status === 403
+          ? "You don't have permission to restore this note."
+          : error.response?.status === 404
+            ? "Note not found."
+            : "Unable to restore note. Please try again.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
   return (
     <main className="mx-auto max-w-[1450px] space-y-5">
       <header className="flex items-start justify-between gap-4">
@@ -266,7 +352,14 @@ export default function NotesPage() {
             {l}
           </button>
         ))}
-        <button type="button" onClick={() => { setTab("ARCHIVED"); setPage(1); }} className={`relative shrink-0 px-4 py-3 text-sm font-semibold transition ${tab === "ARCHIVED" ? "text-success after:absolute after:inset-x-3 after:bottom-[-1px] after:h-0.5 after:bg-success" : "text-muted-foreground hover:text-foreground"}`}>
+        <button
+          type="button"
+          onClick={() => {
+            setTab("ARCHIVED");
+            setPage(1);
+          }}
+          className={`relative shrink-0 px-4 py-3 text-sm font-semibold transition ${tab === "ARCHIVED" ? "text-success after:absolute after:inset-x-3 after:bottom-[-1px] after:h-0.5 after:bg-success" : "text-muted-foreground hover:text-foreground"}`}
+        >
           Archived
         </button>
       </nav>
@@ -351,15 +444,55 @@ export default function NotesPage() {
           ]}
         />
         <span className="relative ml-auto">
-          <button type="button" disabled={exporting} onClick={(e) => { e.stopPropagation(); setExportOpen((value) => !value); setMenuId(null); }} className="inline-flex h-11 items-center gap-2 rounded-xl border border-success/40 px-3.5 text-sm font-semibold text-success disabled:opacity-55">
-            <Download size={16} />{exporting ? "Exporting..." : "Export"}<ChevronDown size={14} />
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExportOpen((value) => !value);
+              setMenuId(null);
+            }}
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-success/40 px-3.5 text-sm font-semibold text-success disabled:opacity-55"
+          >
+            <Download size={16} />
+            {exporting ? "Exporting..." : "Export"}
+            <ChevronDown size={14} />
           </button>
-          {exportOpen && <span onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl">
-            {[["ALL","Export All Accessible Notes"],["MY","Export My Notes"],["IMPORTANT","Export Important Notes"],["TASK","Export Task Notes"],["FILTERED","Export Current Filtered Results"],...(tab === "ARCHIVED" ? [["ARCHIVED","Export Archived Notes"]] : [])].map(([mode,label]) => <button key={mode} onClick={() => exportSelection(mode)} className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-surface-secondary">{label}</button>)}
-          </span>}
+          {exportOpen && (
+            <span
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl"
+            >
+              {[
+                ["ALL", "Export All Accessible Notes"],
+                ["MY", "Export My Notes"],
+                ["IMPORTANT", "Export Important Notes"],
+                ["TASK", "Export Task Notes"],
+                ["FILTERED", "Export Current Filtered Results"],
+                ...(tab === "ARCHIVED"
+                  ? [["ARCHIVED", "Export Archived Notes"]]
+                  : []),
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => exportSelection(mode)}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-surface-secondary"
+                >
+                  {label}
+                </button>
+              ))}
+            </span>
+          )}
         </span>
       </section>
-      {notice && <div role="status" className={`notification-toast fixed right-5 top-5 z-[70] max-w-sm rounded-xl border border-border px-4 py-3 text-sm shadow-xl ${notice.includes("successfully") ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>{notice}</div>}
+      {notice && (
+        <div
+          role="status"
+          className={`notification-toast fixed right-5 top-5 z-[70] max-w-sm rounded-xl border border-border px-4 py-3 text-sm shadow-xl ${notice.includes("successfully") ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}
+        >
+          {notice}
+        </div>
+      )}
       {dateRange === "CUSTOM" && (
         <section className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-3">
           <label className="text-xs font-semibold">
@@ -442,6 +575,11 @@ export default function NotesPage() {
                         {n.imageCount} image{n.imageCount === 1 ? "" : "s"}
                       </span>
                     )}
+                    {n.replyCount > 0 && (
+                      <span className="text-muted-foreground">
+                        {n.replyCount} repl{n.replyCount === 1 ? "y" : "ies"}
+                      </span>
+                    )}
                     {n.relatedTaskTitle && (
                       <span className="max-w-[330px] truncate text-primary-text">
                         ↗ Related Task: {n.relatedTaskTitle}
@@ -463,7 +601,11 @@ export default function NotesPage() {
                   </span>
                 </span>
                 <VisibilityBadge value={n.visibility} />
-                {n.isNew && <span className="rounded-full bg-primary-soft px-2 py-1 text-[10px] font-bold text-primary-text">New</span>}
+                {n.isNew && (
+                  <span className="rounded-full bg-primary-soft px-2 py-1 text-[10px] font-bold text-primary-text">
+                    New
+                  </span>
+                )}
                 <button
                   onClick={() => open(n)}
                   className="rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-surface-secondary"
@@ -471,19 +613,112 @@ export default function NotesPage() {
                   View
                 </button>
                 <span className="relative">
-                  <button type="button" aria-label={`Actions for ${n.title}`} onClick={(e) => { e.stopPropagation(); setMenuId(menuId === n.id ? null : n.id); setExportOpen(false); }} className="rounded-lg p-2 hover:bg-surface-secondary"><MoreVertical size={18} /></button>
-                  {menuId === n.id && <span onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl">
-                    <MenuAction Icon={Eye} label="View" onClick={() => { setMenuId(null); open(n); }} />
-                    {tab !== "ARCHIVED" && Number(n.authorUserId) === Number(user.id) && <MenuAction Icon={Pencil} label="Edit" onClick={async () => { setMenuId(null); try { setEditing(await api.getNote(n.id)); } catch { setNotice("Unable to open this note for editing."); } }} />}
-                    <span className="my-1 block border-t border-border" />
-                    {tab === "ARCHIVED" ? <>
-                      <MenuAction Icon={RotateCcw} label="Restore" onClick={() => restore(n)} />
-                      <MenuAction Icon={Trash2} label="Delete Permanently" danger onClick={() => { setMenuId(null); setConfirmation({ kind: "delete", note: n }); }} />
-                    </> : <>
-                      <MenuAction Icon={Pin} label={n.isPinned ? "Unpin" : "Pin"} onClick={async () => { setMenuId(null); await api.toggleNotePin(n.id); load(); }} />
-                      {Number(n.authorUserId) === Number(user.id) && <><MenuAction Icon={Archive} label="Archive" onClick={() => { setMenuId(null); setConfirmation({ kind: "archive", note: n }); }} /><MenuAction Icon={Trash2} label="Delete" danger onClick={() => { setMenuId(null); setConfirmation({ kind: "delete", note: n }); }} /></>}
-                    </>}
-                  </span>}
+                  <button
+                    type="button"
+                    aria-label={`Actions for ${n.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuId(menuId === n.id ? null : n.id);
+                      setExportOpen(false);
+                    }}
+                    className="rounded-lg p-2 hover:bg-surface-secondary"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  {menuId === n.id && (
+                    <span
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl"
+                    >
+                      <MenuAction
+                        Icon={Eye}
+                        label="View"
+                        onClick={() => {
+                          setMenuId(null);
+                          open(n);
+                        }}
+                      />
+                      {tab !== "ARCHIVED" &&
+                        Number(n.authorUserId) === Number(user.id) && (
+                          <MenuAction
+                            Icon={Pencil}
+                            label="Edit"
+                            onClick={async () => {
+                              setMenuId(null);
+                              try {
+                                setEditing(await api.getNote(n.id));
+                              } catch {
+                                setNotice(
+                                  "Unable to open this note for editing.",
+                                );
+                              }
+                            }}
+                          />
+                        )}
+                      <span className="my-1 block border-t border-border" />
+                      {tab === "ARCHIVED" ? (
+                        <>
+                          <MenuAction
+                            Icon={RotateCcw}
+                            label="Restore"
+                            onClick={() => restore(n)}
+                          />
+                          <MenuAction
+                            Icon={Trash2}
+                            label="Delete Permanently"
+                            danger
+                            onClick={() => {
+                              setMenuId(null);
+                              setConfirmation({ kind: "delete", note: n });
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <MenuAction
+                            Icon={Pin}
+                            label={n.isPinned ? "Unpin" : "Pin"}
+                            onClick={async () => {
+                              if (actionBusy) return;
+                              setMenuId(null);
+                              setActionBusy(true);
+                              try {
+                                await api.toggleNotePin(n.id);
+                                load();
+                              } catch {
+                                setNotice(
+                                  "Unable to update this pin. Please try again.",
+                                );
+                              } finally {
+                                setActionBusy(false);
+                              }
+                            }}
+                          />
+                          {Number(n.authorUserId) === Number(user.id) && (
+                            <>
+                              <MenuAction
+                                Icon={Archive}
+                                label="Archive"
+                                onClick={() => {
+                                  setMenuId(null);
+                                  setConfirmation({ kind: "archive", note: n });
+                                }}
+                              />
+                              <MenuAction
+                                Icon={Trash2}
+                                label="Delete"
+                                danger
+                                onClick={() => {
+                                  setMenuId(null);
+                                  setConfirmation({ kind: "delete", note: n });
+                                }}
+                              />
+                            </>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  )}
                 </span>
               </div>
             </article>
@@ -502,7 +737,9 @@ export default function NotesPage() {
                     ? "No important notes yet."
                     : tab === "MY"
                       ? "You have not created any notes yet."
-                      : "No notes yet"
+                      : tab === "ARCHIVED"
+                        ? "No archived notes yet."
+                        : "No notes yet"
           }
           detail={
             query || visibility || importance || source || dateRange !== "ALL"
@@ -563,11 +800,21 @@ export default function NotesPage() {
       {selected && (
         <Detail
           note={selected}
+          currentUserId={user.id}
+          targetReplyId={Number(urlParams.get("reply")) || null}
           onPin={async () => {
-            await api.toggleNotePin(selected.id);
-            const fresh = await api.getNote(selected.id);
-            setSelected(fresh);
-            load();
+            if (actionBusy) return;
+            setActionBusy(true);
+            try {
+              await api.toggleNotePin(selected.id);
+              const fresh = await api.getNote(selected.id);
+              setSelected(fresh);
+              load();
+            } catch {
+              setNotice("Unable to update this pin. Please try again.");
+            } finally {
+              setActionBusy(false);
+            }
           }}
           own={Number(selected.authorUserId) === Number(user.id)}
           onClose={close}
@@ -575,16 +822,62 @@ export default function NotesPage() {
           onRefresh={() => api.getNote(selected.id).then(setSelected)}
         />
       )}
-      <Modal open={Boolean(confirmation)} title={confirmation?.kind === "archive" ? "Archive Note?" : "Delete Note?"} onClose={() => !actionBusy && setConfirmation(null)}>
-        <p className="text-sm text-muted-foreground">{confirmation?.kind === "archive" ? "This note will be moved to Archived and can be restored later." : <>Are you sure you want to permanently delete: <strong className="text-foreground">{confirmation?.note.title}</strong>? This action cannot be undone.</>}</p>
-        <div className="mt-6 flex justify-end gap-2"><Button variant="secondary" disabled={actionBusy} onClick={() => setConfirmation(null)}>Cancel</Button><Button variant={confirmation?.kind === "delete" ? "danger" : "primary"} disabled={actionBusy} onClick={completeAction}>{actionBusy ? "Working..." : confirmation?.kind === "archive" ? "Archive" : "Delete Permanently"}</Button></div>
+      <Modal
+        open={Boolean(confirmation)}
+        title={
+          confirmation?.kind === "archive" ? "Archive Note?" : "Delete Note?"
+        }
+        onClose={() => !actionBusy && setConfirmation(null)}
+      >
+        <p className="text-sm text-muted-foreground">
+          {confirmation?.kind === "archive" ? (
+            "This note will be moved to Archived and can be restored later."
+          ) : (
+            <>
+              Are you sure you want to permanently delete:{" "}
+              <strong className="text-foreground">
+                {confirmation?.note.title}
+              </strong>
+              ? This action cannot be undone.
+            </>
+          )}
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            disabled={actionBusy}
+            onClick={() => setConfirmation(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={confirmation?.kind === "delete" ? "danger" : "primary"}
+            disabled={actionBusy}
+            onClick={completeAction}
+          >
+            {actionBusy
+              ? "Working..."
+              : confirmation?.kind === "archive"
+                ? "Archive"
+                : "Delete Permanently"}
+          </Button>
+        </div>
       </Modal>
     </main>
   );
 }
 
 function MenuAction({ Icon, label, onClick, danger = false }) {
-  return <button type="button" onClick={onClick} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-surface-secondary ${danger ? "text-danger" : "text-foreground"}`}><Icon size={15} />{label}</button>;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-surface-secondary ${danger ? "text-danger" : "text-foreground"}`}
+    >
+      <Icon size={15} />
+      {label}
+    </button>
+  );
 }
 
 function CompactFilter({
@@ -680,23 +973,28 @@ function Editor({ note, author, onClose, onSaved }) {
     [removed, setRemoved] = useState([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [dragging, setDragging] = useState(false);
+    [dragging, setDragging] = useState(false),
+    [createdId, setCreatedId] = useState(null);
   const dirty =
     files.length > 0 ||
     removed.length > 0 ||
     JSON.stringify(form) !== JSON.stringify(initial.current);
+  const requestClose = useCallback(() => {
+    if (!dirty || window.confirm("Discard your unsaved Note changes?"))
+      onClose();
+  }, [dirty, onClose]);
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const key = (e) => {
-      if (e.key === "Escape" && !busy) onClose();
+      if (e.key === "Escape" && !busy) requestClose();
     };
     window.addEventListener("keydown", key);
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", key);
     };
-  }, [busy, onClose]);
+  }, [busy, requestClose]);
   const addFiles = (list) => {
     const next = [...list].filter(
       (f) =>
@@ -723,11 +1021,23 @@ function Editor({ note, author, onClose, onSaved }) {
           relatedTaskId: form.relatedTaskId || null,
           ...(note.id ? { notifyViewers: Boolean(form.notifyViewers) } : {}),
         },
-        saved = note.id
+        initialSaved = note.id
           ? await api.updateNote(note.id, payload)
-          : await api.createNote(payload);
-      for (const id of removed) await api.removeImage(saved.id, id);
-      for (const file of files) await api.uploadImage(saved.id, file);
+          : createdId
+            ? await api.updateNote(createdId, {
+                ...payload,
+                notifyViewers: false,
+              })
+            : await api.createNote(payload);
+      if (!note.id && !createdId) setCreatedId(initialSaved.id);
+      for (const id of removed) await api.removeImage(initialSaved.id, id);
+      for (const file of [...files]) {
+        await api.uploadImage(initialSaved.id, file);
+        setFiles((current) => current.filter((item) => item !== file));
+      }
+      const saved = note.id
+        ? initialSaved
+        : await api.publishNoteNotifications(initialSaved.id);
       onSaved(saved);
     } catch (e) {
       setError(errorMessage(e));
@@ -759,7 +1069,7 @@ function Editor({ note, author, onClose, onSaved }) {
     <div
       className="note-editor-backdrop fixed inset-0 z-50 grid place-items-center bg-[rgba(15,23,42,0.45)] p-3 backdrop-blur-[2px] sm:p-5"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !dirty && !busy) onClose();
+        if (e.target === e.currentTarget && !busy) requestClose();
       }}
     >
       <form
@@ -788,7 +1098,7 @@ function Editor({ note, author, onClose, onSaved }) {
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={busy}
             aria-label="Close note editor"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-surface-secondary hover:text-foreground"
@@ -824,6 +1134,7 @@ function Editor({ note, author, onClose, onSaved }) {
             Note Content <span className="text-danger">*</span>
             <textarea
               required
+              maxLength="50000"
               rows="5"
               className="input mt-1.5 min-h-[140px] resize-y"
               value={form.content}
@@ -992,7 +1303,13 @@ function Editor({ note, author, onClose, onSaved }) {
           </section>
           {note.id && (
             <label className="flex items-center gap-3 rounded-xl border border-border p-4 text-sm font-semibold">
-              <input type="checkbox" checked={Boolean(form.notifyViewers)} onChange={(e) => setForm({ ...form, notifyViewers: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={Boolean(form.notifyViewers)}
+                onChange={(e) =>
+                  setForm({ ...form, notifyViewers: e.target.checked })
+                }
+              />
               Notify viewers about this update
             </label>
           )}
@@ -1022,7 +1339,7 @@ function Editor({ note, author, onClose, onSaved }) {
             <Button
               type="button"
               variant="secondary"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={busy}
             >
               Cancel
@@ -1071,8 +1388,24 @@ function ImagePreview({ name, onRemove, children }) {
     </span>
   );
 }
-function Detail({ note, own, onClose, onEdit, onPin }) {
-  const [preview, setPreview] = useState(null), [copied, setCopied] = useState(false);
+function Detail({
+  note,
+  own,
+  currentUserId,
+  targetReplyId,
+  onClose,
+  onEdit,
+  onPin,
+}) {
+  const [preview, setPreview] = useState(null),
+    [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
   const show = async (image) => {
     const blob = await api.imageBlob(note.id, image.id);
     setPreview(URL.createObjectURL(blob));
@@ -1094,21 +1427,23 @@ function Detail({ note, own, onClose, onEdit, onPin }) {
             <p className="mt-2 text-sm text-muted-foreground">{note.summary}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onPin}
-              aria-label={note.isPinned ? "Unpin note" : "Pin note"}
-              className="rounded-lg border border-border p-2"
-            >
-              <Pin
-                size={18}
-                className={
-                  note.isPinned
-                    ? "fill-primary text-primary"
-                    : "text-muted-foreground"
-                }
-              />
-            </button>
-            <button onClick={onClose}>
+            {!note.isArchived && (
+              <button
+                onClick={onPin}
+                aria-label={note.isPinned ? "Unpin note" : "Pin note"}
+                className="rounded-lg border border-border p-2"
+              >
+                <Pin
+                  size={18}
+                  className={
+                    note.isPinned
+                      ? "fill-primary text-primary"
+                      : "text-muted-foreground"
+                  }
+                />
+              </button>
+            )}
+            <button onClick={onClose} aria-label="Close note details">
               <X />
             </button>
           </div>
@@ -1118,8 +1453,32 @@ function Detail({ note, own, onClose, onEdit, onPin }) {
             {note.content}
           </p>
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4">
-            <div><p className="text-xs font-bold uppercase text-muted-foreground">Visibility</p><p className="mt-1 text-sm font-semibold">{note.visibility === "TEAM" ? "👥" : note.visibility === "CEO_ONLY" ? "♛" : "🔒"} {labels[note.visibility]}</p></div>
-            <Button variant="secondary" onClick={async () => { await navigator.clipboard.writeText(`${window.location.origin}/notes/${note.id}`); setCopied(true); setTimeout(() => setCopied(false), 1800); }}><Copy size={14} className="mr-1 inline" />{copied ? "Link Copied" : "Copy Note Link"}</Button>
+            <div>
+              <p className="text-xs font-bold uppercase text-muted-foreground">
+                Visibility
+              </p>
+              <p className="mt-1 text-sm font-semibold">
+                {note.visibility === "TEAM"
+                  ? "👥"
+                  : note.visibility === "CEO_ONLY"
+                    ? "♛"
+                    : "🔒"}{" "}
+                {labels[note.visibility]}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                await navigator.clipboard.writeText(
+                  `${window.location.origin}/notes/${note.id}`,
+                );
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1800);
+              }}
+            >
+              <Copy size={14} className="mr-1 inline" />
+              {copied ? "Link Copied" : "Copy Note Link"}
+            </Button>
           </section>
           {note.relatedTaskId && (
             <section className="rounded-xl bg-primary-soft p-4">
@@ -1165,8 +1524,13 @@ function Detail({ note, own, onClose, onEdit, onPin }) {
               </div>
             </section>
           )}
+          <NoteReplies
+            note={note}
+            currentUserId={currentUserId}
+            targetReplyId={targetReplyId}
+          />
         </div>
-        {own && (
+        {own && !note.isArchived && (
           <footer className="flex justify-end border-t p-4">
             <Button onClick={onEdit}>Edit Note</Button>
           </footer>
@@ -1174,16 +1538,399 @@ function Detail({ note, own, onClose, onEdit, onPin }) {
       </article>
       {preview && (
         <button
+          type="button"
+          aria-label="Close image preview"
           className="absolute inset-0 z-10 grid place-items-center bg-black/80 p-6"
           onClick={() => {
             URL.revokeObjectURL(preview);
             setPreview(null);
           }}
         >
-          <img src={preview} className="max-h-full max-w-full object-contain" />
+          <img
+            src={preview}
+            alt="Note attachment preview"
+            className="max-h-full max-w-full object-contain"
+          />
         </button>
       )}
     </div>
+  );
+}
+
+function NoteReplies({ note, currentUserId, targetReplyId }) {
+  const [replies, setReplies] = useState([]),
+    [people, setPeople] = useState([]),
+    [content, setContent] = useState(""),
+    [mentionIds, setMentionIds] = useState([]),
+    [editing, setEditing] = useState(null),
+    [busy, setBusy] = useState(false),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [removeReply, setRemoveReply] = useState(null),
+    [highlighted, setHighlighted] = useState(null);
+  const load = useCallback(() => {
+    setLoading(true);
+    return api
+      .listNoteReplies(note.id, note.isArchived)
+      .then(setReplies)
+      .catch((e) => setError(errorMessage(e)))
+      .finally(() => setLoading(false));
+  }, [note.id, note.isArchived]);
+  const searchPeople = useCallback(
+    (search) => {
+      if (note.isArchived) return;
+      api
+        .listMentionableNoteUsers(note.id, search)
+        .then((found) =>
+          setPeople((current) => {
+            const merged = new Map(
+              current.map((person) => [Number(person.userId), person]),
+            );
+            found.forEach((person) =>
+              merged.set(Number(person.userId), person),
+            );
+            return [...merged.values()];
+          }),
+        )
+        .catch(() => {});
+    },
+    [note.id, note.isArchived],
+  );
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    if (note.isArchived) return;
+    api
+      .listMentionableNoteUsers(note.id)
+      .then(setPeople)
+      .catch(() => {});
+  }, [note.id, note.isArchived]);
+  useEffect(() => {
+    if (
+      !targetReplyId ||
+      loading ||
+      !replies.some((reply) => Number(reply.id) === Number(targetReplyId))
+    )
+      return;
+    const element = document.getElementById(`note-reply-${targetReplyId}`);
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlighted(Number(targetReplyId));
+    const timer = setTimeout(() => setHighlighted(null), 1800);
+    return () => clearTimeout(timer);
+  }, [targetReplyId, loading, replies]);
+  const submit = async () => {
+    if (!content.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const selected = mentionIds.filter((id) =>
+        content.includes(
+          `@${people.find((person) => Number(person.userId) === Number(id))?.name}`,
+        ),
+      );
+      const created = await api.createNoteReply(note.id, {
+        content: content.trim(),
+        mentionUserIds: selected,
+      });
+      setReplies((items) => [...items, created]);
+      setContent("");
+      setMentionIds([]);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveEdit = async () => {
+    if (!editing?.content.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const ids = editing.mentionIds.filter((id) =>
+        editing.content.includes(
+          `@${people.find((person) => Number(person.userId) === Number(id))?.name}`,
+        ),
+      );
+      const saved = await api.updateNoteReply(note.id, editing.id, {
+        content: editing.content.trim(),
+        mentionUserIds: ids,
+      });
+      setReplies((items) =>
+        items.map((item) => (item.id === saved.id ? saved : item)),
+      );
+      setEditing(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirmDelete = async () => {
+    if (!removeReply || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.deleteNoteReply(note.id, removeReply.id);
+      setReplies((items) => items.filter((item) => item.id !== removeReply.id));
+      setRemoveReply(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="border-t border-border pt-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold">Replies</h2>
+        <span className="text-xs text-muted-foreground">{replies.length}</span>
+      </div>
+      {loading ? (
+        <p className="mt-3 text-xs text-muted-foreground">Loading replies...</p>
+      ) : replies.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-surface-secondary p-4 text-center text-xs text-muted-foreground">
+          No replies yet.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {replies.map((reply) => {
+            const own = Number(reply.createdBy) === Number(currentUserId),
+              activeEdit = editing?.id === reply.id;
+            return (
+              <article
+                id={`note-reply-${reply.id}`}
+                key={reply.id}
+                className={`rounded-xl border p-3 transition ${highlighted === Number(reply.id) ? "border-primary bg-primary-soft" : "border-border"}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-soft text-[10px] font-bold text-primary-text">
+                    {initials(reply.authorName)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-bold">
+                        {reply.authorName}
+                      </p>
+                      {own && !note.isArchived && !activeEdit && (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            aria-label="Edit reply"
+                            className="rounded p-1 text-muted-foreground hover:bg-surface-secondary"
+                            onClick={() =>
+                              setEditing({
+                                id: reply.id,
+                                content: reply.content,
+                                mentionIds: reply.mentions.map(
+                                  (item) => item.userId,
+                                ),
+                              })
+                            }
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Delete reply"
+                            className="rounded p-1 text-danger hover:bg-danger-soft"
+                            onClick={() => setRemoveReply(reply)}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {stamp(reply.createdAt)}
+                      {reply.edited ? " · Edited" : ""}
+                    </p>
+                    {activeEdit ? (
+                      <div className="mt-2">
+                        <MentionBox
+                          value={editing.content}
+                          onChange={(value) =>
+                            setEditing((item) => ({ ...item, content: value }))
+                          }
+                          people={people}
+                          onSearch={searchPeople}
+                          onMention={(id) =>
+                            setEditing((item) => ({
+                              ...item,
+                              mentionIds: [
+                                ...new Set([...item.mentionIds, id]),
+                              ],
+                            }))
+                          }
+                        />
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={() => setEditing(null)}
+                            disabled={busy}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={saveEdit}
+                            disabled={busy || !editing.content.trim()}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">
+                        <MentionText
+                          content={reply.content}
+                          mentions={reply.mentions}
+                        />
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {note.isArchived ? (
+        <p className="mt-4 rounded-xl bg-surface-secondary p-3 text-xs text-muted-foreground">
+          This note is archived. Replies are disabled.
+        </p>
+      ) : (
+        <div className="mt-4">
+          <MentionBox
+            value={content}
+            onChange={setContent}
+            people={people}
+            onSearch={searchPeople}
+            onMention={(id) =>
+              setMentionIds((items) => [...new Set([...items, id])])
+            }
+            placeholder="Write a reply..."
+          />
+          <div className="mt-2 flex justify-end">
+            <Button onClick={submit} disabled={busy || !content.trim()}>
+              <Send size={14} className="mr-1 inline" />
+              {busy ? "Sending..." : "Reply"}
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger"
+        >
+          {error}
+        </p>
+      )}
+      <Modal
+        open={Boolean(removeReply)}
+        title="Delete Reply?"
+        onClose={() => !busy && setRemoveReply(null)}
+      >
+        <p className="text-sm text-muted-foreground">
+          This reply will be removed permanently.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setRemoveReply(null)}
+          >
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={confirmDelete}>
+            {busy ? "Deleting..." : "Delete"}
+          </Button>
+        </div>
+      </Modal>
+    </section>
+  );
+}
+
+function MentionBox({
+  value,
+  onChange,
+  people,
+  onSearch,
+  onMention,
+  placeholder,
+}) {
+  const match = value.match(/(?:^|\s)@([^@\n]*)$/),
+    query = match?.[1]?.toLowerCase() || "";
+  const choices = match
+    ? people
+        .filter((person) => person.name.toLowerCase().includes(query))
+        .slice(0, 6)
+    : [];
+  useEffect(() => {
+    if (!match) return;
+    const timer = setTimeout(() => onSearch(query.trim()), 200);
+    return () => clearTimeout(timer);
+  }, [query, Boolean(match), onSearch]);
+  const select = (person) => {
+    const start = match.index + (/^\s/.test(match[0]) ? 1 : 0);
+    onChange(`${value.slice(0, start)}@${person.name} `);
+    onMention(Number(person.userId));
+  };
+  return (
+    <div className="relative">
+      <textarea
+        className="input mt-0 min-h-[82px] resize-y text-sm"
+        maxLength={3000}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+      {choices.length > 0 && (
+        <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-border bg-surface shadow-xl">
+          {choices.map((person) => (
+            <button
+              type="button"
+              key={person.userId}
+              onClick={() => select(person)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-secondary"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-[9px] font-bold text-primary-text">
+                {initials(person.name)}
+              </span>
+              <span>
+                <span className="block text-xs font-bold">{person.name}</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  {person.role}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MentionText({ content, mentions }) {
+  const names = mentions
+    .map((item) => item.name)
+    .sort((a, b) => b.length - a.length);
+  if (!names.length) return content;
+  const escaped = names.map((name) =>
+    `@${name}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
+  const parts = content.split(new RegExp(`(${escaped.join("|")})`, "g"));
+  return parts.map((part, index) =>
+    names.some((name) => part === `@${name}`) ? (
+      <span
+        key={index}
+        className="rounded bg-primary-soft px-0.5 font-semibold text-primary-text"
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
   );
 }
 

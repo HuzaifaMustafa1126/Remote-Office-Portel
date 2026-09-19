@@ -1,5 +1,14 @@
 import mysql from "mysql2/promise";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import env from "../config/env.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const migrationsDir = path.resolve(here, "../../database/migrations");
+const expectedMigrations = (await fs.readdir(migrationsDir))
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
 
 const connection = await mysql.createConnection({
   host: env.DB_HOST,
@@ -42,14 +51,60 @@ const [[ongoingWork]] = await connection.execute(
 const [migrations] = await connection.execute(
   `SELECT migration_name migrationName,applied_at appliedAt
    FROM schema_migrations
-   WHERE migration_name IN ('041_namaz_ongoing_work.sql','042_normalize_database_collations.sql')
    ORDER BY migration_name`,
 );
+const appliedMigrations = new Set(migrations.map((row) => row.migrationName));
+const missingMigrations = expectedMigrations.filter(
+  (name) => !appliedMigrations.has(name),
+);
+const unexpectedMigrations = migrations
+  .map((row) => row.migrationName)
+  .filter((name) => !expectedMigrations.includes(name));
+const [[recentFeatures]] = await connection.execute(
+  `SELECT
+    EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema=DATABASE() AND table_name='note_reads') noteReadsTable,
+    EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema=DATABASE() AND table_name='note_replies') noteRepliesTable,
+    EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema=DATABASE() AND table_name='note_reply_mentions') noteReplyMentionsTable,
+    EXISTS(SELECT 1 FROM information_schema.columns
+           WHERE table_schema=DATABASE() AND table_name='work_notes'
+             AND column_name='archived_at') noteArchiveTimestamp,
+    EXISTS(SELECT 1 FROM information_schema.columns
+           WHERE table_schema=DATABASE() AND table_name='notification_preferences'
+             AND column_name='availability_notifications') availabilityPreference,
+    EXISTS(SELECT 1 FROM notification_policies
+           WHERE event_type='AVAILABILITY_CHANGED') availabilityPolicy`,
+);
+const migrationState = {
+  expectedCount: expectedMigrations.length,
+  appliedExpectedCount: expectedMigrations.length - missingMigrations.length,
+  latestExpected: expectedMigrations.at(-1) || null,
+  latestApplied: migrations.at(-1)?.migrationName || null,
+  missingMigrations,
+  unexpectedMigrations,
+};
 
-console.log(JSON.stringify({database,ongoingWork,migrations,wrongTables,wrongColumns},null,2));
+console.log(
+  JSON.stringify(
+    {
+      database,
+      ongoingWork,
+      recentFeatures,
+      migrationState,
+      migrations,
+      wrongTables,
+      wrongColumns,
+    },
+    null,
+    2,
+  ),
+);
 await connection.end();
 if(
   database?.collation!=="utf8mb4_unicode_ci"||
   !ongoingWork?.tableExists||!ongoingWork?.namazExists||
-  migrations.length!==2||wrongTables.length||wrongColumns.length
+  Object.values(recentFeatures).some((value) => !value)||
+  missingMigrations.length||wrongTables.length||wrongColumns.length
 ) process.exitCode=2;

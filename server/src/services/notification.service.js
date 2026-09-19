@@ -14,6 +14,7 @@ export function categoryFor(type = "") {
   if (["CALENDAR", "HOLIDAY"].includes(prefix)) return "CALENDAR";
   if (prefix === "TASK" || type === "OPEN_TASK_CREATED") return "TASK";
   if (prefix === "NOTE") return "NOTE";
+  if (prefix === "AVAILABILITY") return "AVAILABILITY";
   if (["PAYROLL", "PAYSLIP", "SALARY"].includes(prefix)) return "PAYROLL";
   if (prefix === "SECURITY") return "SECURITY";
   if (prefix === "EMPLOYEE") return "EMPLOYEE";
@@ -26,6 +27,7 @@ const categoryPreference = {
   ATTENDANCE: "attendance_notifications", BREAK: "break_notifications",
   LEAVE: "leave_notifications", CALENDAR: "calendar_notifications",
   TASK: "task_notifications", NOTE: "note_notifications", PAYROLL: "payroll_notifications",
+  AVAILABILITY: "availability_notifications",
   SECURITY: "security_notifications", EMPLOYEE: "employee_notifications",
   SHIFT: "shift_notifications", ANNOUNCEMENT: "announcement_notifications",
   SYSTEM: "announcement_notifications",
@@ -99,8 +101,8 @@ export async function notifyByPolicy(eventType, actor, data) {
   if(policy.audience_type==='CEO_ADMIN') conditions.push("UPPER(r.name) IN('CEO','ADMIN')");
   else if(policy.audience_type==='MANAGERS') conditions.push("UPPER(r.name) LIKE '%MANAGER%'");
   else if(policy.audience_type==='SAME_DEPARTMENT'){conditions.push("e.department=(SELECT department FROM employees WHERE id=?)");params.push(actor.employee_id);}
-  else if(policy.audience_type==='SELECTED_ROLES'&&!data.recipientUserIds){conditions.push("r.id IN(SELECT role_id FROM notification_policy_roles WHERE policy_id=?)");params.push(policy.id);}
-  else if(policy.audience_type==='SELECTED_EMPLOYEES'&&!data.recipientUserIds){conditions.push("e.id IN(SELECT employee_id FROM notification_policy_employees WHERE policy_id=?)");params.push(policy.id);}
+  else if(policy.audience_type==='SELECTED_ROLES'&&(!data.recipientUserIds||data.respectAudience)){conditions.push("r.id IN(SELECT role_id FROM notification_policy_roles WHERE policy_id=?)");params.push(policy.id);}
+  else if(policy.audience_type==='SELECTED_EMPLOYEES'&&(!data.recipientUserIds||data.respectAudience)){conditions.push("e.id IN(SELECT employee_id FROM notification_policy_employees WHERE policy_id=?)");params.push(policy.id);}
   else conditions.push('1=1');
   if (data.recipientUserIds) {
     const recipients=[...new Set(data.recipientUserIds.map(Number).filter(Boolean))];
@@ -109,8 +111,8 @@ export async function notifyByPolicy(eventType, actor, data) {
     params.push(...recipients);
   }
   if(!policy.notify_actor){conditions.push('u.id<>?');params.push(actor.id);}
-  const [users]=await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND ${conditions.join(' AND ')}`,[...params]);
-  const {recipientUserIds:_,...notification}=data;
+  const [users]=await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN employees e ON e.id=u.employee_id LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND e.status='ACTIVE' AND ${conditions.join(' AND ')}`,[...params]);
+  const {recipientUserIds:_,respectAudience:__,...notification}=data;
   return Promise.all(users.map(({id})=>notifyUser({...notification,userId:id,type:eventType,eventKey:data.eventKey?`${data.eventKey}:${id}`:`${eventType}:${data.referenceId}:${id}`,delivery:{inApp:Boolean(policy.in_app_enabled),desktop:Boolean(policy.desktop_enabled),sound:Boolean(policy.sound_enabled),push:Boolean(policy.push_enabled)}})));
 }
 
@@ -197,7 +199,7 @@ export async function getPreferences(userId) {
     `SELECT notifications_enabled AS notificationsEnabled,in_app_enabled AS inAppEnabled,browser_notifications AS desktopEnabled,sound_enabled AS soundEnabled,do_not_disturb AS doNotDisturb,volume,
      task_notifications AS taskEnabled,note_notifications AS noteEnabled,
      leave_notifications AS leaveEnabled,break_notifications AS breakEnabled,
-     attendance_notifications AS attendanceEnabled,announcement_notifications AS announcementEnabled,
+     attendance_notifications AS attendanceEnabled,availability_notifications AS availabilityEnabled,announcement_notifications AS announcementEnabled,
      calendar_notifications AS calendarEnabled,payroll_notifications AS payrollEnabled,
      security_notifications AS securityEnabled,employee_notifications AS employeeEnabled,shift_notifications AS shiftEnabled
      FROM notification_preferences WHERE user_id=?`,
@@ -210,13 +212,12 @@ export async function getPreferences(userId) {
 }
 
 export async function updatePreferences(userId, data) {
-  await pool.execute(
-    "INSERT IGNORE INTO notification_preferences(user_id) VALUES(?)",
-    [userId],
-  );
-  await pool.execute(
-    `INSERT INTO notification_preferences(user_id,notifications_enabled,in_app_enabled,browser_notifications,sound_enabled,do_not_disturb,volume,task_notifications,note_notifications,leave_notifications,break_notifications,attendance_notifications,announcement_notifications,calendar_notifications,payroll_notifications,security_notifications,employee_notifications,shift_notifications)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE notifications_enabled=VALUES(notifications_enabled),in_app_enabled=VALUES(in_app_enabled),browser_notifications=VALUES(browser_notifications),sound_enabled=VALUES(sound_enabled),do_not_disturb=VALUES(do_not_disturb),volume=VALUES(volume),task_notifications=VALUES(task_notifications),note_notifications=VALUES(note_notifications),leave_notifications=VALUES(leave_notifications),break_notifications=VALUES(break_notifications),attendance_notifications=VALUES(attendance_notifications),announcement_notifications=VALUES(announcement_notifications),calendar_notifications=VALUES(calendar_notifications),payroll_notifications=VALUES(payroll_notifications),security_notifications=VALUES(security_notifications),employee_notifications=VALUES(employee_notifications),shift_notifications=VALUES(shift_notifications)`,
+  const connection=await pool.getConnection();
+  try{await connection.beginTransaction();
+  await connection.execute("INSERT IGNORE INTO notification_preferences(user_id) VALUES(?)",[userId]);
+  await connection.execute(
+    `INSERT INTO notification_preferences(user_id,notifications_enabled,in_app_enabled,browser_notifications,sound_enabled,do_not_disturb,volume,task_notifications,note_notifications,leave_notifications,break_notifications,attendance_notifications,availability_notifications,announcement_notifications,calendar_notifications,payroll_notifications,security_notifications,employee_notifications,shift_notifications)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE notifications_enabled=VALUES(notifications_enabled),in_app_enabled=VALUES(in_app_enabled),browser_notifications=VALUES(browser_notifications),sound_enabled=VALUES(sound_enabled),do_not_disturb=VALUES(do_not_disturb),volume=VALUES(volume),task_notifications=VALUES(task_notifications),note_notifications=VALUES(note_notifications),leave_notifications=VALUES(leave_notifications),break_notifications=VALUES(break_notifications),attendance_notifications=VALUES(attendance_notifications),availability_notifications=VALUES(availability_notifications),announcement_notifications=VALUES(announcement_notifications),calendar_notifications=VALUES(calendar_notifications),payroll_notifications=VALUES(payroll_notifications),security_notifications=VALUES(security_notifications),employee_notifications=VALUES(employee_notifications),shift_notifications=VALUES(shift_notifications)`,
     [
       userId,
       data.notificationsEnabled,
@@ -230,6 +231,7 @@ export async function updatePreferences(userId, data) {
       data.leaveEnabled,
       data.breakEnabled,
       data.attendanceEnabled,
+      data.availabilityEnabled,
       data.announcementEnabled,
       data.calendarEnabled,
       data.payrollEnabled,
@@ -238,12 +240,14 @@ export async function updatePreferences(userId, data) {
       data.shiftEnabled,
     ],
   );
-  for (const event of data.eventPreferences || []) await pool.execute(
+  for (const event of data.eventPreferences || []) await connection.execute(
     `INSERT INTO notification_event_preferences(user_id,event_type,in_app_enabled,desktop_enabled,sound_enabled)
      VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE in_app_enabled=VALUES(in_app_enabled),desktop_enabled=VALUES(desktop_enabled),sound_enabled=VALUES(sound_enabled)`,
     [userId,event.eventType,event.inAppEnabled,event.desktopEnabled,event.soundEnabled],
   );
-  await pool.execute("INSERT INTO audit_logs(user_id,action,entity_type,description) VALUES(?,'NOTIFICATION_PREFERENCES_UPDATED','NOTIFICATION_PREFERENCE','Notification preferences were updated.')",[userId]);
+  await connection.execute("INSERT INTO audit_logs(user_id,action,entity_type,description) VALUES(?,'NOTIFICATION_PREFERENCES_UPDATED','NOTIFICATION_PREFERENCE','Notification preferences were updated.')",[userId]);
+  await connection.commit();
+  }catch(error){await connection.rollback();throw error;}finally{connection.release();}
   return getPreferences(userId);
 }
 

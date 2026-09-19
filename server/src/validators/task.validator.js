@@ -120,6 +120,9 @@ export const transitionSchema = z
     reason: z.string().trim().max(1000).optional(),
     note: z.string().trim().max(1000).optional(),
     revisionDueAt: datetime.optional().nullable(),
+    workAction: z.enum(["PAUSE"]).optional(),
+    confirmSwitch: z.boolean().optional(),
+    expectedActiveTaskId: z.number().int().positive().optional(),
   })
   .strict()
   .superRefine((x, c) => {

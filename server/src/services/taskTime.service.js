@@ -1,16 +1,61 @@
 import ApiError from "../utils/ApiError.js";
 
-export async function startTaskSession(executor, { taskId, employeeId }) {
+export async function startTaskSession(
+  executor,
+  {
+    taskId,
+    employeeId,
+    switchExisting = false,
+    expectedActiveTaskId = null,
+  },
+) {
   await executor.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [employeeId]);
   const [[active]] = await executor.execute(
     "SELECT id,task_id taskId FROM task_work_sessions WHERE employee_id=? AND state='ACTIVE' LIMIT 1 FOR UPDATE",
     [employeeId],
   );
   if (active) {
-    const message = Number(active.taskId) === Number(taskId)
-      ? "This task already has an active work session."
-      : "You already have another task in progress.";
-    throw new ApiError(409, message, "TASK_SESSION_ACTIVE");
+    if (Number(active.taskId) === Number(taskId))
+      throw new ApiError(
+        409,
+        "This task already has an active work session.",
+        "TASK_SESSION_ACTIVE",
+      );
+    if (!switchExisting)
+      throw new ApiError(
+        409,
+        "Another task is currently running. Confirm the switch to pause it and start this task.",
+        "TASK_SWITCH_REQUIRED",
+      );
+    if (
+      expectedActiveTaskId != null &&
+      Number(active.taskId) !== Number(expectedActiveTaskId)
+    )
+      throw new ApiError(
+        409,
+        "Your active task changed in another session. Refresh and try again.",
+        "TASK_SWITCH_CONFLICT",
+      );
+    await executor.execute(
+      `UPDATE task_work_sessions
+       SET state='ENDED',ended_at=CURRENT_TIMESTAMP,
+           duration_seconds=GREATEST(0,TIMESTAMPDIFF(SECOND,started_at,CURRENT_TIMESTAMP)),
+           end_reason='PAUSED'
+       WHERE id=? AND state='ACTIVE'`,
+      [active.id],
+    );
+    await executor.execute(
+      `INSERT INTO task_activities(task_id,event_type,previous_status,new_status,metadata)
+       SELECT id,'WORK_SESSION_PAUSED',status,status,? FROM tasks WHERE id=?`,
+      [
+        JSON.stringify({
+          reason: "TASK_SWITCHED",
+          employeeId,
+          nextTaskId: Number(taskId),
+        }),
+        active.taskId,
+      ],
+    );
   }
   try {
     const [result] = await executor.execute(
@@ -21,7 +66,10 @@ export async function startTaskSession(executor, { taskId, employeeId }) {
       "SELECT id,task_id taskId,employee_id employeeId,started_at startedAt FROM task_work_sessions WHERE id=?",
       [result.insertId],
     );
-    return session;
+    return {
+      ...session,
+      switchedFromTaskId: active ? Number(active.taskId) : null,
+    };
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
       throw new ApiError(409, "You already have another task in progress.", "TASK_SESSION_ACTIVE");

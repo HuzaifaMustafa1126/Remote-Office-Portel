@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
+import { notifyByPolicy } from "./notification.service.js";
 
 export const AVAILABILITY = Object.freeze({
   ONLINE: "ONLINE",
@@ -96,6 +97,88 @@ function publicRow(row) {
   };
 }
 
+export async function getEmployeeAvailability(employeeId, executor = pool) {
+  const rows = await baseRows(executor, employeeId);
+  if (!rows[0]) throw new ApiError(404, "Employee is unavailable");
+  return publicRow(rows[0]);
+}
+
+const statusLabels = {
+  ONLINE: "Available",
+  AWAY: "Away",
+  DO_NOT_DISTURB: "Do Not Disturb",
+  IN_MEETING: "In a Meeting",
+  NAMAZ: "Namaz",
+  ON_BREAK: "On Break",
+  OFFLINE: "Offline",
+};
+
+export function availabilityNotificationContent(
+  employeeName,
+  oldStatus,
+  newStatus,
+  context,
+) {
+  if (oldStatus === newStatus || newStatus === AVAILABILITY.OFFLINE) return null;
+  if (newStatus === AVAILABILITY.ON_BREAK)
+    return {
+      title: `${employeeName} Started a Break`,
+      message: `${employeeName} is now On Break.`,
+    };
+  if (newStatus === AVAILABILITY.ONLINE)
+    return {
+      title: `${employeeName} is Available`,
+      message:
+        context === "BREAK_ENDED"
+          ? `${employeeName} ended their break and is available again.`
+          : `${employeeName} is available again.`,
+    };
+  const title =
+    newStatus === AVAILABILITY.NAMAZ
+      ? `${employeeName} is Away for Namaz`
+      : `${employeeName} is ${statusLabels[newStatus]}`;
+  const from =
+    oldStatus && ![AVAILABILITY.ONLINE, AVAILABILITY.OFFLINE].includes(oldStatus)
+      ? ` from ${statusLabels[oldStatus]}`
+      : "";
+  return {
+    title,
+    message: `${employeeName} changed their availability${from} to ${statusLabels[newStatus]}.`,
+  };
+}
+
+export async function notifyAvailabilityChanged({
+  user,
+  employeeName,
+  oldStatus,
+  newStatus,
+  context,
+  eventKey,
+}) {
+  const content = availabilityNotificationContent(
+    employeeName,
+    oldStatus,
+    newStatus,
+    context,
+  );
+  if (!content) return [];
+  try {
+    return await notifyByPolicy("AVAILABILITY_CHANGED", user, {
+      ...content,
+      referenceType: "EMPLOYEE",
+      referenceId: Number(user.employee_id),
+      actionUrl: "/",
+      eventKey: `AVAILABILITY_CHANGED:${eventKey}`,
+    });
+  } catch (error) {
+    console.error(
+      `Availability changed for employee ${user.employee_id}, but notifications failed:`,
+      error.message,
+    );
+    return [];
+  }
+}
+
 export async function getTeamAvailability() {
   const rows = await baseRows();
   const employees = rows.map(publicRow);
@@ -124,30 +207,87 @@ export async function setManualAvailability(data, user) {
   if (!user.employee_id) throw new ApiError(403, "This account is not linked to an employee");
   const until = data.until ? new Date(data.until) : null;
   if (until && until <= new Date()) throw new ApiError(400, "Availability end time must be in the future");
-  await pool.execute(
-    `INSERT INTO employee_availability_preferences
+  const connection = await pool.getConnection();
+  let before, after, auditId;
+  try {
+    await connection.beginTransaction();
+    await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
+    before = await getEmployeeAvailability(user.employee_id, connection);
+    await connection.execute(
+      `INSERT INTO employee_availability_preferences
       (employee_id,manual_status,manual_status_until,status_note)
      VALUES(?,?,?,?)
      ON DUPLICATE KEY UPDATE manual_status=VALUES(manual_status),
       manual_status_until=VALUES(manual_status_until),status_note=VALUES(status_note),
       status_updated_at=CURRENT_TIMESTAMP`,
-    [user.employee_id, data.status, until, data.note || null],
-  );
-  await pool.execute(
-    `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+      [user.employee_id, data.status, until, data.note || null],
+    );
+    const [auditResult] = await connection.execute(
+      `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
      VALUES(?,?,'AVAILABILITY_UPDATED','EMPLOYEE',?,?,?)`,
-    [user.id, user.employee_id, user.employee_id, "Manual availability updated.", JSON.stringify({ status: data.status, until: data.until || null })],
-  );
+      [
+        user.id,
+        user.employee_id,
+        user.employee_id,
+        "Manual availability updated.",
+        JSON.stringify({ status: data.status, until: data.until || null }),
+      ],
+    );
+    auditId = auditResult.insertId;
+    after = await getEmployeeAvailability(user.employee_id, connection);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await notifyAvailabilityChanged({
+    user,
+    employeeName: after.employeeName,
+    oldStatus: before.availability,
+    newStatus: after.availability,
+    eventKey: auditId,
+  });
   return getMyAvailability(user);
 }
 
 export async function clearManualAvailability(user) {
   if (!user.employee_id) throw new ApiError(403, "This account is not linked to an employee");
-  await pool.execute("DELETE FROM employee_availability_preferences WHERE employee_id=?", [user.employee_id]);
-  await pool.execute(
-    `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)
+  const connection = await pool.getConnection();
+  let before, after, auditId;
+  try {
+    await connection.beginTransaction();
+    await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
+    before = await getEmployeeAvailability(user.employee_id, connection);
+    await connection.execute(
+      "DELETE FROM employee_availability_preferences WHERE employee_id=?",
+      [user.employee_id],
+    );
+    const [auditResult] = await connection.execute(
+      `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)
      VALUES(?,?,'AVAILABILITY_CLEARED','EMPLOYEE',?,'Manual availability cleared.')`,
-    [user.id, user.employee_id, user.employee_id],
-  );
+      [user.id, user.employee_id, user.employee_id],
+    );
+    auditId = auditResult.insertId;
+    after = await getEmployeeAvailability(user.employee_id, connection);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await notifyAvailabilityChanged({
+    user,
+    employeeName: after.employeeName,
+    oldStatus: before.availability,
+    newStatus: after.availability,
+    eventKey: auditId,
+  });
   return getMyAvailability(user);
 }

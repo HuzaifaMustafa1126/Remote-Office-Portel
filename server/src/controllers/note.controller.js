@@ -19,6 +19,11 @@ export const update = async (req, res) =>
     success: true,
     data: await s.update(req.params.id, req.body, req.user),
   });
+export const publishNotifications = async (req, res) =>
+  res.json({
+    success: true,
+    data: await s.publishNotifications(req.params.id, req.user),
+  });
 export const archive = async (req, res) =>
   res.json({
     success: true,

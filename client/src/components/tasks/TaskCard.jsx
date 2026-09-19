@@ -36,9 +36,6 @@ export default function TaskCard({
       }[task.status] || 0,
     editable = management && ["DRAFT", "SCHEDULED"].includes(task.status),
     reviewable = management && task.status === "SUBMITTED_FOR_REVIEW",
-    blockedActive = Boolean(
-      activeTask && Number(activeTask.id) !== Number(task.id),
-    ),
     draggable = Boolean(
       onDragStart &&
       ["TO_DO", "IN_PROGRESS", "CHANGES_REQUIRED"].includes(task.status) &&
@@ -52,17 +49,12 @@ export default function TaskCard({
       help = "You have reached your Open Task claim limit.";
   } else if (!management && task.status === "TO_DO") {
     workflow = ["start", "Start Task"];
-    if (blockedActive)
-      help = "Finish your current active task before starting another.";
   } else if (!management && task.status === "IN_PROGRESS") {
     workflow = task.activeSessionStartedAt
-      ? task.review_required
-        ? ["submit", "Submit for Review"]
-        : ["complete", "Complete Task"]
+      ? ["pause", "Pause"]
       : ["resume", "Resume Task"];
   } else if (!management && task.status === "CHANGES_REQUIRED") {
     workflow = ["resume", "Resume Work"];
-    if (blockedActive) help = "You already have another active task.";
   }
   const disabled = busy || Boolean(help);
   return (
@@ -154,7 +146,7 @@ export default function TaskCard({
         )}
         {task.status === "IN_PROGRESS" && task.activeSessionStartedAt && (
           <p className="mt-2 flex items-center justify-between rounded-lg bg-info-soft px-2.5 py-2 text-xs">
-            <span className="font-semibold text-info">Working</span>
+            <span className="font-semibold text-info">Working Now</span>
             <TaskWorkTimer compact timeTracking={task} />
           </p>
         )}
@@ -162,7 +154,7 @@ export default function TaskCard({
           <p className="mt-2 rounded-lg bg-warning-soft px-2.5 py-2 text-xs font-semibold text-warning">
             {task.lastSessionEndReason === "OFFLINE"
               ? "Work paused after connection was lost"
-              : "Work paused"}
+              : "Paused"}
           </p>
         )}
         <div

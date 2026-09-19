@@ -8,6 +8,7 @@ import {
   NotebookPen,
   Search,
   ShieldCheck,
+  Users,
   WalletCards,
 } from "lucide-react";
 import Button from "../components/common/Button";
@@ -27,6 +28,11 @@ const audienceLabels = {
   NOBODY: "Nobody",
 };
 const categoryMeta = {
+  Availability: {
+    Icon: Users,
+    description:
+      "Meeting, Away, Namaz, Break, and return-to-available updates.",
+  },
   Attendance: {
     Icon: CalendarClock,
     description:
@@ -48,7 +54,8 @@ const categoryMeta = {
   },
   Notes: {
     Icon: NotebookPen,
-    description: "Published, important, updated and newly shared Notes.",
+    description:
+      "Visibility-based Note publications, sharing, replies, and mentions.",
   },
   "Company & Calendar": {
     Icon: Building2,
@@ -75,6 +82,7 @@ const overrides = {
   BREAK_STARTED: "Break Started",
   BREAK_ENDED: "Break Ended",
   BREAK_EXCEEDED: "Break Exceeded",
+  AVAILABILITY_CHANGED: "Availability Updates",
   LEAVE_REQUESTED: "Leave Requested",
   LEAVE_APPROVED: "Leave Approved",
   LEAVE_REJECTED: "Leave Rejected",
@@ -98,6 +106,9 @@ const overrides = {
   NOTE_IMPORTANT_PUBLISHED: "Important Note",
   NOTE_UPDATED: "Note Update",
   NOTE_SHARED_TEAM: "Note Shared",
+  NOTE_SHARED_CEO: "Note Shared With CEO",
+  NOTE_REPLY_CREATED: "Note Replies",
+  NOTE_REPLY_MENTION: "Note Mentions",
   CALENDAR_HOLIDAY_CREATED: "Holiday Created",
   CALENDAR_HOLIDAY_UPDATED: "Holiday Updated",
   CALENDAR_HOLIDAY_DELETED: "Holiday Cancelled",
@@ -120,25 +131,27 @@ const overrides = {
   SECURITY_PERMISSION_DENIED: "Unauthorized Access",
 };
 const categoryFor = (type) =>
-  type.startsWith("BREAK_")
-    ? "Break"
-    : type.startsWith("NOTE_")
-      ? "Notes"
-    : type.startsWith("LEAVE_")
-      ? "Leave"
-      : type.startsWith("TASK_") || type === "OPEN_TASK_CREATED"
-        ? "Tasks"
-        : type.startsWith("CALENDAR_") ||
-            type.startsWith("HOLIDAY_") ||
-            type.startsWith("ANNOUNCEMENT")
-          ? "Company & Calendar"
-          : type.startsWith("PAYROLL_") ||
-              type.startsWith("PAYSLIP_") ||
-              type.startsWith("SALARY_")
-            ? "Payroll & Salary"
-            : type.startsWith("SECURITY_") || type.startsWith("EMPLOYEE_")
-              ? "Security"
-              : "Attendance";
+  type.startsWith("AVAILABILITY_")
+    ? "Availability"
+    : type.startsWith("BREAK_")
+      ? "Break"
+      : type.startsWith("NOTE_")
+        ? "Notes"
+        : type.startsWith("LEAVE_")
+          ? "Leave"
+          : type.startsWith("TASK_") || type === "OPEN_TASK_CREATED"
+            ? "Tasks"
+            : type.startsWith("CALENDAR_") ||
+                type.startsWith("HOLIDAY_") ||
+                type.startsWith("ANNOUNCEMENT")
+              ? "Company & Calendar"
+              : type.startsWith("PAYROLL_") ||
+                  type.startsWith("PAYSLIP_") ||
+                  type.startsWith("SALARY_")
+                ? "Payroll & Salary"
+                : type.startsWith("SECURITY_") || type.startsWith("EMPLOYEE_")
+                  ? "Security"
+                  : "Attendance";
 const friendly = (type) =>
   overrides[type] ||
   type
@@ -147,6 +160,24 @@ const friendly = (type) =>
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
 const descriptionFor = (type) => {
+  if (type === "AVAILABILITY_CHANGED")
+    return "Notify employees when a team member changes availability, such as Meeting, Away, Namaz or Break.";
+  const noteDescriptions = {
+    NOTE_TEAM_PUBLISHED:
+      "Notify employees when a new note is published for All Team Members.",
+    NOTE_CEO_PUBLISHED:
+      "Notify CEO when a new note is published with Only CEO visibility.",
+    NOTE_IMPORTANT_PUBLISHED:
+      "Notify eligible users when an important note is published.",
+    NOTE_REPLY_MENTION:
+      "Notify employees when they are @mentioned in a note reply.",
+    NOTE_REPLY_CREATED:
+      "Notify note creators when someone replies to their note.",
+    NOTE_SHARED_TEAM:
+      "Notify eligible employees when a note becomes visible to the team.",
+    NOTE_SHARED_CEO: "Notify CEO when a note becomes visible to CEO.",
+  };
+  if (noteDescriptions[type]) return noteDescriptions[type];
   const name = friendly(type).toLowerCase();
   if (type.startsWith("TASK_"))
     return `Controls who can receive alerts when ${name}.`;

@@ -516,7 +516,11 @@ function TeamAvailability({ data, connected }) {
                 <p className="truncate text-xs font-semibold">
                   {employee.employeeName}
                 </p>
-                {employee.ongoingWorkTitle&&<p className="truncate text-[9px] text-primary-text">Working on: {employee.ongoingWorkTitle}</p>}
+                {employee.ongoingWorkTitle && (
+                  <p className="truncate text-[9px] text-primary-text">
+                    Working on: {employee.ongoingWorkTitle}
+                  </p>
+                )}
                 <p className="truncate text-[9px] text-muted-foreground">
                   {employee.jobTitle || employee.role || "Employee"} ·{" "}
                   {employee.department || "Team"}

@@ -7,6 +7,7 @@ import {
   Clock3,
   Coffee,
   ShieldCheck,
+  Users,
   WalletCards,
 } from "lucide-react";
 import Button from "../common/Button";
@@ -14,15 +15,26 @@ import useNotifications from "../../hooks/useNotifications";
 import NotificationSoundManager from "./NotificationSoundManager";
 const groups = [
   [
+    "Availability Updates",
+    "Updates when a team member changes availability.",
+    ["availabilityEnabled"],
+    Users,
+    [["Availability Updates", "AVAILABILITY_CHANGED", "Notify employees when a team member changes availability, such as Meeting, Away, Namaz or Break."]],
+  ],
+  [
     "Notes",
-    "Updates when accessible notes are published, updated, or newly shared.",
+    "Control notifications for accessible Notes, important Notes, replies, and mentions.",
     ["noteEnabled"],
     ClipboardCheck,
     [
-      ["New Team Note", "NOTE_TEAM_PUBLISHED"],
-      ["Important Note", "NOTE_IMPORTANT_PUBLISHED"],
+      ["New Team Notes", "NOTE_TEAM_PUBLISHED", "Notify employees when a new note is published for All Team Members."],
+      ["CEO Notes", "NOTE_CEO_PUBLISHED", "Notify CEO when a new note is published with Only CEO visibility."],
+      ["Important Notes", "NOTE_IMPORTANT_PUBLISHED", "Notify eligible users when an important note is published."],
       ["Note Update", "NOTE_UPDATED"],
       ["Note Shared", "NOTE_SHARED_TEAM"],
+      ["Note Shared With CEO", "NOTE_SHARED_CEO"],
+      ["Note Replies", "NOTE_REPLY_CREATED", "Notify note creators when someone replies to their note."],
+      ["Note Mentions", "NOTE_REPLY_MENTION", "Notify employees when they are @mentioned in a note reply."],
     ],
   ],
   [
@@ -41,12 +53,10 @@ const groups = [
   ],
   [
     "Break Updates",
-    "Updates about your breaks during the workday.",
+    "Alerts when a break exceeds its allowed duration.",
     ["breakEnabled"],
     Coffee,
     [
-      ["Break Started", "BREAK_STARTED"],
-      ["Break Ended", "BREAK_ENDED"],
       ["Break Running Too Long", "BREAK_EXCEEDED"],
     ],
   ],
@@ -240,9 +250,11 @@ export default function EmployeeNotificationPreferences() {
         doNotDisturb: false,
         volume: 70,
         taskEnabled: true,
+        noteEnabled: true,
         leaveEnabled: true,
         breakEnabled: true,
         attendanceEnabled: true,
+        availabilityEnabled: true,
         announcementEnabled: true,
         calendarEnabled: true,
         payrollEnabled: true,
@@ -424,7 +436,7 @@ export default function EmployeeNotificationPreferences() {
                       Advanced options
                     </p>
                     <div className="space-y-3">
-                      {events.map(([label, type]) => {
+                      {events.map(([label, type, help]) => {
                         const row = eventMap.get(type) || {};
                         return (
                           <div
@@ -433,7 +445,7 @@ export default function EmployeeNotificationPreferences() {
                           >
                             <p className="text-sm font-semibold">{label}</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Choose how you receive this update.
+                              {help || "Choose how you receive this update."}
                             </p>
                             <div className="mt-4 grid gap-3 sm:grid-cols-3">
                               {[

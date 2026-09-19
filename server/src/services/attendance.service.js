@@ -8,6 +8,7 @@ import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
 import { current as currentPolicy } from "./attendancePolicy.service.js";
 import { classifyArrival } from "../utils/attendancePolicy.js";
 import { pauseActiveTask, resumeTaskAfterBreak } from "./taskTime.service.js";
+import { getEmployeeAvailability, notifyAvailabilityChanged } from "./availability.service.js";
 
 const attendanceSelect = `
   SELECT ar.id, ar.employee_id AS employeeId, ar.work_date AS workDate,ar.attendance_date AS attendanceDate,
@@ -194,6 +195,7 @@ export async function clockIn(user) {
 export async function startBreak(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    const availabilityBefore=await getEmployeeAvailability(user.employee_id,conn);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
       throw new ApiError(409, "You must clock in before starting a break");
@@ -248,6 +250,7 @@ export async function startBreak(user) {
       entityId: record.id,
       description: `${name} started a break at ${formatAuditTime(entry.break_start_at)}.`,
     });
+    const availabilityAfter=await getEmployeeAvailability(user.employee_id,conn);
     return {
       data: {
         ...(await getToday(user, conn)),
@@ -257,21 +260,19 @@ export async function startBreak(user) {
       name,
       recordId: record.id,
       at: entry.break_start_at,
+      oldAvailability:availabilityBefore.availability,
+      newAvailability:availabilityAfter.availability,
+      breakId:result.insertId,
     };
   });
-  await notifyByPolicy("BREAK_STARTED", user, {
-    title: "Break Started",
-    message: `${outcome.name} started a break at ${formatAuditTime(outcome.at)}.`,
-    referenceType: "ATTENDANCE",
-    referenceId: outcome.recordId,
-    actionUrl: "/attendance",
-  });
+  await notifyAvailabilityChanged({user,employeeName:outcome.name,oldStatus:outcome.oldAvailability,newStatus:outcome.newAvailability,context:"BREAK_STARTED",eventKey:`BREAK_STARTED:${outcome.breakId}`});
   return outcome.data;
 }
 
 export async function endBreak(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    const availabilityBefore=await getEmployeeAvailability(user.employee_id,conn);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
       throw new ApiError(409, "You must clock in before ending a break");
@@ -327,6 +328,7 @@ export async function endBreak(user) {
       entityId: record.id,
       description: `${name} ended a break at ${formatAuditTime(entry.break_end_at)}.`,
     });
+    const availabilityAfter=await getEmployeeAvailability(user.employee_id,conn);
     return {
       data: {
         ...(await getToday(user, conn)),
@@ -336,15 +338,12 @@ export async function endBreak(user) {
       name,
       recordId: record.id,
       duration: Number(entry.duration_minutes || 0),
+      oldAvailability:availabilityBefore.availability,
+      newAvailability:availabilityAfter.availability,
+      breakId:active.id,
     };
   });
-  await notifyByPolicy("BREAK_ENDED", user, {
-    title: "Break Ended",
-    message: `${outcome.name} returned from break. Duration: ${outcome.duration} minutes.`,
-    referenceType: "ATTENDANCE",
-    referenceId: outcome.recordId,
-    actionUrl: "/attendance",
-  });
+  await notifyAvailabilityChanged({user,employeeName:outcome.name,oldStatus:outcome.oldAvailability,newStatus:outcome.newAvailability,context:"BREAK_ENDED",eventKey:`BREAK_ENDED:${outcome.breakId}`});
   return outcome.data;
 }
 

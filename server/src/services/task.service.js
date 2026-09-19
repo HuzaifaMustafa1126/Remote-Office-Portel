@@ -419,6 +419,37 @@ export async function transition(id, data, user) {
         403,
         "You do not have permission to update this task.",
       );
+    if (data.workAction === "PAUSE") {
+      if (
+        Number(task.assignee_employee_id) !== Number(user.employee_id) ||
+        task.status !== "IN_PROGRESS" ||
+        data.status !== "IN_PROGRESS"
+      )
+        throw new ApiError(409, "Only your running In Progress task can be paused.");
+      await endTaskSession(c, {
+        taskId: id,
+        employeeId: task.assignee_employee_id,
+        reason: "PAUSED",
+      });
+      await activity(
+        c,
+        id,
+        "WORK_SESSION_PAUSED",
+        user,
+        task.status,
+        task.status,
+        { reason: "MANUAL_PAUSE" },
+      );
+      await audit(
+        c,
+        id,
+        "TASK_WORK_PAUSED",
+        user,
+        `${task.title} work was paused manually.`,
+        { status: task.status },
+      );
+      return { id: Number(id), status: task.status, sessionState: "PAUSED" };
+    }
     const ownedWorkAction =
       Number(task.assignee_employee_id) === Number(user.employee_id) &&
       data.status === "IN_PROGRESS" &&
@@ -433,6 +464,8 @@ export async function transition(id, data, user) {
           )));
     const resumingWork = ownedWorkAction && task.status !== "TO_DO";
     const resumingPausedWork = ownedWorkAction && task.status === "IN_PROGRESS";
+    let switchedFromTaskId = null;
+    let switchActivityId = null;
     assertTransition(task.status, data.status, {
       management: manage && !ownedEmployeeTransition,
       reviewRequired: Boolean(task.review_required),
@@ -465,10 +498,44 @@ export async function transition(id, data, user) {
             ? "Please clock in before resuming this task."
             : "Please clock in before starting a task.",
         );
-      await startTaskSession(c, {
+      const session = await startTaskSession(c, {
         taskId: id,
         employeeId: task.assignee_employee_id,
+        switchExisting: data.confirmSwitch === true,
+        expectedActiveTaskId: data.expectedActiveTaskId,
       });
+      if (session.switchedFromTaskId) {
+        switchedFromTaskId = session.switchedFromTaskId;
+        const [[previousTask]] = await c.execute(
+          "SELECT title FROM tasks WHERE id=?",
+          [session.switchedFromTaskId],
+        );
+        switchActivityId = await activity(
+          c,
+          id,
+          "TASK_SWITCHED",
+          user,
+          task.status,
+          data.status,
+          {
+            fromTaskId: session.switchedFromTaskId,
+            fromTaskTitle: previousTask?.title || null,
+            toTaskId: Number(id),
+            toTaskTitle: task.title,
+          },
+        );
+        await audit(
+          c,
+          id,
+          "TASK_SWITCHED",
+          user,
+          `${user.employee_name || "Employee"} switched active work from ${previousTask?.title || `task ${session.switchedFromTaskId}`} to ${task.title}.`,
+          {
+            fromTaskId: session.switchedFromTaskId,
+            toTaskId: Number(id),
+          },
+        );
+      }
     }
     if (
       (!manage || ownedEmployeeTransition) &&
@@ -532,30 +599,33 @@ export async function transition(id, data, user) {
         id,
       ],
     );
-    const transitionActivityId = await activity(
-      c,
-      id,
-      resumingPausedWork ? "WORK_SESSION_RESUMED" : `TASK_${data.status}`,
-      user,
-      task.status,
-      data.status,
-      {
-        reason: data.reason || null,
-        revisionDueAt: data.revisionDueAt || null,
-        note: data.note || null,
-        ...(resumingPausedWork ? { reason: "MANUAL_RESUME" } : {}),
-      },
-    );
-    await audit(
-      c,
-      id,
-      resumingPausedWork ? "TASK_WORK_RESUMED" : "TASK_STATUS_CHANGED",
-      user,
-      resumingPausedWork
-        ? `${task.title} work was resumed manually.`
-        : `${task.title} changed from ${task.status} to ${data.status}.`,
-      data,
-    );
+    const transitionActivityId = switchActivityId
+      ? switchActivityId
+      : await activity(
+          c,
+          id,
+          resumingPausedWork ? "WORK_SESSION_RESUMED" : `TASK_${data.status}`,
+          user,
+          task.status,
+          data.status,
+          {
+            reason: data.reason || null,
+            revisionDueAt: data.revisionDueAt || null,
+            note: data.note || null,
+            ...(resumingPausedWork ? { reason: "MANUAL_RESUME" } : {}),
+          },
+        );
+    if (!switchedFromTaskId)
+      await audit(
+        c,
+        id,
+        resumingPausedWork ? "TASK_WORK_RESUMED" : "TASK_STATUS_CHANGED",
+        user,
+        resumingPausedWork
+          ? `${task.title} work was resumed manually.`
+          : `${task.title} changed from ${task.status} to ${data.status}.`,
+        data,
+      );
     const eventType =
       task.status === "COMPLETED" && data.status === "CHANGES_REQUIRED"
         ? "TASK_REOPENED"

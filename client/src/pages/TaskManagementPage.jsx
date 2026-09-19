@@ -9,6 +9,7 @@ import TaskWorkflowDialog from "../components/tasks/TaskWorkflowDialog";
 import TaskManagementList from "../components/tasks/TaskManagementList";
 import TaskDashboard from "../components/tasks/TaskDashboard";
 import TaskDashboardErrorBoundary from "../components/tasks/TaskDashboardErrorBoundary";
+import SwitchActiveTaskDialog from "../components/tasks/SwitchActiveTaskDialog";
 import usePermission from "../hooks/usePermission";
 import { PERMISSIONS as P } from "../utils/permissions";
 import {
@@ -50,6 +51,7 @@ export default function TaskManagementPage() {
     [selected, setSelected] = useState(null),
     [editing, setEditing] = useState(null),
     [workflow, setWorkflow] = useState(null),
+    [switchTask, setSwitchTask] = useState(null),
     [creating, setCreating] = useState(false),
     [loading, setLoading] = useState(true),
     [busyTask, setBusyTask] = useState(null),
@@ -134,6 +136,8 @@ export default function TaskManagementPage() {
     () =>
       [...tasks].sort(
         (a, b) =>
+          Number(Boolean(b.activeSessionStartedAt)) -
+            Number(Boolean(a.activeSessionStartedAt)) ||
           priority[a.priority] - priority[b.priority] ||
           new Date(a.due_at || "9999-12-31") -
             new Date(b.due_at || "9999-12-31"),
@@ -235,6 +239,14 @@ export default function TaskManagementPage() {
       setWorkflow({ action: type, task });
       return;
     }
+    if (
+      ["start", "resume"].includes(type) &&
+      activeTask &&
+      Number(activeTask.id) !== Number(task.id)
+    ) {
+      setSwitchTask({ currentTask: activeTask, nextTask: task, type });
+      return;
+    }
     setBusyTask(task.id);
     try {
       if (type === "delete") {
@@ -262,6 +274,12 @@ export default function TaskManagementPage() {
         await transitionTask(task.id, { status: "IN_PROGRESS" });
         setTab("IN_PROGRESS");
         await done(type === "resume" ? "Task resumed." : "Task started.");
+      } else if (type === "pause") {
+        await transitionTask(task.id, {
+          status: "IN_PROGRESS",
+          workAction: "PAUSE",
+        });
+        await done("Task paused. It remains In Progress.");
       }
     } catch (e) {
       const raw = e.response?.data?.message || "Unable to update the task.",
@@ -446,6 +464,41 @@ export default function TaskManagementPage() {
             setNotice(`${message} The latest task state has been loaded.`);
             setDetailVersion((value) => value + 1);
             load(true);
+          }}
+        />
+      )}
+      {switchTask && (
+        <SwitchActiveTaskDialog
+          currentTask={switchTask.currentTask}
+          nextTask={switchTask.nextTask}
+          busy={Number(busyTask) === Number(switchTask.nextTask.id)}
+          onCancel={() => setSwitchTask(null)}
+          onConfirm={async () => {
+            const pending = switchTask;
+            setBusyTask(pending.nextTask.id);
+            setNotice("");
+            try {
+              await transitionTask(pending.nextTask.id, {
+                status: "IN_PROGRESS",
+                confirmSwitch: true,
+                expectedActiveTaskId: Number(pending.currentTask.id),
+              });
+              setSwitchTask(null);
+              setTab("IN_PROGRESS");
+              await done(
+                pending.type === "resume"
+                  ? "Active task switched and work resumed."
+                  : "Active task switched and new work started.",
+              );
+            } catch (error) {
+              setSwitchTask(null);
+              setNotice(
+                error.response?.data?.message || "Unable to switch tasks.",
+              );
+              await load(true);
+            } finally {
+              setBusyTask(null);
+            }
           }}
         />
       )}

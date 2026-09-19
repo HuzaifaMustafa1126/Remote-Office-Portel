@@ -931,6 +931,7 @@ function DrawerActions({ task, management, onAction, busy }) {
   else if (!management && task.status === "IN_PROGRESS")
     actions = task.timeTracking?.isRunning
       ? [
+          ["pause", "Pause"],
           [
             task.review_required ? "submit" : "complete",
             task.review_required ? "Submit for Review" : "Complete Task",

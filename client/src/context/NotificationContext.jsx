@@ -15,28 +15,30 @@ import {
 export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "", category = "") =>
-  category === "TASK" || type.startsWith("TASK_")
-    ? "taskEnabled"
-    : category === "NOTE" || type.startsWith("NOTE_")
-      ? "noteEnabled"
-      : category === "LEAVE" || type.startsWith("LEAVE_")
-        ? "leaveEnabled"
-        : category === "BREAK" || type.startsWith("BREAK_")
-          ? "breakEnabled"
-          : category === "CALENDAR"
-            ? "calendarEnabled"
-            : category === "PAYROLL"
-              ? "payrollEnabled"
-              : category === "SECURITY"
-                ? "securityEnabled"
-                : category === "EMPLOYEE"
-                  ? "employeeEnabled"
-                  : category === "SHIFT"
-                    ? "shiftEnabled"
-                    : category === "ANNOUNCEMENT" ||
-                        type.startsWith("ANNOUNCEMENT")
-                      ? "announcementEnabled"
-                      : "attendanceEnabled";
+  category === "AVAILABILITY" || type.startsWith("AVAILABILITY_")
+    ? "availabilityEnabled"
+    : category === "TASK" || type.startsWith("TASK_")
+      ? "taskEnabled"
+      : category === "NOTE" || type.startsWith("NOTE_")
+        ? "noteEnabled"
+        : category === "LEAVE" || type.startsWith("LEAVE_")
+          ? "leaveEnabled"
+          : category === "BREAK" || type.startsWith("BREAK_")
+            ? "breakEnabled"
+            : category === "CALENDAR"
+              ? "calendarEnabled"
+              : category === "PAYROLL"
+                ? "payrollEnabled"
+                : category === "SECURITY"
+                  ? "securityEnabled"
+                  : category === "EMPLOYEE"
+                    ? "employeeEnabled"
+                    : category === "SHIFT"
+                      ? "shiftEnabled"
+                      : category === "ANNOUNCEMENT" ||
+                          type.startsWith("ANNOUNCEMENT")
+                        ? "announcementEnabled"
+                        : "attendanceEnabled";
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -117,6 +119,7 @@ export function NotificationProvider({ children }) {
           "CLOCK_OUT",
           "BREAK_STARTED",
           "BREAK_ENDED",
+          "AVAILABILITY_CHANGED",
           "ON_LEAVE",
         ].includes(notification.type)
       )

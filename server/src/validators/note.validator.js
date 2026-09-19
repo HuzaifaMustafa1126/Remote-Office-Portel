@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const identifier = z.coerce.number().int().positive();
 const listFields = {
   search: z.string().trim().max(200).optional(),
   tab: z

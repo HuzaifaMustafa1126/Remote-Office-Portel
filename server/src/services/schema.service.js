@@ -48,6 +48,8 @@ const requiredTables = [
   "note_mentions",
   "note_attachments",
   "note_images",
+  "note_replies",
+  "note_reply_mentions",
   "ongoing_work",
 ];
 const requiredColumns = {
@@ -55,6 +57,7 @@ const requiredColumns = {
   audit_logs: ["old_values", "new_values", "reason"],
   employee_salary_profiles: ["change_reason"],
   attendance_breaks: ["paused_task_id"],
+  notification_preferences: ["availability_notifications"],
   auth_sessions: ["browser", "operating_system", "device_type", "login_at", "logout_at", "ended_reason", "is_new_ip", "is_new_device"],
 };
 const requiredMigrations = [
@@ -87,6 +90,12 @@ const requiredMigrations = [
   "040_task_work_notes.sql",
   "041_namaz_ongoing_work.sql",
   "042_normalize_database_collations.sql",
+  "043_notes_notifications_sharing.sql",
+  "044_note_archive_timestamp.sql",
+  "045_note_replies_mentions.sql",
+  "046_note_shared_ceo_notification.sql",
+  "047_notes_query_indexes.sql",
+  "048_availability_notifications.sql",
 ];
 
 export async function validateSchema() {

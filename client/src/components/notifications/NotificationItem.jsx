@@ -17,7 +17,7 @@ const icon = (type, category) =>
         ? DollarSign
         : category === "SECURITY"
           ? ShieldCheck
-          : ["EMPLOYEE", "SHIFT"].includes(category)
+          : ["EMPLOYEE", "SHIFT", "AVAILABILITY"].includes(category)
             ? Users
             : type.startsWith("LEAVE")
               ? CalendarCheck

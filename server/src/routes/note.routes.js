@@ -2,6 +2,8 @@ import express, { Router } from "express";
 import ApiError from "../utils/ApiError.js";
 import * as c from "../controllers/note.controller.js";
 import * as v from "../validators/note.validator.js";
+import * as replyController from "../controllers/noteReply.controller.js";
+import * as replyValidator from "../validators/noteReply.validator.js";
 import { requirePermission as p } from "../middleware/permission.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -24,9 +26,11 @@ const r = Router(),
     const mime = String(req.headers["content-type"] || "")
         .split(";")[0]
         .toLowerCase(),
-      name = decodeURIComponent(String(req.headers["x-file-name"] || "image"))
-        .replace(/[\\/\0]/g, "_")
-        .slice(0, 255),
+      rawName=String(req.headers["x-file-name"]||"image");
+    let name;
+    try{name=decodeURIComponent(rawName).replace(/[\\/\0]/g,"_").slice(0,255);}
+    catch{return next(new ApiError(400,"Image filename is invalid"));}
+    const
       ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
     if (!types[mime]?.includes(ext))
       return next(
@@ -48,7 +52,15 @@ const r = Router(),
       };
       next();
     });
+  },
+  positiveId=(req,res,next,value,name)=>{
+    const parsed=v.identifier.safeParse(value);
+    if(!parsed.success)return next(new ApiError(400,`${name} must be a positive integer`));
+    req.params[name]=parsed.data;next();
   };
+r.param("id",positiveId);
+r.param("imageId",positiveId);
+r.param("replyId",positiveId);
 r.get(
   "/",
   p("notes.view_own"),
@@ -68,6 +80,30 @@ r.post(
   validate(v.createSchema),
   asyncHandler(c.create),
 );
+r.get(
+  "/:id/replies/mentionable",
+  p("notes.view_own"),
+  validate(replyValidator.mentionSearchSchema, "query"),
+  asyncHandler(replyController.mentionable),
+);
+r.get("/:id/replies", p("notes.view_own"), asyncHandler(replyController.list));
+r.post(
+  "/:id/replies",
+  p("notes.view_own"),
+  validate(replyValidator.replySchema),
+  asyncHandler(replyController.create),
+);
+r.put(
+  "/:id/replies/:replyId",
+  p("notes.view_own"),
+  validate(replyValidator.replySchema),
+  asyncHandler(replyController.update),
+);
+r.delete(
+  "/:id/replies/:replyId",
+  p("notes.view_own"),
+  asyncHandler(replyController.remove),
+);
 r.get("/:id", p("notes.view_own"), asyncHandler(c.get));
 r.put(
   "/:id",
@@ -76,6 +112,11 @@ r.put(
   asyncHandler(c.update),
 );
 r.patch("/:id/pin", p("notes.view_own"), asyncHandler(c.togglePin));
+r.post(
+  "/:id/notifications/published",
+  p("notes.create"),
+  asyncHandler(c.publishNotifications),
+);
 r.patch("/:id/archive", p("notes.edit_own"), asyncHandler(c.archive));
 r.patch("/:id/restore", p("notes.edit_own"), asyncHandler(c.restore));
 r.delete("/:id", p("notes.edit_own"), asyncHandler(c.remove));

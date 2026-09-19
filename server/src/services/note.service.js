@@ -6,21 +6,35 @@ import { notifyByPolicy } from "./notification.service.js";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { Document, HeadingLevel, ImageRun, Packer, PageBreak, Paragraph, TextRun } from "docx";
 
-const selectSql = viewerId => `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.author_user_id authorUserId,n.related_task_id relatedTaskId,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CONCAT(e.first_name,' ',e.last_name) authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id`;
-const map = row => ({ ...row, isImportant: Boolean(row.isImportant), isPinned: Boolean(row.isPinned), isNew: Boolean(row.isNew), imageCount: Number(row.imageCount || 0) });
+const selectSql = viewerId => `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.is_archived isArchived,n.author_user_id authorUserId,n.related_task_id relatedTaskId,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CONCAT(e.first_name,' ',e.last_name) authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount,(SELECT COUNT(*) FROM note_replies nr WHERE nr.note_id=n.id AND nr.deleted_at IS NULL) replyCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id`;
+const map = row => ({ ...row, isImportant: Boolean(row.isImportant), isArchived: Boolean(row.isArchived), isPinned: Boolean(row.isPinned), isNew: Boolean(row.isNew), imageCount: Number(row.imageCount || 0), replyCount: Number(row.replyCount || 0) });
 
 async function isCeo(user, connection = pool) {
-  const [[row]] = await connection.execute("SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name) IN('CEO','SUPER_ADMIN')) yes", [user.id]);
+  const [[row]] = await connection.execute("SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name)='CEO') yes", [user.id]);
   return Boolean(row.yes);
 }
 
-async function access(user, params) {
+async function access(user, params, executor=pool) {
   const clauses = ["n.author_user_id=?", "n.visibility='TEAM'"];
   params.push(user.id);
-  if (await isCeo(user)) clauses.push("n.visibility='CEO_ONLY'");
+  if (await isCeo(user,executor)) clauses.push("n.visibility='CEO_ONLY'");
   return `(${clauses.join(" OR ")})`;
+}
+
+export async function requireAccessibleNote(id, user, includeArchived = false, executor = pool, forUpdate = false) {
+  const params = [], predicate = await access(user, params,executor);
+  const archiveOwner = includeArchived ? " AND n.author_user_id=?" : "";
+  const [[note]] = await executor.execute(
+    `SELECT n.id,n.title,n.visibility,n.status,n.is_archived isArchived,n.author_user_id authorUserId,CONCAT(e.first_name,' ',e.last_name) authorName
+     FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id
+     WHERE n.id=? AND n.status='${includeArchived ? "ARCHIVED" : "PUBLISHED"}' AND n.is_archived=${includeArchived ? 1 : 0} AND ${predicate}${archiveOwner}${forUpdate ? " FOR UPDATE" : ""}`,
+    [id, ...params, ...(includeArchived ? [user.id] : [])],
+  );
+  if (!note) throw new ApiError(404, "Note not found or no longer available");
+  return { ...note, isArchived: Boolean(note.isArchived) };
 }
 
 async function buildAccessibleNotesQuery(filters, user) {
@@ -42,10 +56,10 @@ async function buildAccessibleNotesQuery(filters, user) {
     where.push("(n.title LIKE ? OR n.summary LIKE ? OR n.content LIKE ? OR CONCAT(e.first_name,' ',e.last_name) LIKE ? OR COALESCE(n.related_task_title,t.title,'') LIKE ?)");
     params.push(query, query, query, query, query);
   }
-  if (filters.dateRange === "TODAY") where.push("DATE(n.created_at)=CURRENT_DATE");
-  if (filters.dateRange === "WEEK") where.push("YEARWEEK(n.created_at,1)=YEARWEEK(CURRENT_DATE,1)");
-  if (filters.dateRange === "MONTH") where.push("YEAR(n.created_at)=YEAR(CURRENT_DATE) AND MONTH(n.created_at)=MONTH(CURRENT_DATE)");
-  if (filters.dateRange === "CUSTOM") { where.push("DATE(n.created_at) BETWEEN ? AND ?"); params.push(filters.startDate, filters.endDate); }
+  if (filters.dateRange === "TODAY") where.push("n.created_at>=CURRENT_DATE AND n.created_at<DATE_ADD(CURRENT_DATE,INTERVAL 1 DAY)");
+  if (filters.dateRange === "WEEK") where.push("n.created_at>=DATE_SUB(CURRENT_DATE,INTERVAL WEEKDAY(CURRENT_DATE) DAY) AND n.created_at<DATE_ADD(DATE_SUB(CURRENT_DATE,INTERVAL WEEKDAY(CURRENT_DATE) DAY),INTERVAL 7 DAY)");
+  if (filters.dateRange === "MONTH") where.push("n.created_at>=DATE_FORMAT(CURRENT_DATE,'%Y-%m-01') AND n.created_at<DATE_ADD(DATE_FORMAT(CURRENT_DATE,'%Y-%m-01'),INTERVAL 1 MONTH)");
+  if (filters.dateRange === "CUSTOM") { where.push("n.created_at>=? AND n.created_at<DATE_ADD(?,INTERVAL 1 DAY)"); params.push(`${filters.startDate} 00:00:00`, `${filters.endDate} 00:00:00`); }
   const order = { NEWEST: "n.created_at DESC,n.id DESC", OLDEST: "n.created_at ASC,n.id ASC", UPDATED: "n.updated_at DESC,n.id DESC", IMPORTANT: "n.is_important DESC,n.created_at DESC,n.id DESC" }[filters.sort];
   return { clause: where.join(" AND "), params, order };
 }
@@ -80,44 +94,89 @@ export async function get(id, user, includeArchived = false) {
 
 async function recipients(visibility, actorId) {
   if (visibility === "PRIVATE") return [];
-  const role = visibility === "CEO_ONLY" ? "AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND UPPER(r.name)='CEO')" : "";
-  const [rows] = await pool.execute(`SELECT u.id FROM users u JOIN employees e ON e.id=u.employee_id WHERE u.status='ACTIVE' AND u.id<>? ${role}`, [actorId]);
+  const role = visibility === "CEO_ONLY"
+    ? "AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND UPPER(r.name)='CEO')"
+    : "";
+  const [rows] = await pool.execute(
+    `SELECT u.id FROM users u JOIN employees e ON e.id=u.employee_id
+     WHERE u.status='ACTIVE' AND e.status='ACTIVE' AND u.id<>? ${role}
+       AND EXISTS(
+         SELECT 1 FROM permissions p
+         LEFT JOIN user_permission_overrides upo ON upo.permission_id=p.id AND upo.user_id=u.id
+         WHERE p.name='notes.view_own'
+           AND (upo.effect='ALLOW' OR (upo.effect IS NULL AND EXISTS(
+             SELECT 1 FROM user_roles urp JOIN role_permissions rp ON rp.role_id=urp.role_id
+             WHERE urp.user_id=u.id AND rp.permission_id=p.id
+           )))
+       )`,
+    [actorId],
+  );
   return rows.map((row) => row.id);
+}
+
+export function resolveNoteNotification(note, kind) {
+  if (note.visibility === "PRIVATE") return null;
+  const important = Boolean(note.isImportant);
+  if (kind === "shared") return note.visibility === "CEO_ONLY"
+    ? { type: "NOTE_SHARED_CEO", title: "Note Shared With CEO", verb: "shared a note with you" }
+    : { type: "NOTE_SHARED_TEAM", title: "Note Shared With Team", verb: "shared a note with the team" };
+  if (kind === "updated") return { type: "NOTE_UPDATED", title: "Note Updated", verb: "updated a note" };
+  if (important) return { type: "NOTE_IMPORTANT_PUBLISHED", title: note.visibility === "CEO_ONLY" ? "⭐ Important Note for CEO" : "⭐ Important Team Note", verb: "added an important note" };
+  return note.visibility === "CEO_ONLY"
+    ? { type: "NOTE_CEO_PUBLISHED", title: "New Note for CEO", verb: "added a new note for CEO" }
+    : { type: "NOTE_TEAM_PUBLISHED", title: "New Team Note", verb: "added a new note" };
 }
 
 async function notifyNote(note, user, kind) {
   const recipientUserIds = await recipients(note.visibility, user.id);
   if (!recipientUserIds.length) return;
-  const important = Boolean(note.isImportant);
-  let type, title, verb;
-  if (kind === "shared") [type, title, verb] = ["NOTE_SHARED_TEAM", "Note Shared With Team", "shared"];
-  else if (kind === "updated") [type, title, verb] = ["NOTE_UPDATED", "Note Updated", "updated"];
-  else if (important) [type, title, verb] = ["NOTE_IMPORTANT_PUBLISHED", note.visibility === "CEO_ONLY" ? "⭐ Important Note for CEO" : "⭐ Important Team Note", note.relatedTaskId ? "documented" : "published"];
-  else [type, title, verb] = [note.visibility === "CEO_ONLY" ? "NOTE_CEO_PUBLISHED" : "NOTE_TEAM_PUBLISHED", note.visibility === "CEO_ONLY" ? "New Note for CEO" : "New Team Note", note.relatedTaskId ? "documented" : "published"];
-  await notifyByPolicy(type, user, { recipientUserIds, title, message: `${note.authorName || "A team member"} ${verb}: ${note.title}`, referenceType: "NOTE", referenceId: Number(note.id), actionUrl: `/notes/${note.id}`, priority: important ? "IMPORTANT" : "NORMAL", eventKey: `${type}:${note.id}:${Date.now()}` });
+  const event = resolveNoteNotification(note, kind);
+  if (!event) return;
+  const { type, title, verb } = event, important = Boolean(note.isImportant);
+  await notifyByPolicy(type, user, { recipientUserIds, respectAudience: true, title, message: `${note.authorName || "A team member"} ${verb}: ${note.title}`, referenceType: "NOTE", referenceId: Number(note.id), actionUrl: `/notes/${note.id}`, priority: important ? "IMPORTANT" : "NORMAL", eventKey: `${type}:${note.id}:${kind === "published" ? "published" : new Date(note.updatedAt).getTime()}` });
+}
+
+async function notifyNoteSafely(note, user, kind) {
+  try {
+    await notifyNote(note, user, kind);
+  } catch (error) {
+    console.error(`Note ${note.id} was saved, but ${kind} notifications failed:`, error);
+  }
 }
 
 export async function togglePin(id, user) {
-  await get(id, user);
+  await requireAccessibleNote(id,user);
   const [result] = await pool.execute("DELETE FROM note_pins WHERE user_id=? AND note_id=?", [user.id, id]);
   if (!result.affectedRows) await pool.execute("INSERT INTO note_pins(user_id,note_id) VALUES(?,?)", [user.id, id]);
   return { id: Number(id), isPinned: !result.affectedRows };
 }
 
 export async function create(data, user) {
-  let task = null;
-  if (data.relatedTaskId) {
-    const [[row]] = await pool.execute("SELECT id,title,status,assignee_employee_id assigneeEmployeeId FROM tasks WHERE id=?", [data.relatedTaskId]);
-    if (!row) throw new ApiError(400, "Related task not found");
-    if (row.status !== "COMPLETED") throw new ApiError(400, "Work notes can only be added to completed tasks");
-    const manage = await getEffectivePermission(user.id, "task.view_all", pool);
-    if (!manage && Number(row.assigneeEmployeeId) !== Number(user.employee_id)) throw new ApiError(403, "You cannot add a work note to this task");
-    task = row;
-  }
-  const [result] = await pool.execute("INSERT INTO work_notes(title,summary,content,author_user_id,visibility,is_important,related_task_id,related_task_title,status,published_at)VALUES(?,?,?,?,?,?,?,?,'PUBLISHED',CURRENT_TIMESTAMP)", [data.title, data.summary, data.content, user.id, data.visibility, data.isImportant, task?.id || null, task?.title || null]);
-  await logAudit({ userId: user.id, employeeId: user.employee_id, action: "NOTE_PUBLISHED", entityType: "WORK_NOTE", entityId: result.insertId, description: `Note “${data.title}” was published.${task ? ` Related task: #${task.id}.` : ""}` });
-  const note = await get(result.insertId, user);
-  await notifyNote(note, user, "published");
+  const connection = await pool.getConnection(); let noteId;
+  try {
+    await connection.beginTransaction(); let task = null;
+    if (data.relatedTaskId) {
+      const [[row]] = await connection.execute("SELECT id,title,status,assignee_employee_id assigneeEmployeeId FROM tasks WHERE id=?", [data.relatedTaskId]);
+      if (!row) throw new ApiError(400, "Related task not found");
+      if (row.status !== "COMPLETED") throw new ApiError(400, "Work notes can only be added to completed tasks");
+      const manage = await getEffectivePermission(user.id, "task.view_all", connection);
+      if (!manage && Number(row.assigneeEmployeeId) !== Number(user.employee_id)) throw new ApiError(403, "You cannot add a work note to this task");
+      task = row;
+    }
+    const [result] = await connection.execute("INSERT INTO work_notes(title,summary,content,author_user_id,visibility,is_important,related_task_id,related_task_title,status,published_at)VALUES(?,?,?,?,?,?,?,?,'PUBLISHED',CURRENT_TIMESTAMP)", [data.title, data.summary, data.content, user.id, data.visibility, data.isImportant, task?.id || null, task?.title || null]);
+    noteId = result.insertId;
+    await connection.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description) VALUES(?,?,'NOTE_PUBLISHED','WORK_NOTE',?,?)", [user.id,user.employee_id,noteId,`Note “${data.title}” was published.${task ? ` Related task: #${task.id}.` : ""}`]);
+    await connection.commit();
+  } catch(error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
+  return get(noteId, user);
+}
+
+export async function publishNotifications(id, user) {
+  const owned = await requireNoteOwner(id, user);
+  if (owned.isArchived) throw new ApiError(400, "Archived notes cannot be published");
+  const note = await get(id, user);
+  await notifyNoteSafely(note, user, "published");
   return note;
 }
 
@@ -129,26 +188,28 @@ async function requireNoteOwner(id, user, executor = pool, forUpdate = false, ac
 }
 
 export async function update(id, data, user) {
-  const previous = await requireNoteOwner(id, user);
-  if (previous.isArchived) throw new ApiError(400, "Restore this note before editing it");
-  await pool.execute("UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=? WHERE id=?", [data.title, data.summary, data.content, data.visibility, data.isImportant, id]);
-  await logAudit({ userId: user.id, employeeId: user.employee_id, action: "NOTE_UPDATED", entityType: "WORK_NOTE", entityId: id, description: `Note “${data.title}” was updated.` });
-  if (previous.visibility !== data.visibility) await logAudit({ userId: user.id, employeeId: user.employee_id, action: "NOTE_VISIBILITY_CHANGED", entityType: "WORK_NOTE", entityId: id, description: `Note visibility changed from ${previous.visibility} to ${data.visibility}.` });
+  const connection=await pool.getConnection();let previous;
+  try{await connection.beginTransaction();previous=await requireNoteOwner(id,user,connection,true);if(previous.isArchived)throw new ApiError(400,"Restore this note before editing it");
+    await connection.execute("UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=? WHERE id=?",[data.title,data.summary,data.content,data.visibility,data.isImportant,id]);
+    await connection.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)VALUES(?,?,'NOTE_UPDATED','WORK_NOTE',?,?)",[user.id,user.employee_id,id,`Note “${data.title}” was updated.`]);
+    if(previous.visibility!==data.visibility)await connection.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)VALUES(?,?,'NOTE_VISIBILITY_CHANGED','WORK_NOTE',?,?)",[user.id,user.employee_id,id,`Note visibility changed from ${previous.visibility} to ${data.visibility}.`]);
+    await connection.commit();
+  }catch(error){await connection.rollback();throw error;}finally{connection.release();}
   const note = await get(id, user);
-  if (data.visibility === "TEAM" && previous.visibility !== "TEAM") await notifyNote(note, user, "shared");
-  else if (data.visibility === "CEO_ONLY" && previous.visibility !== "CEO_ONLY") await notifyNote(note, user, "published");
+  if (data.visibility !== "PRIVATE" && previous.visibility !== data.visibility) await notifyNoteSafely(note, user, "shared");
   else if (data.notifyViewers) {
-    await notifyNote(note, user, "updated");
-    await logAudit({ userId: user.id, employeeId: user.employee_id, action: "NOTE_UPDATE_NOTIFICATION_SENT", entityType: "WORK_NOTE", entityId: id, description: `Viewers were notified that note “${data.title}” was updated.` });
+    await notifyNoteSafely(note, user, "updated");
+    await logAudit({ userId: user.id, employeeId: user.employee_id, action: "NOTE_UPDATE_NOTIFICATION_SENT", entityType: "WORK_NOTE", entityId: id, description: `Viewers were notified that note “${data.title}” was updated.` }).catch((error)=>console.error(`Note ${id} was updated, but its notification audit entry failed:`,error.message));
   }
   return note;
 }
 
 export async function setArchived(id, archived, user) {
-  const note = await requireNoteOwner(id, user);
-  if (Boolean(note.isArchived) === archived) return { id: Number(id), isArchived: archived };
-  await pool.execute("UPDATE work_notes SET is_archived=?,status=?,archived_at=? WHERE id=?", [archived, archived ? "ARCHIVED" : "PUBLISHED", archived ? new Date() : null, id]);
-  await logAudit({ userId: user.id, employeeId: user.employee_id, action: archived ? "NOTE_ARCHIVED" : "NOTE_RESTORED", entityType: "WORK_NOTE", entityId: id, description: `Note “${note.title}” was ${archived ? "archived" : "restored"}.` });
+  const connection=await pool.getConnection();let note;
+  try{await connection.beginTransaction();note=await requireNoteOwner(id,user,connection,true);if(Boolean(note.isArchived)===archived){await connection.rollback();return{id:Number(id),isArchived:archived};}
+    await connection.execute("UPDATE work_notes SET is_archived=?,status=?,archived_at=? WHERE id=?",[archived,archived?"ARCHIVED":"PUBLISHED",archived?new Date():null,id]);
+    await connection.execute("INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description)VALUES(?,?,?,'WORK_NOTE',?,?)",[user.id,user.employee_id,archived?"NOTE_ARCHIVED":"NOTE_RESTORED",id,`Note “${note.title}” was ${archived?"archived":"restored"}.`]);await connection.commit();
+  }catch(error){await connection.rollback();throw error;}finally{connection.release();}
   return { id: Number(id), isArchived: archived };
 }
 
@@ -212,13 +273,14 @@ export async function exportDocx(filters, user) {
 }
 
 export async function addImage(id, file, buffer, user) {
-  await requireNoteOwner(id, user);
-  const directory = path.resolve(new URL(`../../uploads/notes/${id}/images`, import.meta.url).pathname);
+  const note=await requireNoteOwner(id,user);if(note.isArchived)throw new ApiError(400,"Restore this note before adding images");
+  const directory = fileURLToPath(new URL(`../../uploads/notes/${id}/images/`, import.meta.url));
   await mkdir(directory, { recursive: true });
   const storageKey = path.join(directory, `${randomUUID()}.${file.extension}`);
   await writeFile(storageKey, buffer, { flag: "wx" });
   try {
-    const [result] = await pool.execute("INSERT INTO note_images(note_id,uploaded_by,storage_key,original_filename,mime_type,size_bytes)VALUES(?,?,?,?,?,?)", [id, user.id, storageKey, file.originalFilename, file.mimeType, file.sizeBytes]);
+    const [result] = await pool.execute("INSERT INTO note_images(note_id,uploaded_by,storage_key,original_filename,mime_type,size_bytes) SELECT id,?,?,?,?,? FROM work_notes WHERE id=? AND author_user_id=? AND is_archived=0 AND status='PUBLISHED'", [user.id, storageKey, file.originalFilename, file.mimeType, file.sizeBytes,id,user.id]);
+    if(!result.affectedRows)throw new ApiError(409,"The note changed before the image could be saved");
     return { id: result.insertId };
   } catch (error) { await unlink(storageKey).catch(() => {}); throw error; }
 }
@@ -231,10 +293,10 @@ export async function imageContent(noteId, imageId, user) {
 }
 
 export async function removeImage(noteId, imageId, user) {
-  await requireNoteOwner(noteId, user);
+  const note=await requireNoteOwner(noteId,user);if(note.isArchived)throw new ApiError(400,"Restore this note before removing images");
   const [[file]] = await pool.execute("SELECT storage_key FROM note_images WHERE id=? AND note_id=?", [imageId, noteId]);
   if (!file) throw new ApiError(404, "Image not found");
-  await unlink(file.storage_key).catch(() => {});
   await pool.execute("DELETE FROM note_images WHERE id=?", [imageId]);
+  await unlink(file.storage_key).catch((error) => console.error(`Removed image ${imageId} from the database but could not delete its file:`,error.message));
   return { id: Number(imageId) };
 }
