@@ -83,14 +83,28 @@ export async function update(id, data, user) {
   );
   return getOwn(id, user);
 }
+
+export function statusUpdateStatement(status) {
+  const statements = {
+    ONGOING:
+      "UPDATE ongoing_work SET status='ONGOING',started_at=COALESCE(started_at,CURRENT_TIMESTAMP),completed_at=NULL WHERE id=?",
+    PAUSED:
+      "UPDATE ongoing_work SET status='PAUSED',completed_at=NULL WHERE id=?",
+    COMPLETED:
+      "UPDATE ongoing_work SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP WHERE id=?",
+  };
+
+  const statement = statements[status];
+  if (!statement)
+    throw new ApiError(400, `Unsupported ongoing-work status: ${status}`);
+  return statement;
+}
+
 export async function setStatus(id, data, user) {
   const row = await getOwn(id, user);
   if (row.status === "COMPLETED")
     throw new ApiError(409, "Completed ongoing work cannot be resumed");
-  await pool.execute(
-    "UPDATE ongoing_work SET status=?,started_at=IF(?='ONGOING' AND started_at IS NULL,CURRENT_TIMESTAMP,started_at),completed_at=IF(?='COMPLETED',CURRENT_TIMESTAMP,NULL) WHERE id=?",
-    [data.status, data.status, data.status, id],
-  );
+  await pool.execute(statusUpdateStatement(data.status), [id]);
   return getOwn(id, user);
 }
 export async function remove(id, user) {

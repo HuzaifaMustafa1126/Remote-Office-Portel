@@ -1,5 +1,16 @@
 import mysql from "mysql2/promise";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import env from "../config/env.js";
+import {
+  assertMigrationLedger,
+  auditCoverage,
+  PROTECTED_MIGRATION_MAX_VERSION,
+} from "./migrationSafety.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const migrationsDir = path.resolve(here, "../../database/migrations");
 
 const repair = process.argv.includes("--repair");
 const connection = await mysql.createConnection({
@@ -38,10 +49,42 @@ const columns = async (pairs) =>
   (await Promise.all(pairs.map((pair) => column(...pair)))).every(Boolean);
 const indexes = async (pairs) =>
   (await Promise.all(pairs.map((pair) => index(...pair)))).every(Boolean);
+const foreignKey = (tableName, constraintName, deleteRule) =>
+  exists(
+    `SELECT EXISTS(
+       SELECT 1 FROM information_schema.referential_constraints
+       WHERE constraint_schema=DATABASE() AND table_name=?
+         AND constraint_name=? AND delete_rule=?
+     ) yes`,
+    [tableName, constraintName, deleteRule],
+  );
+const foreignKeys = async (values) =>
+  (await Promise.all(values.map((value) => foreignKey(...value)))).every(Boolean);
+const foreignKeyTarget = (tableName, columnName, referencedTable, deleteRule) =>
+  exists(
+    `SELECT EXISTS(
+       SELECT 1 FROM information_schema.key_column_usage k
+       JOIN information_schema.referential_constraints r
+         ON r.constraint_schema=k.constraint_schema
+        AND r.table_name=k.table_name
+        AND r.constraint_name=k.constraint_name
+       WHERE k.table_schema=DATABASE() AND k.table_name=?
+         AND k.column_name=? AND k.referenced_table_name=?
+         AND r.delete_rule=?
+     ) yes`,
+    [tableName, columnName, referencedTable, deleteRule],
+  );
 const permission = (name) =>
   exists("SELECT EXISTS(SELECT 1 FROM permissions WHERE name=?) yes", [name]);
 const permissions = async (names) =>
   (await Promise.all(names.map(permission))).every(Boolean);
+const policy = (eventType) =>
+  exists(
+    "SELECT EXISTS(SELECT 1 FROM notification_policies WHERE event_type=?) yes",
+    [eventType],
+  );
+const policies = async (eventTypes) =>
+  (await Promise.all(eventTypes.map(policy))).every(Boolean);
 const roleHas = (role, permissionName) =>
   exists(
     "SELECT EXISTS(SELECT 1 FROM role_permissions rp JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id WHERE r.name=? AND p.name=?) yes",
@@ -327,13 +370,135 @@ const checks = {
       "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='work_notes' AND column_name='summary' AND is_nullable='NO' AND character_maximum_length=300) yes",
     )),
   "040_task_work_notes.sql": () => column("work_notes", "related_task_title"),
+  "041_namaz_ongoing_work.sql": async () =>
+    (await enumHas("employee_availability_preferences", "manual_status", "NAMAZ")) &&
+    (await table("ongoing_work")) &&
+    (await columns([
+      ["ongoing_work", "employee_id"],
+      ["ongoing_work", "title"],
+      ["ongoing_work", "description"],
+      ["ongoing_work", "status"],
+      ["ongoing_work", "started_at"],
+      ["ongoing_work", "completed_at"],
+    ])) &&
+    (await enumHas("ongoing_work", "status", "ONGOING")) &&
+    (await enumHas("ongoing_work", "status", "PAUSED")) &&
+    (await enumHas("ongoing_work", "status", "COMPLETED")) &&
+    (await index("ongoing_work", "idx_ongoing_work_employee_status")) &&
+    (await foreignKeyTarget(
+      "ongoing_work",
+      "employee_id",
+      "employees",
+      "CASCADE",
+    )),
+  "042_normalize_database_collations.sql": () =>
+    exists(
+      `SELECT
+        (SELECT default_collation_name FROM information_schema.schemata
+         WHERE schema_name=DATABASE())='utf8mb4_unicode_ci'
+        AND NOT EXISTS(
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema=DATABASE() AND table_type='BASE TABLE'
+            AND table_collation<>'utf8mb4_unicode_ci'
+        )
+        AND NOT EXISTS(
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema=DATABASE() AND collation_name IS NOT NULL
+            AND collation_name<>'utf8mb4_unicode_ci'
+        ) yes`,
+    ),
+  "043_notes_notifications_sharing.sql": async () =>
+    (await column("notification_preferences", "note_notifications")) &&
+    (await table("note_reads")) &&
+    (await index("note_reads", "PRIMARY")) &&
+    (await index("note_reads", "idx_note_reads_user_read")) &&
+    (await foreignKeys([
+      ["note_reads", "fk_note_reads_note", "CASCADE"],
+      ["note_reads", "fk_note_reads_user", "CASCADE"],
+    ])) &&
+    (await policies([
+      "NOTE_TEAM_PUBLISHED",
+      "NOTE_CEO_PUBLISHED",
+      "NOTE_IMPORTANT_PUBLISHED",
+      "NOTE_UPDATED",
+      "NOTE_SHARED_TEAM",
+    ])),
+  "044_note_archive_timestamp.sql": async () =>
+    (await column("work_notes", "archived_at")) &&
+    (await index("work_notes", "idx_work_notes_archived_at")),
+  "045_note_replies_mentions.sql": async () =>
+    (await tables(["note_replies", "note_reply_mentions"])) &&
+    (await indexes([
+      ["note_replies", "idx_note_replies_note_created"],
+      ["note_replies", "idx_note_replies_creator"],
+      ["note_reply_mentions", "uq_note_reply_mention"],
+      ["note_reply_mentions", "idx_note_reply_mentions_user"],
+    ])) &&
+    (await foreignKeyTarget(
+      "note_replies",
+      "note_id",
+      "work_notes",
+      "CASCADE",
+    )) &&
+    (await foreignKeyTarget(
+      "note_replies",
+      "created_by",
+      "users",
+      "RESTRICT",
+    )) &&
+    (await foreignKeyTarget(
+      "note_reply_mentions",
+      "reply_id",
+      "note_replies",
+      "CASCADE",
+    )) &&
+    (await foreignKeyTarget(
+      "note_reply_mentions",
+      "mentioned_user_id",
+      "users",
+      "CASCADE",
+    )) &&
+    (await policies(["NOTE_REPLY_CREATED", "NOTE_REPLY_MENTION"])),
+  "046_note_shared_ceo_notification.sql": () => policy("NOTE_SHARED_CEO"),
+  "047_notes_query_indexes.sql": () =>
+    indexes([
+      ["work_notes", "idx_work_notes_active_created"],
+      ["work_notes", "idx_work_notes_active_important"],
+      ["note_replies", "idx_note_replies_active"],
+    ]),
+  "048_availability_notifications.sql": async () =>
+    (await column("notification_preferences", "availability_notifications")) &&
+    (await policy("AVAILABILITY_CHANGED")),
 };
+
+const migrationFiles = (await fs.readdir(migrationsDir))
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
+const { missingChecks, orphanChecks } = auditCoverage(
+  migrationFiles,
+  Object.keys(checks),
+);
+if (missingChecks.length) {
+  for (const name of missingChecks)
+    console.error(
+      `Protected migration ${name} has no structural audit check. Refusing migration-history reconciliation.`,
+    );
+  await connection.end();
+  process.exit(2);
+}
+if (orphanChecks.length) {
+  for (const name of orphanChecks)
+    console.error(`Structural audit check ${name} has no matching migration file.`);
+  await connection.end();
+  process.exit(2);
+}
 
 await connection.execute(`CREATE TABLE IF NOT EXISTS schema_migrations(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  migration_name VARCHAR(255) NOT NULL UNIQUE,
  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+await assertMigrationLedger(connection);
 const [rows] = await connection.execute(
   "SELECT migration_name FROM schema_migrations",
 );
@@ -356,7 +521,7 @@ const repairable = results.filter(
 );
 if (unsafe.length) {
   console.error(
-    `${unsafe.length} legacy migration(s) require manual schema review. No migration history was changed.`,
+    `${unsafe.length} protected migration(s) require manual schema review. No migration history was changed.`,
   );
   process.exitCode = 2;
 } else if (repair && repairable.length) {
@@ -370,14 +535,17 @@ if (unsafe.length) {
       console.log(`RECORDED_EXISTING ${name}`);
     }
     await connection.commit();
-    console.log(`Reconciled ${repairable.length} legacy migration record(s).`);
+    console.log(`Reconciled ${repairable.length} protected migration record(s).`);
   } catch (error) {
     await connection.rollback();
     throw error;
   }
 } else if (repairable.length) {
   console.log(
-    `All ${repairable.length} missing legacy migration record(s) are safe to reconcile. Re-run with --repair after taking a backup.`,
+    `All ${repairable.length} missing protected migration record(s) are safe to reconcile. Re-run with --repair after taking a backup.`,
   );
-} else console.log("Migration history 001-040 is complete.");
+} else
+  console.log(
+    `Migration history 001-${String(PROTECTED_MIGRATION_MAX_VERSION).padStart(3, "0")} is complete.`,
+  );
 await connection.end();

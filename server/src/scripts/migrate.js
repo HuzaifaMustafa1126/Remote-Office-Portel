@@ -4,6 +4,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import env from "../config/env.js";
+import {
+  assertMigrationLedger,
+  isProtectedMigration,
+  PROTECTED_MIGRATION_MAX_VERSION,
+  refusesProtectedReplay,
+} from "./migrationSafety.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(here, "../../database/migrations");
@@ -33,6 +39,7 @@ await connection.execute(`CREATE TABLE IF NOT EXISTS schema_migrations(
  migration_name VARCHAR(255) NOT NULL UNIQUE,
  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+await assertMigrationLedger(connection);
 
 const files = (await fs.readdir(migrationsDir))
   .filter((name) => name.endsWith(".sql"))
@@ -45,18 +52,16 @@ const readApplied = async () =>
   );
 let applied = await readApplied();
 
-// Existing databases sometimes have schema from 001-040 without the matching
+// Existing databases sometimes have protected schema without the matching
 // ledger rows. Audit every durable footprint as one unit before recording any
 // of them. If a footprint is incomplete, stop rather than replaying historical
 // ALTER/DELETE statements against production data.
-const legacyFiles = files.filter((name) => {
-  const version = Number(name.slice(0, 3));
-  return version >= 1 && version <= 40;
-});
-const missingLegacy = legacyFiles.filter((name) => !applied.has(name));
-if (Number(existingSchema.domainTables) > 0 && missingLegacy.length) {
+const existingDatabase = Number(existingSchema.domainTables) > 0;
+const protectedFiles = files.filter(isProtectedMigration);
+const missingProtected = protectedFiles.filter((name) => !applied.has(name));
+if (existingDatabase && missingProtected.length) {
   console.log(
-    `Reconciling ${missingLegacy.length} missing legacy migration record(s) after structural audit...`,
+    `Reconciling ${missingProtected.length} missing protected migration record(s) after structural audit...`,
   );
   const audit = spawnSync(process.execPath, [auditScript, "--repair"], {
     cwd: path.resolve(here, "../.."),
@@ -68,7 +73,7 @@ if (Number(existingSchema.domainTables) > 0 && missingLegacy.length) {
   if (audit.status !== 0) {
     await connection.end();
     console.error(
-      "Migration stopped safely. At least one legacy footprint is incomplete; no raw legacy migration was replayed.",
+      "Migration stopped safely. At least one protected footprint is incomplete; no protected migration was replayed.",
     );
     process.exit(audit.status || 2);
   }
@@ -137,11 +142,10 @@ async function applyCollationMigration(name) {
 
 for (const name of files) {
   if (applied.has(name)) continue;
-  const version = Number(name.slice(0, 3));
-  if (version >= 1 && version <= 40) {
+  if (refusesProtectedReplay(existingDatabase, name)) {
     await connection.end();
     throw new Error(
-      `Legacy migration ${name} remains unrecorded after structural audit; refusing unsafe replay.`,
+      `Protected migration ${name} remains unrecorded after structural audit; refusing unsafe replay through ${String(PROTECTED_MIGRATION_MAX_VERSION).padStart(3, "0")}.`,
     );
   }
   if (name === "042_normalize_database_collations.sql") {
