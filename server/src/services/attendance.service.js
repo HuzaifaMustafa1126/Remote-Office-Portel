@@ -95,6 +95,9 @@ async function transaction(action) {
 export async function clockIn(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    await conn.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
     const [[clock]] = await conn.execute(
       "SELECT CURRENT_DATE AS today,DATE_SUB(CURRENT_DATE,INTERVAL 1 DAY) yesterday,TIME_FORMAT(CURRENT_TIME,'%H:%i') currentTime",
     );
@@ -199,6 +202,9 @@ export async function clockIn(user) {
 export async function startBreak(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    await conn.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
     const availabilityBefore = await getEmployeeAvailability(
       user.employee_id,
       conn,
@@ -215,14 +221,49 @@ export async function startBreak(user) {
       [record.id],
     );
     if (active) throw new ApiError(409, "You already have an active break");
+    const [[clock]] = await conn.execute(
+      "SELECT CURRENT_TIMESTAMP breakStartTime",
+    );
     const [result] = await conn.execute(
-      `INSERT INTO attendance_breaks (attendance_id, break_start_at, status) VALUES (?, CURRENT_TIMESTAMP, 'ACTIVE')`,
-      [record.id],
+      `INSERT INTO attendance_breaks (attendance_id, break_start_at, status) VALUES (?, ?, 'ACTIVE')`,
+      [record.id, clock.breakStartTime],
     );
     await conn.execute(
       `UPDATE attendance_records SET status = 'ON_BREAK' WHERE id = ?`,
       [record.id],
     );
+    const pausedOngoingWorkId = await pauseActiveOngoingWork(
+      conn,
+      user.employee_id,
+      null,
+      clock.breakStartTime,
+    );
+    let pausedOngoingWork = null;
+    if (pausedOngoingWorkId) {
+      await conn.execute(
+        "UPDATE attendance_breaks SET auto_paused_ongoing_work_id=? WHERE id=?",
+        [pausedOngoingWorkId, result.insertId],
+      );
+      [[pausedOngoingWork]] = await conn.execute(
+        "SELECT id,title,status FROM ongoing_work WHERE id=?",
+        [pausedOngoingWorkId],
+      );
+      await conn.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'ONGOING_WORK',?,?,?)`,
+        [
+          user.id,
+          user.employee_id,
+          "ONGOING_WORK_AUTO_PAUSED_BREAK",
+          pausedOngoingWorkId,
+          `${name}'s active ongoing work was paused by Break Start.`,
+          JSON.stringify({
+            breakId: result.insertId,
+            endedAt: clock.breakStartTime,
+          }),
+        ],
+      );
+    }
     const pausedTaskId = await pauseActiveTask(conn, user.employee_id, "BREAK");
     if (pausedTaskId) {
       await conn.execute(
@@ -262,6 +303,11 @@ export async function startBreak(user) {
         ...(await getToday(user, conn)),
         taskSessionPaused: Boolean(pausedTaskId),
         pausedTaskId: pausedTaskId ? Number(pausedTaskId) : null,
+        ongoingWorkSessionPaused: Boolean(pausedOngoingWorkId),
+        pausedOngoingWorkId: pausedOngoingWorkId
+          ? Number(pausedOngoingWorkId)
+          : null,
+        previousOngoingWork: pausedOngoingWork,
       },
       name,
       recordId: record.id,
@@ -285,6 +331,9 @@ export async function startBreak(user) {
 export async function endBreak(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    await conn.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
     const availabilityBefore = await getEmployeeAvailability(
       user.employee_id,
       conn,
@@ -295,7 +344,7 @@ export async function endBreak(user) {
     if (record.status === "CLOCKED_OUT")
       throw new ApiError(409, "Your workday has already been completed");
     const [[active]] = await conn.execute(
-      `SELECT id,paused_task_id pausedTaskId FROM attendance_breaks WHERE attendance_id = ? AND status = 'ACTIVE' ORDER BY break_start_at DESC LIMIT 1 FOR UPDATE`,
+      `SELECT id,paused_task_id pausedTaskId,auto_paused_ongoing_work_id pausedOngoingWorkId FROM attendance_breaks WHERE attendance_id = ? AND status = 'ACTIVE' ORDER BY break_start_at DESC LIMIT 1 FOR UPDATE`,
       [record.id],
     );
     if (!active) throw new ApiError(409, "No active break was found");
@@ -337,6 +386,12 @@ export async function endBreak(user) {
       "SELECT break_end_at,duration_minutes FROM attendance_breaks WHERE id = ?",
       [active.id],
     );
+    let previousOngoingWork = null;
+    if (active.pausedOngoingWorkId)
+      [[previousOngoingWork]] = await conn.execute(
+        "SELECT id,title,status FROM ongoing_work WHERE id=? AND employee_id=?",
+        [active.pausedOngoingWorkId, user.employee_id],
+      );
     await audit(conn, {
       userId: user.id,
       employeeId: user.employee_id,
@@ -353,6 +408,7 @@ export async function endBreak(user) {
         ...(await getToday(user, conn)),
         taskSessionResumed: Boolean(resumedTaskId),
         resumedTaskId: resumedTaskId ? Number(resumedTaskId) : null,
+        previousOngoingWork,
       },
       name,
       recordId: record.id,

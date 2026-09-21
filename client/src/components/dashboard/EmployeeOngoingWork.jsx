@@ -16,7 +16,7 @@ const formatDuration = (value) => {
   return [hours, minutes, remainder].map((part) => String(part).padStart(2, "0")).join(":");
 };
 
-export default function EmployeeOngoingWork({ attendanceStatus }) {
+export default function EmployeeOngoingWork({ attendanceStatus, previousOngoingWork }) {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
@@ -30,7 +30,7 @@ export default function EmployeeOngoingWork({ attendanceStatus }) {
   const [completionNote, setCompletionNote] = useState("");
   const [details, setDetails] = useState(null);
   const activeRows = useMemo(() => rows.filter((row) => row.status !== "COMPLETED"), [rows]);
-  const attendanceActive = ["WORKING", "ON_BREAK"].includes(attendanceStatus);
+  const attendanceActive = attendanceStatus === "WORKING";
   const load = useCallback(() => api.getMine().then((data) => {
     const receivedAt = performance.now();
     setTick(receivedAt);
@@ -121,7 +121,7 @@ export default function EmployeeOngoingWork({ attendanceStatus }) {
   };
   const timerAction = async (row) => {
     if (row.status !== "WORKING" && !attendanceActive) {
-      setError("Clock in before starting or resuming ongoing work.");
+      setError(attendanceStatus === "ON_BREAK" ? "End your break before starting or resuming ongoing work." : "Clock in before starting or resuming ongoing work.");
       return;
     }
     setBusyId(row.id);
@@ -204,6 +204,13 @@ export default function EmployeeOngoingWork({ attendanceStatus }) {
         <button type="button" onClick={() => setView("completed")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${view === "completed" ? "bg-surface text-primary-text shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>Completed{history.pagination.total ? ` (${history.pagination.total})` : ""}</button>
       </div>
 
+      {attendanceStatus === "WORKING" && previousOngoingWork && activeRows.some((item) => item.id === previousOngoingWork.id && item.status === "PAUSED") && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary-border bg-primary-soft px-4 py-3">
+          <div><p className="text-xs font-bold text-primary-text">Break ended</p><p className="text-sm">Previous work: <span className="font-semibold">{previousOngoingWork.title}</span></p></div>
+          <Button disabled={Boolean(busyId)} onClick={() => timerAction(activeRows.find((item) => item.id === previousOngoingWork.id))}>Resume Previous Work</Button>
+        </div>
+      )}
+
       {view === "ongoing" ? (activeRows.length ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {activeRows.map((row) => (
@@ -224,9 +231,9 @@ export default function EmployeeOngoingWork({ attendanceStatus }) {
                 <p className="mt-1 text-[11px] text-muted-foreground">Created: {dateTime.format(new Date(row.createdAt))}</p>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                <button type="button" title={row.status !== "WORKING" && !attendanceActive ? "Clock in to start work" : undefined} disabled={Boolean(busyId) || (row.status !== "WORKING" && !attendanceActive)} onClick={() => timerAction(row)} className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold disabled:opacity-50 ${row.status === "WORKING" ? "bg-warning-soft text-warning" : "bg-primary text-primary-foreground"}`}>
+                <button type="button" title={row.status !== "WORKING" && !attendanceActive ? (attendanceStatus === "ON_BREAK" ? "End your break before resuming work" : "Clock in to start work") : undefined} disabled={Boolean(busyId) || (row.status !== "WORKING" && !attendanceActive)} onClick={() => timerAction(row)} className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold disabled:opacity-50 ${row.status === "WORKING" ? "bg-warning-soft text-warning" : "bg-primary text-primary-foreground"}`}>
                   {row.status === "WORKING" ? <Pause size={13} /> : <Play size={13} />}
-                  {row.status !== "WORKING" && !attendanceActive ? "Clock in to start" : timerLabel(row)}
+                  {row.status !== "WORKING" && !attendanceActive ? (attendanceStatus === "ON_BREAK" ? "End break to resume" : "Clock in to start") : timerLabel(row)}
                 </button>
                 <button type="button" disabled={Boolean(busyId)} onClick={() => openEdit(row)} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-hover disabled:opacity-50"><Pencil size={13} /> Edit</button>
                 <button type="button" disabled={Boolean(busyId)} onClick={() => remove(row)} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-danger hover:bg-danger-soft disabled:opacity-50"><Trash2 size={13} /> Delete</button>

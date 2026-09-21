@@ -57,7 +57,7 @@ const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
   audit_logs: ["old_values", "new_values", "reason"],
   employee_salary_profiles: ["change_reason"],
-  attendance_breaks: ["paused_task_id"],
+  attendance_breaks: ["paused_task_id", "auto_paused_ongoing_work_id"],
   ongoing_work: ["completion_note", "total_duration_seconds"],
   ongoing_work_sessions: [
     "ongoing_work_id",
@@ -121,6 +121,7 @@ const requiredMigrations = [
   "050_ongoing_work_time_tracking.sql",
   "051_team_ongoing_work_monitoring.sql",
   "052_ongoing_work_attendance_link.sql",
+  "053_break_ongoing_work_context.sql",
 ];
 
 export async function validateSchema() {

@@ -79,7 +79,7 @@ test("pause is data-safe when no active session exists", async () => {
   assert.equal(await pauseActiveOngoingWork(executor, 7, 12), null);
 });
 
-function timerExecutor(activeWorkId, { attendance = true } = {}) {
+function timerExecutor(activeWorkId, { attendance = true, breakActive = false } = {}) {
   const calls = [];
   const statuses = new Map([
     [11, "WORKING"],
@@ -92,9 +92,13 @@ function timerExecutor(activeWorkId, { attendance = true } = {}) {
       if (sql.includes("SELECT EXISTS(SELECT 1 FROM user_roles"))
         return [[{ yes: 0 }]];
       if (sql.includes("SELECT id FROM employees")) return [[]];
-      if (sql.includes("SELECT id FROM attendance_records"))
-        return attendance ? [[{ id: 81 }]] : [[]];
+      if (sql.includes("FROM attendance_records") && sql.includes("status IN"))
+        return attendance ? [[{ id: 81, status: breakActive ? "ON_BREAK" : "WORKING" }]] : [[]];
+      if (sql.includes("FROM attendance_breaks"))
+        return breakActive ? [[{ id: 91, breakStartedAt: "2026-09-21 21:00:00" }]] : [[]];
       if (sql.includes("SELECT id,ongoing_work_id ongoingWorkId,started_at startedAt"))
+        return [[]];
+      if (sql.includes("SELECT id,ongoing_work_id ongoingWorkId FROM ongoing_work_sessions"))
         return [[]];
       if (sql.startsWith("SELECT ow.id")) {
         const id = Number(params[0]);
@@ -177,6 +181,38 @@ test("attendance-link migration keeps legacy sessions nullable", () => {
   assert.match(sql, /attendance_record_id BIGINT UNSIGNED NULL/);
   assert.match(sql, /REFERENCES attendance_records\(id\) ON DELETE RESTRICT/);
   assert.match(sql, /idx_ongoing_work_sessions_attendance/);
+});
+
+test("active break blocks start, resume, and switch", async () => {
+  const executor = timerExecutor(null, { breakActive: true });
+  await assert.rejects(
+    () => startOngoingWork(executor, 12, { id: 7, employee_id: 7 }),
+    (error) => error.statusCode === 409 && error.code === "BREAK_ACTIVE",
+  );
+  assert.equal(
+    executor.calls.some((call) => call.sql.includes("INSERT INTO ongoing_work_sessions")),
+    false,
+  );
+});
+
+test("break-context migration stores only a nullable previous-work reference", () => {
+  const sql = fs.readFileSync(
+    new URL("../database/migrations/053_break_ongoing_work_context.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /auto_paused_ongoing_work_id BIGINT UNSIGNED NULL/);
+  assert.match(sql, /REFERENCES ongoing_work\(id\) ON DELETE SET NULL/);
+});
+
+test("break start uses one timestamp and break end does not resume ongoing work", () => {
+  const source = fs.readFileSync(
+    new URL("../src/services/attendance.service.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /SELECT CURRENT_TIMESTAMP breakStartTime/);
+  assert.match(source, /pauseActiveOngoingWork\([\s\S]*?clock\.breakStartTime/);
+  assert.doesNotMatch(source, /resumeOngoingWorkAfterBreak/);
+  assert.match(source, /previousOngoingWork/);
 });
 
 test("clock out shares its authoritative timestamp with ongoing-work pause", () => {

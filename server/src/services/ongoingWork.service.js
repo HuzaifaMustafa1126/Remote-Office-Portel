@@ -286,6 +286,12 @@ export async function start(id, user) {
       "Clock in before starting ongoing work.",
       "ATTENDANCE_REQUIRED",
     );
+  if (result?.breakActive)
+    throw new ApiError(
+      409,
+      "End your break before starting ongoing work.",
+      "BREAK_ACTIVE",
+    );
   return result;
 }
 
@@ -294,8 +300,15 @@ export async function startOngoingWork(connection, id, user) {
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
       employeeId,
     ]);
+    const row = await getOwn(id, user, connection, true);
+    if (row.status === "COMPLETED")
+      throw new ApiError(
+        409,
+        "This work item has already been completed.",
+        "ONGOING_WORK_COMPLETED",
+      );
     const [[attendance]] = await connection.execute(
-      `SELECT id FROM attendance_records
+      `SELECT id,status FROM attendance_records
        WHERE employee_id=? AND status IN('WORKING','ON_BREAK')
        ORDER BY id DESC LIMIT 1 FOR UPDATE`,
       [employeeId],
@@ -349,13 +362,43 @@ export async function startOngoingWork(connection, id, user) {
       );
       return { attendanceRequired: true };
     }
-    const row = await getOwn(id, user, connection, true);
-    if (row.status === "COMPLETED")
-      throw new ApiError(
-        409,
-        "This work item has already been completed.",
-        "ONGOING_WORK_COMPLETED",
+    const [[activeBreak]] = await connection.execute(
+      `SELECT id,break_start_at breakStartedAt FROM attendance_breaks
+       WHERE attendance_id=? AND status='ACTIVE' LIMIT 1 FOR UPDATE`,
+      [attendance.id],
+    );
+    if (attendance.status === "ON_BREAK" || activeBreak) {
+      const [[stale]] = await connection.execute(
+        `SELECT id,ongoing_work_id ongoingWorkId FROM ongoing_work_sessions
+         WHERE employee_id=? AND ended_at IS NULL LIMIT 1 FOR UPDATE`,
+        [employeeId],
       );
+      if (!stale || !activeBreak)
+        throw new ApiError(
+          409,
+          "End your break before starting ongoing work.",
+          "BREAK_ACTIVE",
+        );
+      await pauseActiveOngoingWork(
+        connection,
+        employeeId,
+        stale.ongoingWorkId,
+        activeBreak.breakStartedAt,
+      );
+      await connection.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'ONGOING_WORK',?,?,?)`,
+        [
+          user.id,
+          employeeId,
+          "ONGOING_WORK_BREAK_INTEGRITY_RECOVERY",
+          stale.ongoingWorkId,
+          "A stale ongoing work timer was paused at the active break boundary.",
+          JSON.stringify({ breakId: activeBreak.id, endedAt: activeBreak.breakStartedAt }),
+        ],
+      );
+      return { breakActive: true };
+    }
     const [[active]] = await connection.execute(
       `SELECT s.id,s.ongoing_work_id ongoingWorkId,ow.title
        FROM ongoing_work_sessions s JOIN ongoing_work ow ON ow.id=s.ongoing_work_id

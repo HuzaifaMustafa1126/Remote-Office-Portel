@@ -20,7 +20,14 @@ export default function useAttendance({ enabled = true } = {}) {
       setError("");
       return latest;
     } catch (e) {
-      setError(errorMessage(e));
+      const message = errorMessage(e);
+      await refresh().catch(() => {});
+      publishPortalStateChanged(eventType, { includeCurrent: true });
+      if (["BREAK_CHANGED", "ATTENDANCE_CHANGED"].includes(eventType))
+        publishPortalStateChanged("ONGOING_WORK_CHANGED", {
+          includeCurrent: true,
+        });
+      setError(message);
       throw e;
     } finally {
       setLoading(false);
@@ -60,7 +67,9 @@ export default function useAttendance({ enabled = true } = {}) {
       const response = await fn();
       setData(response.data);
       setNotice(
-        response.data?.ongoingWorkSessionPaused
+        response.data?.previousOngoingWork && response.data?.status === "WORKING"
+          ? `${response.message} ${response.data.previousOngoingWork.title} remains paused until you resume it.`
+          : response.data?.ongoingWorkSessionPaused
           ? `${response.message} Your active ongoing work was paused.`
           : response.data?.taskSessionResumed
           ? `${response.message} Your task has resumed automatically.`
