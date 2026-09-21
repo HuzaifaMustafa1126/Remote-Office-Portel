@@ -32,6 +32,7 @@ import EmployeeTaskPerformancePage from "../pages/EmployeeTaskPerformancePage";
 import TaskSettingsPage from "../pages/TaskSettingsPage";
 import LoginSecurityPage from "../pages/LoginSecurityPage";
 import NotesPage from "../pages/NotesPage";
+import TeamOngoingWorkPage from "../pages/TeamOngoingWorkPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -92,6 +93,14 @@ export default function AppRoutes() {
           element={
             <Gate permission={P.TASK_VIEW_OWN}>
               <TaskManagementPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="team-ongoing-work"
+          element={
+            <Gate permission={P.ONGOING_WORK_VIEW_TEAM}>
+              <TeamOngoingWorkPage />
             </Gate>
           }
         />

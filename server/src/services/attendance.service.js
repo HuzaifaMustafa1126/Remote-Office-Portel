@@ -8,6 +8,7 @@ import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
 import { current as currentPolicy } from "./attendancePolicy.service.js";
 import { classifyArrival } from "../utils/attendancePolicy.js";
 import { pauseActiveTask, resumeTaskAfterBreak } from "./taskTime.service.js";
+import { pauseActiveOngoingWork } from "./ongoingWork.service.js";
 import {
   getEmployeeAvailability,
   notifyAvailabilityChanged,
@@ -375,6 +376,9 @@ export async function endBreak(user) {
 export async function clockOut(user) {
   const outcome = await transaction(async (conn) => {
     const name = await employeeName(conn, user.employee_id);
+    await conn.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
+      user.employee_id,
+    ]);
     const record = await currentRecord(conn, user.employee_id, true);
     if (!record)
       throw new ApiError(409, "You must clock in before clocking out");
@@ -386,20 +390,47 @@ export async function clockOut(user) {
     );
     if (active || record.status === "ON_BREAK")
       throw new ApiError(409, "You must end your break before clocking out");
+    const [[clock]] = await conn.execute(
+      "SELECT CURRENT_TIMESTAMP clockOutTime",
+    );
+    const pausedOngoingWorkId = await pauseActiveOngoingWork(
+      conn,
+      user.employee_id,
+      null,
+      clock.clockOutTime,
+    );
     await conn.execute(
       `UPDATE attendance_records
-       SET clock_out_at = CURRENT_TIMESTAMP, status = 'CLOCKED_OUT',
+       SET clock_out_at = ?, status = 'CLOCKED_OUT',
            total_break_minutes = (SELECT COALESCE(SUM(duration_minutes), 0) FROM attendance_breaks WHERE attendance_id = ?),
            total_work_minutes = GREATEST(0,
-             TIMESTAMPDIFF(MINUTE, clock_in_at, CURRENT_TIMESTAMP) -
+             TIMESTAMPDIFF(MINUTE, clock_in_at, ?) -
              (SELECT COALESCE(SUM(duration_minutes), 0) FROM attendance_breaks WHERE attendance_id = ?)
            ),
-           short_minutes=GREATEST(0,COALESCE(required_work_minutes,0)-GREATEST(0,TIMESTAMPDIFF(MINUTE,clock_in_at,CURRENT_TIMESTAMP)-(SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id=?))),
-           extra_minutes=GREATEST(0,GREATEST(0,TIMESTAMPDIFF(MINUTE,clock_in_at,CURRENT_TIMESTAMP)-(SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id=?))-COALESCE(required_work_minutes,0)),
+           short_minutes=GREATEST(0,COALESCE(required_work_minutes,0)-GREATEST(0,TIMESTAMPDIFF(MINUTE,clock_in_at,?)-(SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id=?))),
+           extra_minutes=GREATEST(0,GREATEST(0,TIMESTAMPDIFF(MINUTE,clock_in_at,?)-(SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id=?))-COALESCE(required_work_minutes,0)),
            break_exceeded_minutes=GREATEST(0,(SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id=?)-COALESCE(break_allowance_minutes,0))
        WHERE id = ?`,
-      [record.id, record.id, record.id, record.id, record.id, record.id],
+      [clock.clockOutTime,record.id,clock.clockOutTime,record.id,clock.clockOutTime,record.id,clock.clockOutTime,record.id,record.id,record.id],
     );
+    if (pausedOngoingWorkId) {
+      await conn.execute(
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+         VALUES(?,?,?,'ONGOING_WORK',?,?,?)`,
+        [
+          user.id,
+          user.employee_id,
+          "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT",
+          pausedOngoingWorkId,
+          `${name}'s active ongoing work was paused by Clock Out.`,
+          JSON.stringify({
+            reason: "CLOCK_OUT",
+            attendanceId: record.id,
+            endedAt: clock.clockOutTime,
+          }),
+        ],
+      );
+    }
     const pausedTaskId = await pauseActiveTask(
       conn,
       user.employee_id,
@@ -435,6 +466,10 @@ export async function clockOut(user) {
         ...(await getToday(user, conn)),
         taskSessionPaused: Boolean(pausedTaskId),
         pausedTaskId: pausedTaskId ? Number(pausedTaskId) : null,
+        ongoingWorkSessionPaused: Boolean(pausedOngoingWorkId),
+        pausedOngoingWorkId: pausedOngoingWorkId
+          ? Number(pausedOngoingWorkId)
+          : null,
       },
       name,
       recordId: record.id,

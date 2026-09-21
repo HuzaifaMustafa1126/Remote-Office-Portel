@@ -1,6 +1,13 @@
 import api from"./api";
 export const getMine=()=>api.get("/ongoing-work/me").then(r=>r.data.data);
+export const getCompleted=(page=1,limit=20)=>api.get("/ongoing-work/completed",{params:{page,limit}}).then(r=>r.data.data);
+export const getTeamActive=params=>api.get("/ongoing-work/team/active",{params}).then(r=>r.data.data);
+export const getTeamCompleted=params=>api.get("/ongoing-work/team/completed",{params}).then(r=>r.data.data);
+export const getTeamDetails=id=>api.get(`/ongoing-work/team/${id}`).then(r=>r.data.data);
 export const create=data=>api.post("/ongoing-work",data).then(r=>r.data.data);
 export const update=(id,data)=>api.put(`/ongoing-work/${id}`,data).then(r=>r.data.data);
 export const setStatus=(id,status)=>api.patch(`/ongoing-work/${id}/status`,{status}).then(r=>r.data.data);
+export const start=id=>api.post(`/ongoing-work/${id}/start`).then(r=>r.data.data);
+export const pause=id=>api.post(`/ongoing-work/${id}/pause`).then(r=>r.data.data);
+export const complete=(id,completionNote)=>api.post(`/ongoing-work/${id}/complete`,{completionNote}).then(r=>r.data.data);
 export const remove=id=>api.delete(`/ongoing-work/${id}`).then(r=>r.data.data);

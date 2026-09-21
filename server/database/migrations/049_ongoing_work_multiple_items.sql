@@ -1,0 +1,9 @@
+ALTER TABLE ongoing_work
+  MODIFY status ENUM('ONGOING','WORKING','PAUSED','COMPLETED') NOT NULL DEFAULT 'WORKING';
+
+UPDATE ongoing_work SET status='WORKING' WHERE status='ONGOING';
+
+ALTER TABLE ongoing_work
+  MODIFY status ENUM('WORKING','PAUSED','COMPLETED') NOT NULL DEFAULT 'WORKING',
+  ADD COLUMN completion_note VARCHAR(1000) NULL AFTER completed_at,
+  ADD COLUMN total_duration_seconds BIGINT UNSIGNED NULL AFTER completion_note;

@@ -18,6 +18,7 @@
     "test:availability": "node --test test/availabilityNotification.test.js",
     "test:task-switch": "node test/taskSwitch.smoke.mjs",
     "test:ongoing-work": "node --test test/ongoingWorkStatus.test.js",
+    "test:ongoing-work-timer": "node --test test/ongoingWorkStatus.test.js test/ongoingWorkTimer.test.js",
     "test:history-cleanup": "node test/historyCleanup.test.mjs",
     "test:migration-safety": "node --test test/migrationSafety.test.js",
     "seed:admin": "node src/scripts/seedAdmin.js",

@@ -19,6 +19,7 @@ import {
   SlidersHorizontal,
   ClipboardList,
   NotebookPen,
+  Activity,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
@@ -39,6 +40,7 @@ const groups = [
     label: "WORK",
     items: [
       ["Task Management", "/tasks", ClipboardList, P.TASK_VIEW_OWN],
+      ["Team Ongoing Work", "/team-ongoing-work", Activity, P.ONGOING_WORK_VIEW_TEAM],
       ["Notes", "/notes", NotebookPen, P.NOTES_VIEW_OWN],
     ],
   },

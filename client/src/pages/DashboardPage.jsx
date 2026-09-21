@@ -566,7 +566,7 @@ export default function DashboardPage() {
               />
             )}
           </div>
-          <EmployeeOngoingWork />
+          <EmployeeOngoingWork attendanceStatus={own.data?.status} />
           <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
             <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar

@@ -51,8 +51,8 @@ async function baseRows(executor = pool, employeeId = null) {
         SELECT 1 FROM attendance_records ar
         WHERE ar.employee_id=e.id AND ar.status IN ('WORKING','ON_BREAK')
       ) clockedIn,
-      (SELECT ow.title FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkTitle,
-      (SELECT ow.status FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkStatus,
+      (SELECT ow.title FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','WORKING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkTitle,
+      (SELECT CASE WHEN ow.status='ONGOING' THEN 'WORKING' ELSE ow.status END FROM ongoing_work ow WHERE ow.employee_id=e.id AND ow.status IN('ONGOING','WORKING','PAUSED') ORDER BY ow.updated_at DESC LIMIT 1) ongoingWorkStatus,
       ts.offline_timeout_minutes timeoutMinutes,CURRENT_TIMESTAMP serverTime
      FROM employees e
      CROSS JOIN task_settings ts

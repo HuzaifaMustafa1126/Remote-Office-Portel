@@ -60,13 +60,19 @@ export default function useAttendance({ enabled = true } = {}) {
       const response = await fn();
       setData(response.data);
       setNotice(
-        response.data?.taskSessionResumed
+        response.data?.ongoingWorkSessionPaused
+          ? `${response.message} Your active ongoing work was paused.`
+          : response.data?.taskSessionResumed
           ? `${response.message} Your task has resumed automatically.`
           : response.data?.taskSessionPaused
             ? `${response.message} Your active task has been paused.`
             : response.message,
       );
       publishPortalStateChanged(eventType, { includeCurrent: true });
+      if (response.data?.ongoingWorkSessionPaused)
+        publishPortalStateChanged("ONGOING_WORK_CHANGED", {
+          includeCurrent: true,
+        });
     } catch (e) {
       setError(errorMessage(e));
     } finally {

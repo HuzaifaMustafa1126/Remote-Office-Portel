@@ -381,7 +381,8 @@ const checks = {
       ["ongoing_work", "started_at"],
       ["ongoing_work", "completed_at"],
     ])) &&
-    (await enumHas("ongoing_work", "status", "ONGOING")) &&
+    ((await enumHas("ongoing_work", "status", "ONGOING")) ||
+      (await enumHas("ongoing_work", "status", "WORKING"))) &&
     (await enumHas("ongoing_work", "status", "PAUSED")) &&
     (await enumHas("ongoing_work", "status", "COMPLETED")) &&
     (await index("ongoing_work", "idx_ongoing_work_employee_status")) &&
