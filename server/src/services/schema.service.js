@@ -52,13 +52,14 @@ const requiredTables = [
   "note_reply_mentions",
   "ongoing_work",
   "ongoing_work_sessions",
+  "ongoing_work_retention_settings",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
   audit_logs: ["old_values", "new_values", "reason"],
   employee_salary_profiles: ["change_reason"],
   attendance_breaks: ["paused_task_id", "auto_paused_ongoing_work_id"],
-  ongoing_work: ["completion_note", "total_duration_seconds"],
+  ongoing_work: ["completion_note", "total_duration_seconds", "deleted_at", "deleted_by_user_id", "deletion_reason"],
   ongoing_work_sessions: [
     "ongoing_work_id",
     "employee_id",
@@ -122,6 +123,8 @@ const requiredMigrations = [
   "051_team_ongoing_work_monitoring.sql",
   "052_ongoing_work_attendance_link.sql",
   "053_break_ongoing_work_context.sql",
+  "054_ongoing_work_notifications.sql",
+  "055_ongoing_work_retention.sql",
 ];
 
 export async function validateSchema() {

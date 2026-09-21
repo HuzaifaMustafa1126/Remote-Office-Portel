@@ -88,6 +88,8 @@ const groups = [
       ["Task Due Soon", "TASK_DUE_SOON"],
       ["Task Overdue", "TASK_OVERDUE"],
       ["Task Completed", "TASK_COMPLETED"],
+      ["Ongoing Work Started", "ONGOING_WORK_STARTED"],
+      ["Ongoing Work Completed", "ONGOING_WORK_COMPLETED"],
     ],
   ],
   [

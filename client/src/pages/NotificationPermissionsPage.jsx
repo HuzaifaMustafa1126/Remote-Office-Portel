@@ -98,6 +98,8 @@ const overrides = {
   TASK_STARTED: "Task Started",
   TASK_PAUSED: "Task Paused",
   TASK_COMPLETED: "Task Completed",
+  ONGOING_WORK_STARTED: "Ongoing Work Started",
+  ONGOING_WORK_COMPLETED: "Ongoing Work Completed",
   TASK_REOPENED: "Task Reopened",
   TASK_DUE_SOON: "Task Due Soon",
   TASK_OVERDUE: "Task Overdue",
@@ -141,6 +143,8 @@ const categoryFor = (type) =>
           ? "Leave"
           : type.startsWith("TASK_") || type === "OPEN_TASK_CREATED"
             ? "Tasks"
+            : type.startsWith("ONGOING_WORK_")
+              ? "Tasks"
             : type.startsWith("CALENDAR_") ||
                 type.startsWith("HOLIDAY_") ||
                 type.startsWith("ANNOUNCEMENT")
@@ -179,7 +183,7 @@ const descriptionFor = (type) => {
   };
   if (noteDescriptions[type]) return noteDescriptions[type];
   const name = friendly(type).toLowerCase();
-  if (type.startsWith("TASK_"))
+  if (type.startsWith("TASK_") || type.startsWith("ONGOING_WORK_"))
     return `Controls who can receive alerts when ${name}.`;
   if (type.startsWith("NOTE_"))
     return `Controls delivery of the ${name} notification to eligible Note viewers.`;

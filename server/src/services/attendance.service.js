@@ -249,8 +249,8 @@ export async function startBreak(user) {
         [pausedOngoingWorkId],
       );
       await conn.execute(
-        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
-         VALUES(?,?,?,'ONGOING_WORK',?,?,?)`,
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values,reason)
+         VALUES(?,?,?,'ONGOING_WORK',?,?,?,'SYSTEM')`,
         [
           user.id,
           user.employee_id,
@@ -471,8 +471,8 @@ export async function clockOut(user) {
     );
     if (pausedOngoingWorkId) {
       await conn.execute(
-        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
-         VALUES(?,?,?,'ONGOING_WORK',?,?,?)`,
+        `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values,reason)
+         VALUES(?,?,?,'ONGOING_WORK',?,?,?,'SYSTEM')`,
         [
           user.id,
           user.employee_id,

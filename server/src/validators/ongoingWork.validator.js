@@ -48,3 +48,11 @@ export const teamCompletedSchema = z
     if (value.date === "CUSTOM" && (!value.from || !value.to || value.from > value.to))
       context.addIssue({ code: "custom", message: "A valid custom date range is required" });
   });
+export const retentionSettingsSchema = z
+  .object({
+    autoCleanupEnabled: z.boolean(),
+    retentionDays: z.number().int().refine((value) => [7, 14, 30, 60, 90].includes(value), {
+      message: "Retention must be 7, 14, 30, 60, or 90 days",
+    }),
+  })
+  .strict();

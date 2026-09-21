@@ -18,6 +18,12 @@ export const teamDetails = async (req, res) =>
     success: true,
     data: await s.teamDetails(req.user, req.params.id),
   });
+export const retentionSettings = async (req, res) =>
+  res.json({ success: true, data: await s.retentionSettings(req.user) });
+export const updateRetentionSettings = async (req, res) =>
+  res.json({ success: true, data: await s.updateRetentionSettings(req.body, req.user) });
+export const removeCompletedByAdmin = async (req, res) =>
+  res.json({ success: true, data: await s.removeCompletedByAdmin(req.params.id, req.user) });
 export const completed = async (req, res) =>
   res.json({
     success: true,

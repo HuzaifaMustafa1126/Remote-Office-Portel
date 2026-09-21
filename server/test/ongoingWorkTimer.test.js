@@ -4,11 +4,18 @@ import test from "node:test";
 
 import {
   completeOngoingWork,
+  formatOngoingDuration,
   pauseActiveOngoingWork,
   startOngoingWork,
 } from "../src/services/ongoingWork.service.js";
+
+test("notification durations use a compact readable format", () => {
+  assert.equal(formatOngoingDuration(0), "0s");
+  assert.equal(formatOngoingDuration(3671), "1h 1m 11s");
+});
 import {
   completionSchema,
+  retentionSettingsSchema,
   teamActiveSchema,
   teamCompletedSchema,
 } from "../src/validators/ongoingWork.validator.js";
@@ -129,6 +136,7 @@ function timerExecutor(activeWorkId, { attendance = true, breakActive = false } 
         statuses.set(Number(params[0]), "WORKING");
         return [{ affectedRows: 1 }];
       }
+      if (sql.includes("INSERT INTO audit_logs")) return [{ insertId: 71 }];
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
@@ -261,6 +269,7 @@ function completionExecutor({ status = "WORKING", active = true, total = 3671 } 
         currentStatus = "COMPLETED";
         return [{ affectedRows: 1 }];
       }
+      if (sql.includes("INSERT INTO audit_logs")) return [{ insertId: 72 }];
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
@@ -308,4 +317,66 @@ test("duplicate completion preserves the original completed state", async () => 
     (error) => error.statusCode === 409 && error.code === "ONGOING_WORK_COMPLETED",
   );
   assert.equal(executor.calls.some((call) => call.sql.includes("SET status='COMPLETED'")), false);
+});
+
+test("Phase 5.9 registers only meaningful management notification events", () => {
+  const sql = fs.readFileSync(
+    new URL("../database/migrations/054_ongoing_work_notifications.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /ONGOING_WORK_STARTED/);
+  assert.match(sql, /ONGOING_WORK_COMPLETED/);
+  assert.match(sql, /CEO_ADMIN/);
+  assert.doesNotMatch(sql, /ONGOING_WORK_PAUSED/);
+  assert.doesNotMatch(sql, /ONGOING_WORK_SWITCHED/);
+});
+
+test("ongoing-work diagnostics are read-only and cover timer integrity", () => {
+  const source = fs.readFileSync(
+    new URL("../src/scripts/auditOngoingWorkIntegrity.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /multipleActiveTimers/);
+  assert.match(source, /statusSessionMismatch/);
+  assert.match(source, /activeWithoutAttendance/);
+  assert.match(source, /activeDuringBreak/);
+  assert.doesNotMatch(source, /\b(UPDATE|DELETE|INSERT|REPLACE)\b/);
+});
+
+test("retention settings accept only supported periods", () => {
+  assert.deepEqual(retentionSettingsSchema.parse({ autoCleanupEnabled: false, retentionDays: 7 }), {
+    autoCleanupEnabled: false,
+    retentionDays: 7,
+  });
+  for (const days of [14, 30, 60, 90])
+    assert.equal(retentionSettingsSchema.safeParse({ autoCleanupEnabled: true, retentionDays: days }).success, true);
+  assert.equal(retentionSettingsSchema.safeParse({ autoCleanupEnabled: true, retentionDays: 8 }).success, false);
+  assert.equal(retentionSettingsSchema.safeParse({ autoCleanupEnabled: true, retentionDays: 7, status: "WORKING" }).success, false);
+});
+
+test("retention migration archives completed work without deleting timer sessions", () => {
+  const sql = fs.readFileSync(
+    new URL("../database/migrations/055_ongoing_work_retention.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /auto_cleanup_enabled BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(sql, /retention_days SMALLINT UNSIGNED NOT NULL DEFAULT 7/);
+  assert.match(sql, /deleted_at DATETIME NULL/);
+  assert.match(sql, /MANUAL_ADMIN_DELETE/);
+  assert.match(sql, /RETENTION_POLICY/);
+  assert.match(sql, /ongoing_work\.retention_manage/);
+  assert.doesNotMatch(sql, /ALTER TABLE ongoing_work_sessions/);
+});
+
+test("cleanup is completed-only, cutoff-based, batched, and idempotent", () => {
+  const source = fs.readFileSync(
+    new URL("../src/services/ongoingWork.service.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /status='COMPLETED' AND deleted_at IS NULL[\s\S]*completed_at<DATE_SUB/);
+  assert.match(source, /LIMIT \? FOR UPDATE SKIP LOCKED/);
+  assert.match(source, /Math\.min\(500/);
+  assert.match(source, /ONGOING_WORK_AUTO_CLEANED/);
+  assert.match(source, /ONGOING_WORK_DELETED_BY_ADMIN/);
+  assert.match(source, /Only completed Ongoing Work can be deleted/);
 });

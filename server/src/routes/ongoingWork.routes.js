@@ -19,6 +19,23 @@ r.get(
   asyncHandler(c.teamCompleted),
 );
 r.get(
+  "/team/retention-settings",
+  requirePermission("ongoing_work.retention_manage"),
+  asyncHandler(c.retentionSettings),
+);
+r.put(
+  "/team/retention-settings",
+  requirePermission("ongoing_work.retention_manage"),
+  validate(v.retentionSettingsSchema),
+  asyncHandler(c.updateRetentionSettings),
+);
+r.delete(
+  "/team/completed/:id",
+  requirePermission("ongoing_work.retention_manage"),
+  validate(v.idSchema, "params"),
+  asyncHandler(c.removeCompletedByAdmin),
+);
+r.get(
   "/team/:id",
   requirePermission("ongoing_work.view_team"),
   validate(v.idSchema, "params"),

@@ -4,6 +4,9 @@ export const getCompleted=(page=1,limit=20)=>api.get("/ongoing-work/completed",{
 export const getTeamActive=params=>api.get("/ongoing-work/team/active",{params}).then(r=>r.data.data);
 export const getTeamCompleted=params=>api.get("/ongoing-work/team/completed",{params}).then(r=>r.data.data);
 export const getTeamDetails=id=>api.get(`/ongoing-work/team/${id}`).then(r=>r.data.data);
+export const getRetentionSettings=()=>api.get("/ongoing-work/team/retention-settings").then(r=>r.data.data);
+export const saveRetentionSettings=data=>api.put("/ongoing-work/team/retention-settings",data).then(r=>r.data.data);
+export const removeCompletedByAdmin=id=>api.delete(`/ongoing-work/team/completed/${id}`).then(r=>r.data.data);
 export const create=data=>api.post("/ongoing-work",data).then(r=>r.data.data);
 export const update=(id,data)=>api.put(`/ongoing-work/${id}`,data).then(r=>r.data.data);
 export const setStatus=(id,status)=>api.patch(`/ongoing-work/${id}/status`,{status}).then(r=>r.data.data);

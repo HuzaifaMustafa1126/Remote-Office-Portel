@@ -54,6 +54,7 @@ export const PERMISSIONS = {
   TASK_EDIT: "task.edit",
   TASK_SETTINGS: "task.settings",
   ONGOING_WORK_VIEW_TEAM: "ongoing_work.view_team",
+  ONGOING_WORK_RETENTION_MANAGE: "ongoing_work.retention_manage",
   NOTES_VIEW_OWN: "notes.view_own",
   NOTES_VIEW_TEAM: "notes.view_team",
   NOTES_VIEW_ALL: "notes.view_all",
