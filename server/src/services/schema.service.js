@@ -125,6 +125,7 @@ const requiredMigrations = [
   "053_break_ongoing_work_context.sql",
   "054_ongoing_work_notifications.sql",
   "055_ongoing_work_retention.sql",
+  "056_ongoing_work_lifecycle_notifications.sql",
 ];
 
 export async function validateSchema() {

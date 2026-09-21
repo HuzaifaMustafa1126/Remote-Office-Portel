@@ -325,6 +325,15 @@ export async function startBreak(user) {
     context: "BREAK_STARTED",
     eventKey: `BREAK_STARTED:${outcome.breakId}`,
   });
+  if (outcome.data.pausedOngoingWorkId)
+    await notifyByPolicy("ONGOING_WORK_AUTO_PAUSED_BREAK", user, {
+      title: "Ongoing work paused for break",
+      message: `${outcome.name}'s “${outcome.data.previousOngoingWork?.title || "Ongoing Work"}” was paused when their break started.`,
+      referenceType: "ONGOING_WORK",
+      referenceId: outcome.data.pausedOngoingWorkId,
+      actionUrl: "/team-ongoing-work",
+      eventKey: `ONGOING_WORK_AUTO_PAUSED_BREAK:${outcome.breakId}`,
+    });
   return outcome.data;
 }
 
@@ -539,6 +548,15 @@ export async function clockOut(user) {
     referenceId: outcome.recordId,
     actionUrl: "/attendance",
   });
+  if (outcome.data.pausedOngoingWorkId)
+    await notifyByPolicy("ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT", user, {
+      title: "Ongoing work paused at clock out",
+      message: `${outcome.name}'s active Ongoing Work was paused when they clocked out.`,
+      referenceType: "ONGOING_WORK",
+      referenceId: outcome.data.pausedOngoingWorkId,
+      actionUrl: "/team-ongoing-work",
+      eventKey: `ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT:${outcome.recordId}`,
+    });
   return outcome.data;
 }
 

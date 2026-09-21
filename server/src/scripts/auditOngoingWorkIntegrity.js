@@ -54,12 +54,67 @@ try {
     `SELECT auto_cleanup_enabled autoCleanupEnabled,retention_days retentionDays
      FROM ongoing_work_retention_settings WHERE id=1`,
   );
+  const [notificationPolicies] = await pool.execute(
+    `SELECT event_type eventType,enabled,audience_type audienceType,notify_actor notifyActor,
+       in_app_enabled inAppEnabled,desktop_enabled desktopEnabled,sound_enabled soundEnabled
+     FROM notification_policies
+     WHERE event_type LIKE 'ONGOING_WORK_%'
+     ORDER BY event_type`,
+  );
+  const [[notificationRecipients]] = await pool.execute(
+    `SELECT COUNT(DISTINCT u.id) eligibleManagementRecipients
+     FROM users u
+     JOIN employees e ON e.id=u.employee_id
+     JOIN user_roles ur ON ur.user_id=u.id
+     JOIN roles r ON r.id=ur.role_id
+     WHERE u.status='ACTIVE' AND e.status='ACTIVE'
+       AND UPPER(r.name) IN('CEO','ADMIN')`,
+  );
+  const [recentOngoingNotifications] = await pool.execute(
+    `SELECT id,user_id userId,type,title,is_read isRead,in_app_allowed inAppAllowed,
+       desktop_allowed desktopAllowed,sound_allowed soundAllowed,created_at createdAt
+     FROM notifications
+     WHERE type LIKE 'ONGOING_WORK_%'
+     ORDER BY id DESC LIMIT 10`,
+  );
+  const [recipientPreferences] = await pool.execute(
+    `SELECT u.id userId,COALESCE(np.notifications_enabled,TRUE) notificationsEnabled,
+       COALESCE(np.in_app_enabled,TRUE) inAppEnabled,
+       COALESCE(np.browser_notifications,FALSE) desktopEnabled,
+       COALESCE(np.do_not_disturb,FALSE) doNotDisturb,
+       COALESCE(np.task_notifications,TRUE) taskEnabled,
+       ep.event_type eventType,ep.in_app_enabled eventInApp,
+       ep.desktop_enabled eventDesktop,ep.sound_enabled eventSound
+     FROM users u
+     JOIN employees e ON e.id=u.employee_id
+     JOIN user_roles ur ON ur.user_id=u.id
+     JOIN roles r ON r.id=ur.role_id
+     LEFT JOIN notification_preferences np ON np.user_id=u.id
+     LEFT JOIN notification_event_preferences ep ON ep.user_id=u.id
+       AND ep.event_type LIKE 'ONGOING_WORK_%'
+     WHERE u.status='ACTIVE' AND e.status='ACTIVE'
+       AND UPPER(r.name) IN('CEO','ADMIN')
+     ORDER BY u.id,ep.event_type`,
+  );
   console.log(JSON.stringify({
     ok: issueCount === 0,
     issueCount,
     retention: {
       autoCleanupEnabled: Boolean(retention.autoCleanupEnabled),
       retentionDays: Number(retention.retentionDays),
+    },
+    notifications: {
+      policies: notificationPolicies.map((policy) => ({
+        ...policy,
+        enabled: Boolean(policy.enabled),
+        notifyActor: Boolean(policy.notifyActor),
+        inAppEnabled: Boolean(policy.inAppEnabled),
+        desktopEnabled: Boolean(policy.desktopEnabled),
+        soundEnabled: Boolean(policy.soundEnabled),
+      })),
+      eligibleManagementRecipients: Number(notificationRecipients.eligibleManagementRecipients),
+      recipientPreferences,
+      recent: recentOngoingNotifications,
     },
     checks: report,
   }, null, 2));

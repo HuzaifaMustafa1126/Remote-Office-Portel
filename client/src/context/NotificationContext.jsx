@@ -50,6 +50,7 @@ export function NotificationProvider({ children }) {
     [preferences, setPreferences] = useState(null);
   const preferencesRef = useRef(null),
     seen = useRef(new Set()),
+    hydrated = useRef(false),
     audioWarningShown = useRef(false);
   useEffect(() => {
     preferencesRef.current = preferences;
@@ -59,9 +60,24 @@ export function NotificationProvider({ children }) {
       api.list({ page: 1, limit: 10 }),
       api.unreadCount(),
     ]);
+    const missed = hydrated.current
+      ? result.rows.filter((item) => !item.isRead && !seen.current.has(Number(item.id)))
+      : [];
     setItems(result.rows);
     seen.current = new Set(result.rows.map((item) => Number(item.id)));
     setUnread(count);
+    hydrated.current = true;
+    if (missed.length && !document.hidden) {
+      setToasts((old) => [
+        ...old,
+        ...missed.filter((item) => !old.some((current) => current.id === item.id)),
+      ]);
+      for (const item of missed)
+        window.setTimeout(
+          () => setToasts((old) => old.filter((current) => current.id !== item.id)),
+          7000,
+        );
+    }
   }, []);
   const play = useCallback((notification) => {
     const current = preferencesRef.current;
@@ -88,6 +104,8 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (!user || blocked) {
       disconnectNotifications();
+      hydrated.current = false;
+      seen.current = new Set();
       setItems([]);
       setToasts([]);
       setUnread(0);
@@ -107,6 +125,7 @@ export function NotificationProvider({ children }) {
       reconcile().catch(() => {});
     });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", () => setConnected(false));
     socket.on("notification:new", (notification) => {
       if (!active) return;
       const id = Number(notification.id);
@@ -174,8 +193,18 @@ export function NotificationProvider({ children }) {
           };
         }
     });
+    const refresh = () => reconcile().catch(() => {});
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
       disconnectNotifications();
     };
   }, [user, blocked, reconcile, play]);

@@ -354,6 +354,15 @@ test("retention settings accept only supported periods", () => {
   assert.equal(retentionSettingsSchema.safeParse({ autoCleanupEnabled: true, retentionDays: 7, status: "WORKING" }).success, false);
 });
 
+test("all Ongoing Work lifecycle notifications are configurable", () => {
+  const sql = fs.readFileSync(
+    new URL("../database/migrations/056_ongoing_work_lifecycle_notifications.sql", import.meta.url),
+    "utf8",
+  );
+  for (const event of ["CREATED", "UPDATED", "PAUSED", "SWITCHED", "DELETED", "AUTO_PAUSED_BREAK", "AUTO_PAUSED_CLOCK_OUT"])
+    assert.match(sql, new RegExp(`ONGOING_WORK_${event}`));
+});
+
 test("retention migration archives completed work without deleting timer sessions", () => {
   const sql = fs.readFileSync(
     new URL("../database/migrations/055_ongoing_work_retention.sql", import.meta.url),
@@ -379,4 +388,8 @@ test("cleanup is completed-only, cutoff-based, batched, and idempotent", () => {
   assert.match(source, /ONGOING_WORK_AUTO_CLEANED/);
   assert.match(source, /ONGOING_WORK_DELETED_BY_ADMIN/);
   assert.match(source, /Only completed Ongoing Work can be deleted/);
+  assert.match(
+    source,
+    /\(user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason\)[\s\S]*?VALUES\(\?,\?,\?,'ONGOING_WORK',\?,\?,\?,\?,\?\)/,
+  );
 });

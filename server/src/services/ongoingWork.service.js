@@ -79,7 +79,7 @@ async function auditOngoingWork(
   await executor.execute(
     `INSERT INTO audit_logs
      (user_id,employee_id,action,entity_type,entity_id,description,old_values,new_values,reason)
-     VALUES(?,?,?,'ONGOING_WORK',?,?,?,?,?,?)`,
+     VALUES(?,?,?,'ONGOING_WORK',?,?,?,?,?)`,
     [
       user?.id || null,
       employeeId,
@@ -278,7 +278,7 @@ export async function completed(user, { page, limit }) {
 }
 
 export async function create(data, user) {
-  return transaction(async (connection) => {
+  const work = await transaction(async (connection) => {
     const employeeId = await assertEmployeeUser(user, connection);
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [employeeId]);
     const [result] = await connection.execute(
@@ -292,10 +292,16 @@ export async function create(data, user) {
     });
     return getOwn(result.insertId, user, connection);
   });
+  await deliverOngoingNotification(ONGOING_WORK_EVENTS.CREATED, user, {
+    title: "Ongoing work created", message: `${work.employeeName} created “${work.title}”.`,
+    referenceType: "ONGOING_WORK", referenceId: work.id, actionUrl: "/team-ongoing-work",
+    eventKey: `${ONGOING_WORK_EVENTS.CREATED}:${work.id}`,
+  });
+  return work;
 }
 
 export async function update(id, data, user) {
-  return transaction(async (connection) => {
+  const work = await transaction(async (connection) => {
     const employeeId = await assertEmployeeUser(user, connection);
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [employeeId]);
     const row = await getOwn(id, user, connection, true);
@@ -313,6 +319,12 @@ export async function update(id, data, user) {
     });
     return getOwn(id, user, connection);
   });
+  await deliverOngoingNotification(ONGOING_WORK_EVENTS.UPDATED, user, {
+    title: "Ongoing work updated", message: `${work.employeeName} updated “${work.title}”.`,
+    referenceType: "ONGOING_WORK", referenceId: work.id, actionUrl: "/team-ongoing-work",
+    eventKey: `${ONGOING_WORK_EVENTS.UPDATED}:${work.id}:${work.updatedAt}`,
+  });
+  return work;
 }
 
 export function statusUpdateStatement(status) {
@@ -360,17 +372,17 @@ export async function start(id, user) {
       "End your break before starting ongoing work.",
       "BREAK_ACTIVE",
     );
-  if (result?.notifyStarted) {
-    await deliverOngoingNotification(ONGOING_WORK_EVENTS.STARTED, user, {
-      title: "Ongoing work started",
-      message: `${result.activeWork.employeeName} started “${result.activeWork.title}”.`,
+  if (result?.notification) {
+    await deliverOngoingNotification(result.notification.type, user, {
+      title: result.notification.title,
+      message: result.notification.message,
       referenceType: "ONGOING_WORK",
       referenceId: result.activeWork.id,
       actionUrl: "/team-ongoing-work",
-      eventKey: `${ONGOING_WORK_EVENTS.STARTED}:${result.activeWork.id}`,
+      eventKey: result.notification.eventKey,
     });
   }
-  delete result.notifyStarted;
+  delete result.notification;
   return result;
 }
 
@@ -508,7 +520,7 @@ export async function startOngoingWork(connection, id, user) {
         connection,
       );
     }
-    await connection.execute(
+    const [createdSession] = await connection.execute(
       `INSERT INTO ongoing_work_sessions(ongoing_work_id,employee_id,user_id,attendance_record_id,started_at)
        VALUES(?,?,?,?,?)`,
       [id, employeeId, user.id, attendance.id, clock.switchTime],
@@ -530,7 +542,14 @@ export async function startOngoingWork(connection, id, user) {
       activeWork: startedWork,
       pausedWork,
       serverTime: clock.switchTime,
-      notifyStarted: !active && Number(row.sessionCount || 0) === 0,
+      notification: {
+        type: switched ? ONGOING_WORK_EVENTS.SWITCHED : ONGOING_WORK_EVENTS.STARTED,
+        title: switched ? "Ongoing work switched" : "Ongoing work started",
+        message: switched
+          ? `${startedWork.employeeName} paused “${active.title}” and started “${startedWork.title}”.`
+          : `${startedWork.employeeName} ${Number(row.sessionCount || 0) ? "resumed" : "started"} “${startedWork.title}”.`,
+        eventKey: `${switched ? ONGOING_WORK_EVENTS.SWITCHED : ONGOING_WORK_EVENTS.STARTED}:${createdSession.insertId}`,
+      },
     };
 }
 
@@ -575,7 +594,7 @@ export async function pauseActiveOngoingWork(
 }
 
 export async function pause(id, user) {
-  return transaction(async (connection) => {
+  const result = await transaction(async (connection) => {
     const employeeId = await assertEmployeeUser(user, connection);
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
       employeeId,
@@ -600,8 +619,15 @@ export async function pause(id, user) {
         description: `Paused ongoing work “${row.title}”.`,
         oldValues: { status: row.status }, newValues: { status: "PAUSED" },
       });
-    return getOwn(id, user, connection);
+    return { work: await getOwn(id, user, connection), changed: Boolean(pausedId || row.status !== "PAUSED") };
   });
+  if (result.changed)
+    await deliverOngoingNotification(ONGOING_WORK_EVENTS.PAUSED, user, {
+      title: "Ongoing work paused", message: `${result.work.employeeName} paused “${result.work.title}”.`,
+      referenceType: "ONGOING_WORK", referenceId: result.work.id, actionUrl: "/team-ongoing-work",
+      eventKey: `${ONGOING_WORK_EVENTS.PAUSED}:${result.work.id}:${result.work.updatedAt}`,
+    });
+  return result.work;
 }
 
 export async function complete(id, data, user) {
@@ -709,7 +735,7 @@ export async function completeOngoingWork(connection, id, data, user) {
 }
 
 export async function remove(id, user) {
-  return transaction(async (connection) => {
+  const result = await transaction(async (connection) => {
     const employeeId = await assertEmployeeUser(user, connection);
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
       employeeId,
@@ -740,8 +766,15 @@ export async function remove(id, user) {
       "DELETE FROM ongoing_work WHERE id=? AND employee_id=?",
       [id, employeeId],
     );
-    return { deleted: true, id: Number(id) };
+    return { deleted: true, id: Number(id), work: row };
   });
+  await deliverOngoingNotification(ONGOING_WORK_EVENTS.DELETED, user, {
+    title: "Ongoing work deleted", message: `${result.work.employeeName} deleted “${result.work.title}”.`,
+    referenceType: "ONGOING_WORK", referenceId: result.id, actionUrl: "/team-ongoing-work",
+    eventKey: `${ONGOING_WORK_EVENTS.DELETED}:${result.id}`,
+  });
+  delete result.work;
+  return result;
 }
 
 export async function retentionSettings(user) {
