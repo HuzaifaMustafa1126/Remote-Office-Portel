@@ -9,6 +9,7 @@ import { current as currentPolicy } from "./attendancePolicy.service.js";
 import { classifyArrival } from "../utils/attendancePolicy.js";
 import { pauseActiveTask, resumeTaskAfterBreak } from "./taskTime.service.js";
 import { pauseActiveOngoingWork } from "./ongoingWork.service.js";
+import { assertSubmittedForAttendance } from "./dayEndReport.service.js";
 import {
   getEmployeeAvailability,
   notifyAvailabilityChanged,
@@ -455,6 +456,7 @@ export async function clockOut(user) {
     );
     if (active || record.status === "ON_BREAK")
       throw new ApiError(409, "You must end your break before clocking out");
+    await assertSubmittedForAttendance(conn, record.id, user.employee_id);
     const [[clock]] = await conn.execute(
       "SELECT CURRENT_TIMESTAMP clockOutTime",
     );

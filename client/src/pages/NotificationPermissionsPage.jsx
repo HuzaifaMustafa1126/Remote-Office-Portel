@@ -107,6 +107,7 @@ const overrides = {
   ONGOING_WORK_DELETED: "Ongoing Work Deleted",
   ONGOING_WORK_AUTO_PAUSED_BREAK: "Ongoing Work Paused for Break",
   ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT: "Ongoing Work Paused at Clock Out",
+  DAY_END_REPORT_SUBMITTED: "Day-End Report Submitted",
   TASK_REOPENED: "Task Reopened",
   TASK_DUE_SOON: "Task Due Soon",
   TASK_OVERDUE: "Task Overdue",

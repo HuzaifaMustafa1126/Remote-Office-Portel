@@ -40,6 +40,7 @@ import TaskFormDrawer from "../components/tasks/TaskFormDrawer";
 import { listTasks, transitionTask } from "../services/task.service";
 import { getUpcoming } from "../services/companyCalendar.service";
 import { getLeaves } from "../services/leave.service";
+import DayEndReportModal from "../components/dayEndReport/DayEndReportModal";
 const clock = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -338,6 +339,7 @@ export default function DashboardPage() {
     [creatingTask, setCreatingTask] = useState(false),
     [taskBusy, setTaskBusy] = useState(null),
     [taskNotice, setTaskNotice] = useState(""),
+    [dayEndOpen, setDayEndOpen] = useState(false),
     [refreshInterval, setRefreshInterval] = useState(() => {
       const stored = Number(
         localStorage.getItem(
@@ -546,7 +548,7 @@ export default function DashboardPage() {
                 onClockIn: own.clockIn,
                 onStartBreak: own.startBreak,
                 onEndBreak: own.endBreak,
-                onClockOut: own.clockOut,
+                onClockOut: () => setDayEndOpen(true),
               }}
             />
             {canViewOwnTasks && (
@@ -567,6 +569,7 @@ export default function DashboardPage() {
             )}
           </div>
           <EmployeeOngoingWork attendanceStatus={own.data?.status} previousOngoingWork={own.data?.previousOngoingWork} />
+          <DayEndReportModal open={dayEndOpen} onClose={() => setDayEndOpen(false)} onSubmitted={async () => { setDayEndOpen(false); await own.clockOut(); }} />
           <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
             <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar

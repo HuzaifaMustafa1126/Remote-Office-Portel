@@ -1,0 +1,12 @@
+import { Router } from "express";
+import * as controller from "../controllers/dayEndReport.controller.js";
+import { submitSchema } from "../validators/dayEndReport.validator.js";
+import { validate } from "../middleware/validate.middleware.js";
+import { requirePermission } from "../middleware/permission.middleware.js";
+import asyncHandler from "../utils/asyncHandler.js";
+const router = Router();
+router.use(requirePermission("day_end_report.submit"));
+router.get("/today", asyncHandler(controller.today));
+router.get("/today/work-items", asyncHandler(controller.workItems));
+router.post("/", validate(submitSchema), asyncHandler(controller.submit));
+export default router;
