@@ -12,6 +12,8 @@ import Modal from "../components/common/Modal";
 import Loader from "../components/common/Loader";
 import * as api from "../services/dayEndReport.service";
 import { errorMessage } from "../utils/helpers";
+import ReportDiscussion from "../components/dayEndReport/ReportDiscussion";
+import ReportActivity from "../components/dayEndReport/ReportActivity";
 const today = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
 const duration = (m) =>
@@ -44,7 +46,9 @@ export default function DayEndReportsPage() {
     [error, setError] = useState(""),
     [detail, setDetail] = useState(null),
     [confirm, setConfirm] = useState(false),
-    [reviewing, setReviewing] = useState(false);
+    [reviewing, setReviewing] = useState(false),
+    [history, setHistory] = useState(null),
+    [historyEmployee, setHistoryEmployee] = useState(null);
   const load = useCallback(() => {
     setLoading(true);
     setError("");
@@ -66,6 +70,10 @@ export default function DayEndReportsPage() {
       setError(errorMessage(e));
     }
   };
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("report");
+    if (id) open(id);
+  }, []);
   const review = async () => {
     setReviewing(true);
     try {
@@ -77,6 +85,11 @@ export default function DayEndReportsPage() {
     } finally {
       setReviewing(false);
     }
+  };
+  const openHistory = async (item) => {
+    setHistoryEmployee(item);
+    try { setHistory(await api.employeeHistory(item.employeeId, { month: date.slice(0, 7), page: 1, limit: 50 })); }
+    catch (e) { setError(errorMessage(e)); }
   };
   const s = data?.summary;
   return (
@@ -183,9 +196,12 @@ export default function DayEndReportsPage() {
                       >
                         {blocker(item.blockerType)}
                       </span>
+                      {` · ${item.replyCount || 0} replies`}
                     </p>
                   )}
                 </div>
+                <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => openHistory(item)}>History</Button>
                 {item.reportId ? (
                   <Button
                     variant="secondary"
@@ -198,6 +214,7 @@ export default function DayEndReportsPage() {
                     {item.displayStatus}
                   </span>
                 )}
+                </div>
               </div>
             </article>
           ))}
@@ -232,6 +249,12 @@ export default function DayEndReportsPage() {
           <ReportDetail report={detail} onReview={() => setConfirm(true)} />
         )}
       </Modal>
+      <Modal open={Boolean(historyEmployee)} title={`${historyEmployee?.employeeName || "Employee"} · Report History`} onClose={() => { setHistoryEmployee(null); setHistory(null); }}>
+        <div className="space-y-3">
+          {!history?.items?.length && <p className="text-sm text-muted-foreground">No reports in this month.</p>}
+          {history?.items?.map((item) => <button type="button" key={item.id} onClick={() => open(item.id)} className="w-full rounded-xl border border-border p-4 text-left hover:bg-surface-secondary"><b>{item.reportDate}</b><p className="mt-1 text-xs text-muted-foreground">{item.status} · {item.itemCount} items · {duration(item.trackedMinutes)} · {item.replyCount} replies</p></button>)}
+        </div>
+      </Modal>
       <Modal
         open={confirm}
         title="Mark Report as Reviewed?"
@@ -257,7 +280,7 @@ export default function DayEndReportsPage() {
     </main>
   );
 }
-function ReportDetail({ report, onReview }) {
+export function ReportDetail({ report, onReview }) {
   return (
     <div className="space-y-5 text-sm">
       <div>
@@ -330,11 +353,13 @@ function ReportDetail({ report, onReview }) {
         value={`${blocker(report.blockerType)}${report.blockerDetails ? ` — ${report.blockerDetails}` : ""}`}
       />
       <Field label="Tomorrow's Priority" value={report.tomorrowPriority} />
-      {report.status === "SUBMITTED" && (
+      {report.status === "SUBMITTED" && onReview && (
         <div className="flex justify-end">
           <Button onClick={onReview}>Mark as Reviewed</Button>
         </div>
       )}
+      <ReportActivity reportId={report.id} />
+      <ReportDiscussion reportId={report.id} />
     </div>
   );
 }

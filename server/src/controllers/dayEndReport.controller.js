@@ -27,3 +27,15 @@ export const review = async (req, res) =>
     success: true,
     data: await service.review(req.user, req.params.id),
   });
+export const ownDetails = async (req, res) =>
+  res.json({ success: true, data: await service.ownDetails(req.user, req.params.id) });
+export const myHistory = async (req, res) =>
+  res.json({ success: true, data: await service.myHistory(req.user, req.validatedQuery) });
+export const employeeHistory = async (req, res) =>
+  res.json({ success: true, data: await service.employeeHistory(req.user, req.params.employeeId, req.validatedQuery) });
+export const replies = async (req, res) =>
+  res.json({ success: true, data: await service.listReplies(req.user, req.params.id, req.validatedQuery) });
+export const reply = async (req, res) =>
+  res.status(201).json({ success: true, data: await service.createReply(req.user, req.params.id, req.body) });
+export const activity = async (req, res) =>
+  res.json({ success: true, data: await service.activity(req.user, req.params.id) });

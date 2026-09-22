@@ -97,6 +97,9 @@ const groups = [
       ["Ongoing Work Deleted", "ONGOING_WORK_DELETED"],
       ["Ongoing Work Paused for Break", "ONGOING_WORK_AUTO_PAUSED_BREAK"],
       ["Ongoing Work Paused at Clock Out", "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT"],
+      ["Day-End Report Submitted", "DAY_END_REPORT_SUBMITTED"],
+      ["Day-End Report Reviewed", "DAY_END_REPORT_REVIEWED"],
+      ["Day-End Report Replies", "DAY_END_REPORT_REPLY"],
     ],
   ],
   [

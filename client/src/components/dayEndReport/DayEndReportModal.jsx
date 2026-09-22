@@ -5,15 +5,305 @@ import Loader from "../common/Loader";
 import * as api from "../../services/dayEndReport.service";
 import { errorMessage } from "../../utils/helpers";
 
-const remainingOptions = [[30,"30 Minutes"],[60,"1 Hour"],[90,"1 Hour 30 Minutes"],[120,"2 Hours"],[180,"3 Hours"],[240,"4 Hours"],[480,"1 Working Day"]];
-const blockerOptions = [["NONE","No Issues"],["WAITING_ADMIN","Waiting for CEO/Admin"],["WAITING_CLIENT","Waiting for Client"],["WAITING_TEAM","Waiting for Team Member"],["TECHNICAL","Technical Issue"],["MISSING_ASSETS","Missing Information / Assets"],["OTHER","Other"]];
-const duration = (minutes) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}` : `${minutes}m`;
+const remainingOptions = [
+  [30, "30 Minutes"],
+  [60, "1 Hour"],
+  [90, "1 Hour 30 Minutes"],
+  [120, "2 Hours"],
+  [180, "3 Hours"],
+  [240, "4 Hours"],
+  [480, "1 Working Day"],
+];
+const blockerOptions = [
+  ["NONE", "No Issues"],
+  ["WAITING_ADMIN", "Waiting for CEO/Admin"],
+  ["WAITING_CLIENT", "Waiting for Client"],
+  ["WAITING_TEAM", "Waiting for Team Member"],
+  ["TECHNICAL", "Technical Issue"],
+  ["MISSING_ASSETS", "Missing Information / Assets"],
+  ["OTHER", "Other"],
+];
+const duration = (minutes) =>
+  minutes >= 60
+    ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`
+    : `${minutes}m`;
 
-export default function DayEndReportModal({ open, onClose, onSubmitted, editExisting=false }) {
-  const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[data,setData]=useState(null),[existing,setExisting]=useState(null),[selected,setSelected]=useState({}),[otherWork,setOtherWork]=useState(""),[blockerType,setBlockerType]=useState("NONE"),[blockerDetails,setBlockerDetails]=useState(""),[tomorrowPriority,setTomorrowPriority]=useState(""),[error,setError]=useState("");
-  useEffect(()=>{if(!open)return;setLoading(true);setError("");Promise.all([api.getToday(),api.getWorkItems().catch(()=>null)]).then(([today,work])=>{if(today.submitted&&!editExisting){onSubmitted();return;}if(today.submitted){const report=today.submitted;setExisting(report);setData({reportDate:report.reportDate,items:report.items});setSelected(Object.fromEntries(report.items.map(item=>[`${item.sourceType}:${item.sourceId}`,{sourceType:item.sourceType,sourceId:Number(item.sourceId),summary:item.summary||"",whatsLeft:item.whatsLeft||"",estimatedRemainingMinutes:item.estimatedRemainingMinutes}])));setOtherWork(report.otherWork||"");setBlockerType(report.blockerType);setBlockerDetails(report.blockerDetails||"");setTomorrowPriority(report.tomorrowPriority);return;}setExisting(null);setData(work);setSelected({});}).catch((e)=>setError(errorMessage(e))).finally(()=>setLoading(false));},[open,editExisting]);
-  const toggle=(item)=>setSelected((old)=>{const key=`${item.sourceType}:${item.sourceId}`,next={...old};if(next[key])delete next[key];else next[key]={sourceType:item.sourceType,sourceId:item.sourceId,summary:item.summaryPrefill||"",whatsLeft:item.whatsLeftPrefill||"",estimatedRemainingMinutes:null};return next;});
-  const setItem=(key,field,value)=>setSelected((old)=>({...old,[key]:{...old[key],[field]:value}}));
-  const submit=async()=>{if(existing?.status==="REVIEWED")return;setSaving(true);setError("");try{const payload={items:Object.values(selected),otherWork:otherWork||null,blockerType,blockerDetails:blockerType==="NONE"?null:blockerDetails,tomorrowPriority};if(existing)await api.update(existing.id,payload);else await api.submit(payload);await onSubmitted();}catch(e){setError(errorMessage(e));}finally{setSaving(false);}};
-  return <Modal open={open} title="DAY-END REPORT" onClose={()=>!saving&&onClose()}>{loading?<Loader/>:<div className="space-y-6"><div><p className="text-sm text-muted-foreground">Before you clock out, tell us how today’s work went.</p>{data?.reportDate&&<p className="mt-1 font-semibold">{new Date(`${data.reportDate}T00:00:00`).toLocaleDateString("en-PK",{weekday:"long",month:"long",day:"numeric"})}</p>}</div>{error&&<p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}<section><h3 className="text-xs font-black tracking-widest text-primary-text">01 · TODAY’S WORK</h3><p className="mt-1 text-sm text-muted-foreground">Select what you worked on today.</p><div className="mt-3 space-y-2">{data?.items?.length?data.items.map((item)=>{const key=`${item.sourceType}:${item.sourceId}`,value=selected[key];return <div key={key} className="rounded-xl border border-border p-3"><label className="flex cursor-pointer items-start gap-3"><input type="checkbox" checked={Boolean(value)} onChange={()=>toggle(item)} className="mt-1"/><span className="flex-1"><b className="block">{item.title}</b><small className="text-muted-foreground">{item.sourceType==="TASK"?"Task Management":"Ongoing Work"} · {item.status.replaceAll("_"," ")}{item.trackedMinutes?` · ${duration(item.trackedMinutes)} tracked`:""}</small></span></label>{value&&<div className="mt-3 grid gap-3 border-t border-border pt-3"><label className="text-xs font-semibold">Optional Summary<textarea value={value.summary||""} onChange={(e)=>setItem(key,"summary",e.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"/></label>{item.status!=="COMPLETED"&&<><label className="text-xs font-semibold">What’s Left? *<textarea value={value.whatsLeft||""} onChange={(e)=>setItem(key,"whatsLeft",e.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"/></label><label className="text-xs font-semibold">Estimated Remaining Time *<select value={value.estimatedRemainingMinutes||""} onChange={(e)=>setItem(key,"estimatedRemainingMinutes",Number(e.target.value)||null)} className="mt-1 w-full rounded-xl border border-border bg-surface p-3"><option value="">Select time</option>{remainingOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label></>}</div>}</div>;}):<p className="rounded-xl bg-surface-secondary p-3 text-sm text-muted-foreground">No tracked Task or Ongoing Work activity was found. Add other work below.</p>}</div></section><section><h3 className="text-xs font-black tracking-widest text-primary-text">02 · OTHER WORK</h3><textarea value={otherWork} onChange={(e)=>setOtherWork(e.target.value)} placeholder="Anything completed that is not listed above?" className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"/></section><section><h3 className="text-xs font-black tracking-widest text-primary-text">03 · BLOCKERS / ISSUES</h3><select value={blockerType} onChange={(e)=>setBlockerType(e.target.value)} className="mt-2 w-full rounded-xl border border-border bg-surface p-3">{blockerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>{blockerType!=="NONE"&&<textarea value={blockerDetails} onChange={(e)=>setBlockerDetails(e.target.value)} placeholder="Explain the issue *" className="mt-2 min-h-20 w-full rounded-xl border border-border bg-surface p-3"/>}</section><section><h3 className="text-xs font-black tracking-widest text-primary-text">04 · TOMORROW’S PRIORITY *</h3><textarea value={tomorrowPriority} onChange={(e)=>setTomorrowPriority(e.target.value)} placeholder="What should you focus on next?" className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"/></section><div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button><Button disabled={saving} onClick={submit}>{saving?"Submitting…":"Submit Report & Clock Out →"}</Button></div></div>}</Modal>;
+export default function DayEndReportModal({
+  open,
+  onClose,
+  onSubmitted,
+  editExisting = false,
+}) {
+  const [loading, setLoading] = useState(false),
+    [saving, setSaving] = useState(false),
+    [data, setData] = useState(null),
+    [existing, setExisting] = useState(null),
+    [selected, setSelected] = useState({}),
+    [otherWork, setOtherWork] = useState(""),
+    [blockerType, setBlockerType] = useState("NONE"),
+    [blockerDetails, setBlockerDetails] = useState(""),
+    [tomorrowPriority, setTomorrowPriority] = useState(""),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setError("");
+    Promise.all([api.getToday(), api.getWorkItems().catch(() => null)])
+      .then(([today, work]) => {
+        if (today.submitted && !editExisting) {
+          onSubmitted();
+          return;
+        }
+        if (today.submitted) {
+          const report = today.submitted;
+          setExisting(report);
+          setData({ reportDate: report.reportDate, items: report.items });
+          setSelected(
+            Object.fromEntries(
+              report.items.map((item) => [
+                `${item.sourceType}:${item.sourceId}`,
+                {
+                  sourceType: item.sourceType,
+                  sourceId: Number(item.sourceId),
+                  summary: item.summary || "",
+                  whatsLeft: item.whatsLeft || "",
+                  estimatedRemainingMinutes: item.estimatedRemainingMinutes,
+                },
+              ]),
+            ),
+          );
+          setOtherWork(report.otherWork || "");
+          setBlockerType(report.blockerType);
+          setBlockerDetails(report.blockerDetails || "");
+          setTomorrowPriority(report.tomorrowPriority);
+          return;
+        }
+        setExisting(null);
+        setData(work);
+        setSelected({});
+      })
+      .catch((e) => setError(errorMessage(e)))
+      .finally(() => setLoading(false));
+  }, [open, editExisting]);
+  const toggle = (item) =>
+    setSelected((old) => {
+      const key = `${item.sourceType}:${item.sourceId}`,
+        next = { ...old };
+      if (next[key]) delete next[key];
+      else
+        next[key] = {
+          sourceType: item.sourceType,
+          sourceId: item.sourceId,
+          summary: item.summaryPrefill || "",
+          whatsLeft: item.whatsLeftPrefill || "",
+          estimatedRemainingMinutes: null,
+        };
+      return next;
+    });
+  const setItem = (key, field, value) =>
+    setSelected((old) => ({ ...old, [key]: { ...old[key], [field]: value } }));
+  const submit = async () => {
+    if (existing?.status === "REVIEWED") return;
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        items: Object.values(selected),
+        otherWork: otherWork || null,
+        blockerType,
+        blockerDetails: blockerType === "NONE" ? null : blockerDetails,
+        tomorrowPriority,
+      };
+      if (existing) await api.update(existing.id, payload);
+      else await api.submit(payload);
+      await onSubmitted();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      title="DAY-END REPORT"
+      onClose={() => !saving && onClose()}
+    >
+      {loading ? (
+        <Loader />
+      ) : (
+        <div className="space-y-6">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Before you clock out, tell us how today’s work went.
+            </p>
+            {data?.reportDate && (
+              <p className="mt-1 font-semibold">
+                {new Date(`${data.reportDate}T00:00:00`).toLocaleDateString(
+                  "en-PK",
+                  { weekday: "long", month: "long", day: "numeric" },
+                )}
+              </p>
+            )}
+          </div>
+          {error && (
+            <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
+              {error}
+            </p>
+          )}
+          <section>
+            <h3 className="text-xs font-black tracking-widest text-primary-text">
+              01 · TODAY’S WORK
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Select what you worked on today.
+            </p>
+            <div className="mt-3 space-y-2">
+              {data?.items?.length ? (
+                data.items.map((item) => {
+                  const key = `${item.sourceType}:${item.sourceId}`,
+                    value = selected[key];
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-xl border border-border p-3"
+                    >
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(value)}
+                          onChange={() => toggle(item)}
+                          className="mt-1"
+                        />
+                        <span className="flex-1">
+                          <b className="block">{item.title}</b>
+                          <small className="text-muted-foreground">
+                            {item.sourceType === "TASK"
+                              ? "Task Management"
+                              : "Ongoing Work"}{" "}
+                            · {item.status.replaceAll("_", " ")}
+                            {item.trackedMinutes
+                              ? ` · ${duration(item.trackedMinutes)} tracked`
+                              : ""}
+                          </small>
+                        </span>
+                      </label>
+                      {value && (
+                        <div className="mt-3 grid gap-3 border-t border-border pt-3">
+                          <label className="text-xs font-semibold">
+                            Optional Summary
+                            <textarea
+                              value={value.summary || ""}
+                              onChange={(e) =>
+                                setItem(key, "summary", e.target.value)
+                              }
+                              className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"
+                            />
+                          </label>
+                          {item.status !== "COMPLETED" && (
+                            <>
+                              <label className="text-xs font-semibold">
+                                What’s Left? *
+                                <textarea
+                                  value={value.whatsLeft || ""}
+                                  onChange={(e) =>
+                                    setItem(key, "whatsLeft", e.target.value)
+                                  }
+                                  className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"
+                                />
+                              </label>
+                              <label className="text-xs font-semibold">
+                                Estimated Remaining Time *
+                                <select
+                                  value={value.estimatedRemainingMinutes || ""}
+                                  onChange={(e) =>
+                                    setItem(
+                                      key,
+                                      "estimatedRemainingMinutes",
+                                      Number(e.target.value) || null,
+                                    )
+                                  }
+                                  className="mt-1 w-full rounded-xl border border-border bg-surface p-3"
+                                >
+                                  <option value="">Select time</option>
+                                  {remainingOptions.map(([v, l]) => (
+                                    <option key={v} value={v}>
+                                      {l}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="rounded-xl bg-surface-secondary p-3 text-sm text-muted-foreground">
+                  No tracked Task or Ongoing Work activity was found. Add other
+                  work below.
+                </p>
+              )}
+            </div>
+          </section>
+          <section>
+            <h3 className="text-xs font-black tracking-widest text-primary-text">
+              02 · OTHER WORK
+            </h3>
+            <textarea
+              value={otherWork}
+              onChange={(e) => setOtherWork(e.target.value)}
+              placeholder="Anything completed that is not listed above?"
+              className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
+            />
+          </section>
+          <section>
+            <h3 className="text-xs font-black tracking-widest text-primary-text">
+              03 · BLOCKERS / ISSUES
+            </h3>
+            <select
+              value={blockerType}
+              onChange={(e) => setBlockerType(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-border bg-surface p-3"
+            >
+              {blockerOptions.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            {blockerType !== "NONE" && (
+              <textarea
+                value={blockerDetails}
+                onChange={(e) => setBlockerDetails(e.target.value)}
+                placeholder="Explain the issue *"
+                className="mt-2 min-h-20 w-full rounded-xl border border-border bg-surface p-3"
+              />
+            )}
+          </section>
+          <section>
+            <h3 className="text-xs font-black tracking-widest text-primary-text">
+              04 · TOMORROW’S PRIORITY *
+            </h3>
+            <textarea
+              value={tomorrowPriority}
+              onChange={(e) => setTomorrowPriority(e.target.value)}
+              placeholder="What should you focus on next?"
+              className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
+            />
+          </section>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button variant="secondary" disabled={saving} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button disabled={saving} onClick={submit}>
+              {saving ? "Submitting…" : "Submit Report & Clock Out →"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 }

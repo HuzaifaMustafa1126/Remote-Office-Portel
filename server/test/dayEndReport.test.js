@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { submitSchema } from "../src/validators/dayEndReport.validator.js";
+import { historyQuerySchema, replySchema, submitSchema } from "../src/validators/dayEndReport.validator.js";
 
 const base = { items: [], otherWork: "Helped resolve deployment issue", blockerType: "NONE", tomorrowPriority: "Finish QA" };
 
@@ -49,4 +49,30 @@ test("Phase 2 migration grants management permissions and reviewed notification"
   assert.match(sql, /day_end_report\.review/);
   assert.match(sql, /DAY_END_REPORT_REVIEWED/);
   assert.match(sql, /CEO','ADMIN','SUPER_ADMIN/);
+});
+
+test("Phase 3 validates reply text and bounded monthly history queries", () => {
+  assert.equal(replySchema.safeParse({ message: "A useful reply" }).success, true);
+  assert.equal(replySchema.safeParse({ message: "   " }).success, false);
+  assert.equal(replySchema.safeParse({ message: "x".repeat(2001) }).success, false);
+  assert.equal(historyQuerySchema.safeParse({ month: "2026-09" }).success, true);
+  assert.equal(historyQuerySchema.safeParse({ month: "2026-13" }).success, false);
+});
+
+test("Phase 3 stores immutable replies and configures reply notifications", () => {
+  const sql = fs.readFileSync(new URL("../database/migrations/059_day_end_report_discussion_history.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE day_end_report_replies/);
+  assert.match(sql, /FOREIGN KEY\(report_id\).*ON DELETE CASCADE/);
+  assert.match(sql, /DAY_END_REPORT_REPLY/);
+  const routes = fs.readFileSync(new URL("../src/routes/dayEndReport.routes.js", import.meta.url), "utf8");
+  assert.match(routes, /\/:id\/replies/);
+  assert.doesNotMatch(routes, /delete\([\s\S]*\/:id\/replies/i);
+});
+
+test("Phase 3 scopes employee history and shared report access on the server", () => {
+  const source = fs.readFileSync(new URL("../src/services/dayEndReport.service.js", import.meta.url), "utf8");
+  assert.match(source, /Number\(report\.employeeId\).*Number\(user\.employee_id\)/);
+  assert.match(source, /historyForEmployee\(user\.employee_id, query\)/);
+  assert.match(source, /DAY_END_REPORT_REPLY_CREATED/);
+  assert.match(source, /report\.status/);
 });

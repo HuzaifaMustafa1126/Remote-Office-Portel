@@ -40,6 +40,7 @@ const groups = [
     label: "WORK",
     items: [
       ["Task Management", "/tasks", ClipboardList, P.TASK_VIEW_OWN],
+      ["My Day-End Reports", "/my-day-end-reports", ClipboardCheck, P.DAY_END_REPORT_SUBMIT],
       [
         "Team Ongoing Work",
         "/team-ongoing-work",

@@ -4,6 +4,10 @@ import {
   submitSchema,
   idSchema,
   managementQuerySchema,
+  employeeIdSchema,
+  replySchema,
+  replyQuerySchema,
+  historyQuerySchema,
 } from "../validators/dayEndReport.validator.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
@@ -24,6 +28,42 @@ router.post(
   requirePermission("day_end_report.submit"),
   validate(submitSchema),
   asyncHandler(controller.submit),
+);
+router.get(
+  "/my-history",
+  requirePermission("day_end_report.submit"),
+  validate(historyQuerySchema, "query"),
+  asyncHandler(controller.myHistory),
+);
+router.get(
+  "/mine/:id",
+  requirePermission("day_end_report.submit"),
+  validate(idSchema, "params"),
+  asyncHandler(controller.ownDetails),
+);
+router.get(
+  "/employees/:employeeId/history",
+  requirePermission("day_end_report.view_all"),
+  validate(employeeIdSchema, "params"),
+  validate(historyQuerySchema, "query"),
+  asyncHandler(controller.employeeHistory),
+);
+router.get(
+  "/:id/replies",
+  validate(idSchema, "params"),
+  validate(replyQuerySchema, "query"),
+  asyncHandler(controller.replies),
+);
+router.post(
+  "/:id/replies",
+  validate(idSchema, "params"),
+  validate(replySchema),
+  asyncHandler(controller.reply),
+);
+router.get(
+  "/:id/activity",
+  validate(idSchema, "params"),
+  asyncHandler(controller.activity),
 );
 router.patch(
   "/:id",

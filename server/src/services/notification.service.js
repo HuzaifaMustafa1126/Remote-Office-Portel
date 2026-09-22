@@ -14,6 +14,7 @@ export function categoryFor(type = "") {
   if (["CALENDAR", "HOLIDAY"].includes(prefix)) return "CALENDAR";
   if (prefix === "TASK" || type === "OPEN_TASK_CREATED") return "TASK";
   if (prefix === "ONGOING") return "TASK";
+  if (type.startsWith("DAY_END_REPORT_")) return "TASK";
   if (prefix === "NOTE") return "NOTE";
   if (prefix === "AVAILABILITY") return "AVAILABILITY";
   if (["PAYROLL", "PAYSLIP", "SALARY"].includes(prefix)) return "PAYROLL";

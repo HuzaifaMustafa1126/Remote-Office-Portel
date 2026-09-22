@@ -423,14 +423,14 @@ export async function managementList(user, query) {
   if (query.blocker === "HAS_BLOCKER") where.push("r.blocker_type<>'NONE'");
   if (query.blocker === "NO_BLOCKER")
     where.push("(r.blocker_type='NONE' OR r.id IS NULL)");
-  const joins = ` FROM employees e LEFT JOIN day_end_reports r ON r.employee_id=e.id AND r.report_date=? LEFT JOIN attendance_records ar ON ar.employee_id=e.id AND ar.work_date=? LEFT JOIN (SELECT report_id,COUNT(*) itemCount,SUM(status_snapshot='COMPLETED') completedCount,SUM(status_snapshot<>'COMPLETED') pendingCount,SUM(CASE WHEN source_type='TASK' THEN tracked_minutes_snapshot ELSE 0 END) trackedMinutes FROM day_end_report_items GROUP BY report_id) x ON x.report_id=r.id`;
+  const joins = ` FROM employees e LEFT JOIN day_end_reports r ON r.employee_id=e.id AND r.report_date=? LEFT JOIN attendance_records ar ON ar.employee_id=e.id AND ar.work_date=? LEFT JOIN (SELECT report_id,COUNT(*) itemCount,SUM(status_snapshot='COMPLETED') completedCount,SUM(status_snapshot<>'COMPLETED') pendingCount,SUM(CASE WHEN source_type='TASK' THEN tracked_minutes_snapshot ELSE 0 END) trackedMinutes FROM day_end_report_items GROUP BY report_id) x ON x.report_id=r.id LEFT JOIN (SELECT report_id,COUNT(*) replyCount FROM day_end_report_replies GROUP BY report_id) y ON y.report_id=r.id`;
   const base = [date, date, ...params];
   const [[count]] = await pool.execute(
     `SELECT COUNT(DISTINCT e.id) total${joins} WHERE ${where.join(" AND ")}`,
     base,
   );
   const [items] = await pool.execute(
-    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.id reportId,r.status reportStatus,r.submitted_at submittedAt,r.updated_at updatedAt,r.blocker_type blockerType,COALESCE(x.itemCount,0) itemCount,COALESCE(x.completedCount,0) completedCount,COALESCE(x.pendingCount,0) pendingCount,COALESCE(x.trackedMinutes,0) trackedMinutes,CASE WHEN r.id IS NOT NULL THEN r.status WHEN ar.status IN('WORKING','ON_BREAK') THEN 'WORKING' WHEN ar.status='CLOCKED_OUT' THEN 'MISSING' ELSE 'NOT_SUBMITTED' END displayStatus${joins} WHERE ${where.join(" AND ")} ORDER BY (r.id IS NULL),employeeName LIMIT ? OFFSET ?`,
+    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.id reportId,r.status reportStatus,r.submitted_at submittedAt,r.updated_at updatedAt,r.blocker_type blockerType,COALESCE(x.itemCount,0) itemCount,COALESCE(x.completedCount,0) completedCount,COALESCE(x.pendingCount,0) pendingCount,COALESCE(x.trackedMinutes,0) trackedMinutes,COALESCE(y.replyCount,0) replyCount,CASE WHEN r.id IS NOT NULL THEN r.status WHEN ar.status IN('WORKING','ON_BREAK') THEN 'WORKING' WHEN ar.status='CLOCKED_OUT' THEN 'MISSING' ELSE 'NOT_SUBMITTED' END displayStatus${joins} WHERE ${where.join(" AND ")} ORDER BY (r.id IS NULL),employeeName LIMIT ? OFFSET ?`,
     [...base, query.limit, (query.page - 1) * query.limit],
   );
   const [[summary]] = await pool.execute(
@@ -456,6 +456,132 @@ export async function managementDetails(user, id) {
   if (!(await isManagement(user)))
     throw new ApiError(403, "Management access required");
   return reportDetails(id);
+}
+
+async function accessibleReport(user, id, executor = pool, lock = false) {
+  const [[report]] = await executor.execute(
+    `SELECT id,employee_id employeeId,report_date reportDate,status FROM day_end_reports WHERE id=?${lock ? " FOR UPDATE" : ""}`,
+    [id],
+  );
+  if (!report) throw new ApiError(404, "Day-End Report not found");
+  if (Number(report.employeeId) !== Number(user.employee_id) && !(await isManagement(user, executor)))
+    throw new ApiError(403, "You cannot access this Day-End Report");
+  return report;
+}
+
+export async function ownDetails(user, id) {
+  const report = await accessibleReport(user, id);
+  if (Number(report.employeeId) !== Number(user.employee_id)) throw new ApiError(403, "You cannot access this Day-End Report");
+  return reportDetails(id);
+}
+
+async function historyForEmployee(employeeId, query) {
+  const conditions = ["r.employee_id=?", "r.report_date>=STR_TO_DATE(CONCAT(?,'-01'),'%Y-%m-%d')", "r.report_date<DATE_ADD(STR_TO_DATE(CONCAT(?,'-01'),'%Y-%m-%d'),INTERVAL 1 MONTH)"];
+  const params = [employeeId, query.month, query.month];
+  if (query.status !== "ALL") { conditions.push("r.status=?"); params.push(query.status); }
+  if (query.blocker === "HAS_BLOCKER") conditions.push("r.blocker_type<>'NONE'");
+  if (query.blocker === "NO_BLOCKER") conditions.push("r.blocker_type='NONE'");
+  const where = conditions.join(" AND ");
+  const [[count]] = await pool.execute(`SELECT COUNT(*) total FROM day_end_reports r WHERE ${where}`, params);
+  const [items] = await pool.execute(
+    `SELECT r.id,r.employee_id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.report_date reportDate,
+      r.status,r.submitted_at submittedAt,r.updated_at updatedAt,r.reviewed_at reviewedAt,r.blocker_type blockerType,
+      r.tomorrow_priority tomorrowPriority,COALESCE(i.itemCount,0) itemCount,COALESCE(i.completedCount,0) completedCount,
+      COALESCE(i.trackedMinutes,0) trackedMinutes,COALESCE(x.replyCount,0) replyCount
+     FROM day_end_reports r JOIN employees e ON e.id=r.employee_id
+     LEFT JOIN (SELECT report_id,COUNT(*) itemCount,SUM(status_snapshot='COMPLETED') completedCount,
+       SUM(CASE WHEN source_type='TASK' THEN tracked_minutes_snapshot ELSE 0 END) trackedMinutes FROM day_end_report_items GROUP BY report_id) i ON i.report_id=r.id
+     LEFT JOIN (SELECT report_id,COUNT(*) replyCount FROM day_end_report_replies GROUP BY report_id) x ON x.report_id=r.id
+     WHERE ${where} ORDER BY r.report_date DESC,r.id DESC LIMIT ? OFFSET ?`,
+    [...params, query.limit, (query.page - 1) * query.limit],
+  );
+  const total = Number(count.total || 0);
+  return { items, pagination: { page: query.page, limit: query.limit, total, totalPages: Math.max(1, Math.ceil(total / query.limit)) } };
+}
+
+export async function myHistory(user, query) {
+  if (!user.employee_id) throw new ApiError(403, "Employee profile required");
+  return historyForEmployee(user.employee_id, query);
+}
+
+export async function employeeHistory(user, employeeId, query) {
+  if (!(await isManagement(user))) throw new ApiError(403, "Management access required");
+  return historyForEmployee(employeeId, query);
+}
+
+const replySelect = `SELECT dr.id,dr.report_id reportId,dr.created_by createdBy,dr.message,dr.created_at createdAt,
+  COALESCE(CONCAT(e.first_name,' ',e.last_name),u.email) authorName,
+  COALESCE(GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ', '),'Employee') authorRole
+  FROM day_end_report_replies dr JOIN users u ON u.id=dr.created_by LEFT JOIN employees e ON e.id=u.employee_id
+  LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id`;
+
+export async function listReplies(user, id, query) {
+  await accessibleReport(user, id);
+  const [[count]] = await pool.execute("SELECT COUNT(*) total FROM day_end_report_replies WHERE report_id=?", [id]);
+  const [items] = await pool.execute(`${replySelect} WHERE dr.report_id=? GROUP BY dr.id ORDER BY dr.created_at ASC,dr.id ASC LIMIT ? OFFSET ?`, [id, query.limit, (query.page - 1) * query.limit]);
+  const total = Number(count.total || 0);
+  return { items, pagination: { page: query.page, limit: query.limit, total, totalPages: Math.max(1, Math.ceil(total / query.limit)) } };
+}
+
+export async function createReply(user, id, data) {
+  const connection = await pool.getConnection();
+  let report, reply, actorIsManagement;
+  try {
+    await connection.beginTransaction();
+    report = await accessibleReport(user, id, connection, true);
+    actorIsManagement = await isManagement(user, connection);
+    const [created] = await connection.execute("INSERT INTO day_end_report_replies(report_id,created_by,message) VALUES(?,?,?)", [id, user.id, data.message]);
+    await connection.execute(
+      `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+       VALUES(?,?,'DAY_END_REPORT_REPLY_CREATED','DAY_END_REPORT',?,'Reply added to Day-End Report discussion.',?)`,
+      [user.id, user.employee_id, id, JSON.stringify({ replyId: created.insertId })],
+    );
+    [[reply]] = await connection.execute(`${replySelect} WHERE dr.id=? GROUP BY dr.id`, [created.insertId]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+  try {
+    let recipientUserIds = [];
+    if (actorIsManagement) {
+      const [[owner]] = await pool.execute("SELECT id FROM users WHERE employee_id=? AND status='ACTIVE'", [report.employeeId]);
+      if (owner) recipientUserIds = [owner.id];
+    } else {
+      const [participants] = await pool.execute(
+        `SELECT DISTINCT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id
+         WHERE u.status='ACTIVE' AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN') AND
+         (u.id=(SELECT reviewed_by FROM day_end_reports WHERE id=?) OR u.id IN(SELECT created_by FROM day_end_report_replies WHERE report_id=?))`, [id, id]);
+      if (participants.length) recipientUserIds = participants.map((x) => x.id);
+      else {
+        const [managers] = await pool.execute(`SELECT DISTINCT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id WHERE u.status='ACTIVE' AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN')`);
+        recipientUserIds = managers.map((x) => x.id);
+      }
+    }
+    await notifyByPolicy("DAY_END_REPORT_REPLY", user, {
+      title: "New Day-End Report Reply", message: `${reply.authorName} replied to the Day-End Report for ${report.reportDate}.`,
+      referenceType: "DAY_END_REPORT", referenceId: id,
+      actionUrl: actorIsManagement ? `/my-day-end-reports?report=${id}` : `/day-end-reports?report=${id}`,
+      recipientUserIds, eventKey: `DAY_END_REPORT_REPLY:${reply.id}`,
+    });
+  } catch (error) { console.error("Day-End Report reply notification failed:", error.message); }
+  return reply;
+}
+
+export async function activity(user, id) {
+  await accessibleReport(user, id);
+  const [items] = await pool.execute(
+    `SELECT * FROM (
+       SELECT CONCAT('audit-',a.id) id,a.action type,a.description message,a.created_at createdAt,
+         COALESCE(CONCAT(e.first_name,' ',e.last_name),u.email,'System') actorName
+       FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN employees e ON e.id=u.employee_id
+       WHERE a.entity_type='DAY_END_REPORT' AND a.entity_id=? AND a.action IN('DAY_END_REPORT_SUBMITTED','DAY_END_REPORT_UPDATED','DAY_END_REPORT_REVIEWED')
+       UNION ALL
+       SELECT CONCAT('reply-',dr.id),'DAY_END_REPORT_REPLY_CREATED','Reply added to the discussion.',dr.created_at,
+         COALESCE(CONCAT(e.first_name,' ',e.last_name),u.email)
+       FROM day_end_report_replies dr JOIN users u ON u.id=dr.created_by LEFT JOIN employees e ON e.id=u.employee_id WHERE dr.report_id=?
+     ) timeline ORDER BY createdAt ASC LIMIT 250`, [id, id]);
+  return items;
 }
 
 export async function review(user, id) {
@@ -503,7 +629,7 @@ export async function review(user, id) {
       message: `Your Day-End Report for ${result.reportDate} was reviewed by ${result.reviewerName || "management"}.`,
       referenceType: "DAY_END_REPORT",
       referenceId: id,
-      actionUrl: "/",
+      actionUrl: `/my-day-end-reports?report=${id}`,
       recipientUserIds: [recipient.id],
       eventKey: `DAY_END_REPORT_REVIEWED:${id}`,
     });

@@ -55,6 +55,7 @@ const requiredTables = [
   "ongoing_work_retention_settings",
   "day_end_reports",
   "day_end_report_items",
+  "day_end_report_replies",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
@@ -130,6 +131,7 @@ const requiredMigrations = [
   "056_ongoing_work_lifecycle_notifications.sql",
   "057_day_end_report_phase1.sql",
   "058_day_end_report_phase2.sql",
+  "059_day_end_report_discussion_history.sql",
 ];
 
 export async function validateSchema() {
