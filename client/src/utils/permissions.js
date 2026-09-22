@@ -56,6 +56,8 @@ export const PERMISSIONS = {
   ONGOING_WORK_VIEW_TEAM: "ongoing_work.view_team",
   ONGOING_WORK_RETENTION_MANAGE: "ongoing_work.retention_manage",
   DAY_END_REPORT_SUBMIT: "day_end_report.submit",
+  DAY_END_REPORT_VIEW_ALL: "day_end_report.view_all",
+  DAY_END_REPORT_REVIEW: "day_end_report.review",
   NOTES_VIEW_OWN: "notes.view_own",
   NOTES_VIEW_TEAM: "notes.view_team",
   NOTES_VIEW_ALL: "notes.view_all",

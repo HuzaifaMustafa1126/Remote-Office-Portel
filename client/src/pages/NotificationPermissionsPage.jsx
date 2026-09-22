@@ -108,6 +108,7 @@ const overrides = {
   ONGOING_WORK_AUTO_PAUSED_BREAK: "Ongoing Work Paused for Break",
   ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT: "Ongoing Work Paused at Clock Out",
   DAY_END_REPORT_SUBMITTED: "Day-End Report Submitted",
+  DAY_END_REPORT_REVIEWED: "Day-End Report Reviewed",
   TASK_REOPENED: "Task Reopened",
   TASK_DUE_SOON: "Task Due Soon",
   TASK_OVERDUE: "Task Overdue",
@@ -153,17 +154,17 @@ const categoryFor = (type) =>
             ? "Tasks"
             : type.startsWith("ONGOING_WORK_")
               ? "Tasks"
-            : type.startsWith("CALENDAR_") ||
-                type.startsWith("HOLIDAY_") ||
-                type.startsWith("ANNOUNCEMENT")
-              ? "Company & Calendar"
-              : type.startsWith("PAYROLL_") ||
-                  type.startsWith("PAYSLIP_") ||
-                  type.startsWith("SALARY_")
-                ? "Payroll & Salary"
-                : type.startsWith("SECURITY_") || type.startsWith("EMPLOYEE_")
-                  ? "Security"
-                  : "Attendance";
+              : type.startsWith("CALENDAR_") ||
+                  type.startsWith("HOLIDAY_") ||
+                  type.startsWith("ANNOUNCEMENT")
+                ? "Company & Calendar"
+                : type.startsWith("PAYROLL_") ||
+                    type.startsWith("PAYSLIP_") ||
+                    type.startsWith("SALARY_")
+                  ? "Payroll & Salary"
+                  : type.startsWith("SECURITY_") || type.startsWith("EMPLOYEE_")
+                    ? "Security"
+                    : "Attendance";
 const friendly = (type) =>
   overrides[type] ||
   type

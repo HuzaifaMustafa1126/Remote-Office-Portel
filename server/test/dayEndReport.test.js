@@ -32,3 +32,21 @@ test("clock out is backend-protected by submitted report enforcement", () => {
   assert.match(reports, /DAY_END_REPORT_REQUIRED/);
   assert.match(reports, /attendance_id=\? AND employee_id=\?/);
 });
+
+test("Phase 2 enforces review locking and snapshot-based management details", () => {
+  const source = fs.readFileSync(new URL("../src/services/dayEndReport.service.js", import.meta.url), "utf8");
+  assert.match(source, /DAY_END_REPORT_LOCKED/);
+  assert.match(source, /WHERE r\.id=\? AND r\.employee_id=\? FOR UPDATE/);
+  assert.match(source, /title_snapshot title/);
+  assert.match(source, /tracked_minutes_snapshot trackedMinutes/);
+  assert.match(source, /DAY_END_REPORT_UPDATED/);
+  assert.match(source, /DAY_END_REPORT_REVIEWED/);
+});
+
+test("Phase 2 migration grants management permissions and reviewed notification", () => {
+  const sql = fs.readFileSync(new URL("../database/migrations/058_day_end_report_phase2.sql", import.meta.url), "utf8");
+  assert.match(sql, /day_end_report\.view_all/);
+  assert.match(sql, /day_end_report\.review/);
+  assert.match(sql, /DAY_END_REPORT_REVIEWED/);
+  assert.match(sql, /CEO','ADMIN','SUPER_ADMIN/);
+});

@@ -340,6 +340,7 @@ export default function DashboardPage() {
     [taskBusy, setTaskBusy] = useState(null),
     [taskNotice, setTaskNotice] = useState(""),
     [dayEndOpen, setDayEndOpen] = useState(false),
+    [dayEndEdit, setDayEndEdit] = useState(false),
     [refreshInterval, setRefreshInterval] = useState(() => {
       const stored = Number(
         localStorage.getItem(
@@ -548,7 +549,7 @@ export default function DashboardPage() {
                 onClockIn: own.clockIn,
                 onStartBreak: own.startBreak,
                 onEndBreak: own.endBreak,
-                onClockOut: () => setDayEndOpen(true),
+                onClockOut: () => { setDayEndEdit(false); setDayEndOpen(true); },
               }}
             />
             {canViewOwnTasks && (
@@ -569,7 +570,8 @@ export default function DashboardPage() {
             )}
           </div>
           <EmployeeOngoingWork attendanceStatus={own.data?.status} previousOngoingWork={own.data?.previousOngoingWork} />
-          <DayEndReportModal open={dayEndOpen} onClose={() => setDayEndOpen(false)} onSubmitted={async () => { setDayEndOpen(false); await own.clockOut(); }} />
+          <div><button type="button" onClick={() => { setDayEndEdit(true); setDayEndOpen(true); }} className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-primary-text shadow-sm">Today’s Day-End Report</button></div>
+          <DayEndReportModal open={dayEndOpen} editExisting={dayEndEdit} onClose={() => setDayEndOpen(false)} onSubmitted={async () => { setDayEndOpen(false); if (!dayEndEdit) await own.clockOut(); else own.refresh(); }} />
           <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
             <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar
