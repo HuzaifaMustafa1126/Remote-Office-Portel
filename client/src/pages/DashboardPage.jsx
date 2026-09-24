@@ -350,6 +350,12 @@ export default function DashboardPage() {
       return refreshIntervals.includes(stored) ? stored : 0;
     });
   useEffect(() => {
+    if (canClock && new URLSearchParams(window.location.search).get("dayEndReport") === "open") {
+      setDayEndEdit(false);
+      setDayEndOpen(true);
+    }
+  }, [canClock]);
+  useEffect(() => {
     if (canViewSalary)
       myAccrual()
         .then(setSalaryAccrual)

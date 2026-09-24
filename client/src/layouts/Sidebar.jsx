@@ -102,6 +102,7 @@ const groups = [
         SlidersHorizontal,
         P.TASK_SETTINGS,
       ],
+      ["Day-End Report Settings", "/settings/day-end-reports", SlidersHorizontal, P.DAY_END_REPORT_VIEW_ALL],
       ["Appearance", "/settings/appearance", Palette, null],
     ],
   },

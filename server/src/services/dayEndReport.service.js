@@ -253,13 +253,14 @@ export async function submit(data, user) {
   } finally {
     connection.release();
   }
-  await notifyByPolicy("DAY_END_REPORT_SUBMITTED", user, {
-    title: "Day-End Report submitted",
-    message: `${outcome.report.employeeName} submitted a Day-End Report for ${outcome.report.reportDate}.`,
+  const submissionEvent = outcome.report.blockerType === "NONE" ? "DAY_END_REPORT_SUBMITTED" : "DAY_END_REPORT_BLOCKER";
+  await notifyByPolicy(submissionEvent, user, {
+    title: outcome.report.blockerType === "NONE" ? "Day-End Report submitted" : "Day-End Report Submitted · Blocker",
+    message: `${outcome.report.employeeName} submitted a Day-End Report for ${outcome.report.reportDate}.${outcome.report.blockerType !== "NONE" ? ` Blocker: ${outcome.report.blockerType.replaceAll("_", " ")}.` : ""}`,
     referenceType: "DAY_END_REPORT",
     referenceId: outcome.report.id,
     actionUrl: "/day-end-reports",
-    eventKey: `DAY_END_REPORT_SUBMITTED:${outcome.report.id}`,
+    eventKey: `${submissionEvent}:${outcome.report.id}`,
   });
   return outcome;
 }
@@ -390,29 +391,13 @@ export async function managementList(user, query) {
     throw new ApiError(403, "Management access required");
   const date = query.date;
   const day = await getCompanyDayStatus(date);
-  if (!day.isWorkingDay)
-    return {
-      summary: {
-        expected: 0,
-        submitted: 0,
-        needsReview: 0,
-        reviewed: 0,
-        blockers: 0,
-      },
-      items: [],
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total: 0,
-        totalPages: 1,
-      },
-    };
   const where = [
       "e.status='ACTIVE'",
       "e.track_attendance=TRUE",
       "NOT EXISTS(SELECT 1 FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id WHERE ld.employee_id=e.id AND ld.leave_date=? AND lr.status='APPROVED')",
     ],
     params = [date];
+  if (!day.isWorkingDay) where.push("ar.id IS NOT NULL");
   if (query.search) {
     where.push("CONCAT(e.first_name,' ',e.last_name) LIKE ?");
     params.push(`%${query.search}%`);
@@ -423,19 +408,29 @@ export async function managementList(user, query) {
   if (query.blocker === "HAS_BLOCKER") where.push("r.blocker_type<>'NONE'");
   if (query.blocker === "NO_BLOCKER")
     where.push("(r.blocker_type='NONE' OR r.id IS NULL)");
-  const joins = ` FROM employees e LEFT JOIN day_end_reports r ON r.employee_id=e.id AND r.report_date=? LEFT JOIN attendance_records ar ON ar.employee_id=e.id AND ar.work_date=? LEFT JOIN (SELECT report_id,COUNT(*) itemCount,SUM(status_snapshot='COMPLETED') completedCount,SUM(status_snapshot<>'COMPLETED') pendingCount,SUM(CASE WHEN source_type='TASK' THEN tracked_minutes_snapshot ELSE 0 END) trackedMinutes FROM day_end_report_items GROUP BY report_id) x ON x.report_id=r.id LEFT JOIN (SELECT report_id,COUNT(*) replyCount FROM day_end_report_replies GROUP BY report_id) y ON y.report_id=r.id`;
+  if (["WAITING_ADMIN", "WAITING_CLIENT", "WAITING_TEAM", "TECHNICAL", "MISSING_ASSETS", "OTHER"].includes(query.blocker)) { where.push("r.blocker_type=?"); params.push(query.blocker); }
+  if (query.attention === "1")
+    where.push("(r.status='SUBMITTED' OR r.blocker_type IN('WAITING_ADMIN','TECHNICAL') OR (r.id IS NULL AND ar.status IN('WORKING','ON_BREAK') AND CURRENT_TIMESTAMP>=DATE_ADD(ar.scheduled_clock_out,INTERVAL ds.overdue_grace_minutes MINUTE)))");
+  const joins = ` FROM employees e LEFT JOIN day_end_reports r ON r.employee_id=e.id AND r.report_date=? LEFT JOIN attendance_records ar ON ar.employee_id=e.id AND ar.work_date=? CROSS JOIN day_end_report_settings ds LEFT JOIN (SELECT report_id,COUNT(*) itemCount,SUM(status_snapshot='COMPLETED') completedCount,SUM(status_snapshot<>'COMPLETED') pendingCount,SUM(CASE WHEN source_type='TASK' THEN tracked_minutes_snapshot ELSE 0 END) trackedMinutes FROM day_end_report_items GROUP BY report_id) x ON x.report_id=r.id LEFT JOIN (SELECT report_id,COUNT(*) replyCount FROM day_end_report_replies GROUP BY report_id) y ON y.report_id=r.id LEFT JOIN (SELECT attendance_id,MAX(sent_at) lastReminderAt FROM day_end_report_followups WHERE event_type='DAY_END_REPORT_MANUAL_REMINDER' GROUP BY attendance_id) z ON z.attendance_id=ar.id`;
   const base = [date, date, ...params];
   const [[count]] = await pool.execute(
     `SELECT COUNT(DISTINCT e.id) total${joins} WHERE ${where.join(" AND ")}`,
     base,
   );
   const [items] = await pool.execute(
-    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.id reportId,r.status reportStatus,r.submitted_at submittedAt,r.updated_at updatedAt,r.blocker_type blockerType,COALESCE(x.itemCount,0) itemCount,COALESCE(x.completedCount,0) completedCount,COALESCE(x.pendingCount,0) pendingCount,COALESCE(x.trackedMinutes,0) trackedMinutes,COALESCE(y.replyCount,0) replyCount,CASE WHEN r.id IS NOT NULL THEN r.status WHEN ar.status IN('WORKING','ON_BREAK') THEN 'WORKING' WHEN ar.status='CLOCKED_OUT' THEN 'MISSING' ELSE 'NOT_SUBMITTED' END displayStatus${joins} WHERE ${where.join(" AND ")} ORDER BY (r.id IS NULL),employeeName LIMIT ? OFFSET ?`,
+    `SELECT e.id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.id reportId,ar.id attendanceId,r.status reportStatus,r.submitted_at submittedAt,r.updated_at updatedAt,r.blocker_type blockerType,ar.scheduled_clock_out scheduledClockOut,z.lastReminderAt,ds.manual_reminder_cooldown_minutes manualReminderCooldownMinutes,COALESCE(x.itemCount,0) itemCount,COALESCE(x.completedCount,0) completedCount,COALESCE(x.pendingCount,0) pendingCount,COALESCE(x.trackedMinutes,0) trackedMinutes,COALESCE(y.replyCount,0) replyCount,
+      CASE WHEN r.status='REVIEWED' THEN 'REVIEWED' WHEN r.status='SUBMITTED' THEN 'NEEDS_REVIEW'
+       WHEN ar.status IN('WORKING','ON_BREAK') AND CURRENT_TIMESTAMP>=DATE_ADD(ar.scheduled_clock_out,INTERVAL ds.overdue_grace_minutes MINUTE) THEN 'REPORT_OVERDUE'
+       WHEN ar.status IN('WORKING','ON_BREAK') AND ds.reminder_enabled=TRUE AND CURRENT_TIMESTAMP>=DATE_SUB(ar.scheduled_clock_out,INTERVAL ds.reminder_before_minutes MINUTE) THEN 'REPORT_DUE_SOON'
+       WHEN ar.status IN('WORKING','ON_BREAK') THEN 'WORKING' WHEN ar.status='CLOCKED_OUT' THEN 'MISSING' ELSE 'NOT_SUBMITTED' END displayStatus,
+      GREATEST(0,TIMESTAMPDIFF(MINUTE,ar.scheduled_clock_out,CURRENT_TIMESTAMP)) minutesPastShiftEnd
+     ${joins} WHERE ${where.join(" AND ")}
+     ORDER BY CASE WHEN r.blocker_type='WAITING_ADMIN' THEN 0 WHEN r.id IS NULL AND ar.status IN('WORKING','ON_BREAK') AND CURRENT_TIMESTAMP>=DATE_ADD(ar.scheduled_clock_out,INTERVAL ds.overdue_grace_minutes MINUTE) THEN 1 WHEN r.status='SUBMITTED' THEN 2 WHEN r.status='REVIEWED' THEN 4 ELSE 5 END,employeeName LIMIT ? OFFSET ?`,
     [...base, query.limit, (query.page - 1) * query.limit],
   );
   const [[summary]] = await pool.execute(
-    `SELECT COUNT(DISTINCT e.id) expected,COUNT(DISTINCT r.id) submitted,SUM(r.status='SUBMITTED') needsReview,SUM(r.status='REVIEWED') reviewed,SUM(r.blocker_type<>'NONE') blockers${joins} WHERE e.status='ACTIVE' AND e.track_attendance=TRUE AND NOT EXISTS(SELECT 1 FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id WHERE ld.employee_id=e.id AND ld.leave_date=? AND lr.status='APPROVED')`,
-    [date, date, date],
+    `SELECT COUNT(DISTINCT e.id) expected,COUNT(DISTINCT r.id) submitted,SUM(r.status='SUBMITTED') needsReview,SUM(r.status='REVIEWED') reviewed,SUM(r.blocker_type<>'NONE') blockers,SUM(r.id IS NULL AND ar.status IN('WORKING','ON_BREAK') AND CURRENT_TIMESTAMP>=DATE_ADD(ar.scheduled_clock_out,INTERVAL ds.overdue_grace_minutes MINUTE)) overdue${joins} WHERE e.status='ACTIVE' AND e.track_attendance=TRUE AND (?=TRUE OR ar.id IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM leave_days ld JOIN leave_requests lr ON lr.id=ld.leave_request_id WHERE ld.employee_id=e.id AND ld.leave_date=? AND lr.status='APPROVED')`,
+    [date, date, day.isWorkingDay, date],
   );
   const total = Number(count.total || 0);
   return {

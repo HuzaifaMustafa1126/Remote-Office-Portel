@@ -8,11 +8,30 @@ import {
   replySchema,
   replyQuerySchema,
   historyQuerySchema,
+  attendanceIdSchema,
+  followupSettingsSchema,
 } from "../validators/dayEndReport.validator.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
 import asyncHandler from "../utils/asyncHandler.js";
 const router = Router();
+router.get(
+  "/settings/followups",
+  requirePermission("day_end_report.view_all"),
+  asyncHandler(controller.settings),
+);
+router.patch(
+  "/settings/followups",
+  requirePermission("day_end_report.review"),
+  validate(followupSettingsSchema),
+  asyncHandler(controller.updateSettings),
+);
+router.post(
+  "/attendance/:attendanceId/reminder",
+  requirePermission("day_end_report.review"),
+  validate(attendanceIdSchema, "params"),
+  asyncHandler(controller.sendReminder),
+);
 router.get(
   "/today",
   requirePermission("day_end_report.submit"),

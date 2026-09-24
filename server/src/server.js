@@ -6,6 +6,7 @@ import { initializeNotifications } from "./sockets/notification.socket.js";
 import { validateSchema } from "./services/schema.service.js";
 import { publishDueScheduled,sendTaskDeadlineNotifications } from "./services/task.service.js";
 import { pauseStaleTaskSessions } from "./services/taskPresence.service.js";
+import { processDayEndReportFollowups } from "./services/dayEndReportFollowup.service.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -65,6 +66,12 @@ async function start() {
       60000,
     );
     presenceTimer.unref();
+    const dayEndTimer = setInterval(
+      () => processDayEndReportFollowups().catch((error) => console.error("Day-End Report follow-up check failed:", error.message)),
+      60000,
+    );
+    dayEndTimer.unref();
+    processDayEndReportFollowups().catch((error) => console.error("Initial Day-End Report follow-up check failed:", error.message));
     server.listen(PORT, "0.0.0.0", () =>
       console.log(`API listening on port ${PORT}`),
     );

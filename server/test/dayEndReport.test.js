@@ -76,3 +76,25 @@ test("Phase 3 scopes employee history and shared report access on the server", (
   assert.match(source, /DAY_END_REPORT_REPLY_CREATED/);
   assert.match(source, /report\.status/);
 });
+
+test("Phase 4 migration adds configurable idempotent follow-up tracking", () => {
+  const sql = fs.readFileSync(new URL("../database/migrations/060_day_end_report_followups.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE day_end_report_settings/);
+  assert.match(sql, /CREATE TABLE day_end_report_followups/);
+  assert.match(sql, /UNIQUE KEY uq_day_end_followup_event\(event_key\)/);
+  assert.match(sql, /DAY_END_REPORT_DUE_SOON/);
+  assert.match(sql, /DAY_END_REPORT_OVERDUE/);
+  assert.match(sql, /DAY_END_REPORT_MANUAL_REMINDER/);
+  assert.match(sql, /DAY_END_REPORT_AWAITING_REVIEW/);
+});
+
+test("Phase 4 derives reminders from attendance shift snapshots without clock-out or payroll mutation", () => {
+  const source = fs.readFileSync(new URL("../src/services/dayEndReportFollowup.service.js", import.meta.url), "utf8");
+  assert.match(source, /ar\.scheduled_clock_out/);
+  assert.match(source, /ar\.status IN\('WORKING','ON_BREAK'\)/);
+  assert.match(source, /LEFT JOIN day_end_reports der ON der\.attendance_id=ar\.id/);
+  assert.match(source, /DAY_END_REPORT_OVERDUE_DETECTED/);
+  assert.match(source, /DAY_END_REPORT_REMINDER_COOLDOWN/);
+  assert.doesNotMatch(source, /UPDATE attendance_records/);
+  assert.doesNotMatch(source, /payroll|salary/i);
+});

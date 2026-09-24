@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Search,
   Users,
+  Clock3,
 } from "lucide-react";
 import PageHeader from "../components/common/PageHeader";
 import Button from "../components/common/Button";
@@ -36,10 +37,11 @@ const blocker = (v) =>
     OTHER: "Other",
   })[v] || v;
 export default function DayEndReportsPage() {
-  const [date, setDate] = useState(today),
+  const [date, setDate] = useState(() => new URLSearchParams(window.location.search).get("date") || today()),
     [search, setSearch] = useState(""),
     [status, setStatus] = useState("ALL"),
     [blockerFilter, setBlockerFilter] = useState("ALL"),
+    [attention, setAttention] = useState(() => new URLSearchParams(window.location.search).get("attention") === "1"),
     [page, setPage] = useState(1),
     [data, setData] = useState(null),
     [loading, setLoading] = useState(true),
@@ -48,16 +50,18 @@ export default function DayEndReportsPage() {
     [confirm, setConfirm] = useState(false),
     [reviewing, setReviewing] = useState(false),
     [history, setHistory] = useState(null),
-    [historyEmployee, setHistoryEmployee] = useState(null);
+    [historyEmployee, setHistoryEmployee] = useState(null),
+    [reminderTarget, setReminderTarget] = useState(null),
+    [sendingReminder, setSendingReminder] = useState(false);
   const load = useCallback(() => {
     setLoading(true);
     setError("");
     return api
-      .list({ date, search, status, blocker: blockerFilter, page, limit: 20 })
+      .list({ date, search, status, blocker: blockerFilter, attention: attention ? "1" : "0", page, limit: 20 })
       .then(setData)
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [date, search, status, blockerFilter, page]);
+  }, [date, search, status, blockerFilter, attention, page]);
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
@@ -91,6 +95,12 @@ export default function DayEndReportsPage() {
     try { setHistory(await api.employeeHistory(item.employeeId, { month: date.slice(0, 7), page: 1, limit: 50 })); }
     catch (e) { setError(errorMessage(e)); }
   };
+  const sendReminder = async () => {
+    setSendingReminder(true); setError("");
+    try { await api.sendReminder(reminderTarget.attendanceId); setReminderTarget(null); await load(); }
+    catch (e) { setError(errorMessage(e)); }
+    finally { setSendingReminder(false); }
+  };
   const s = data?.summary;
   return (
     <main>
@@ -98,12 +108,13 @@ export default function DayEndReportsPage() {
         title="Day-End Reports"
         description="Monitor team work, pending items, blockers and employee priorities."
       />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           [Users, "Reports", s ? `${s.submitted} / ${s.expected}` : "—"],
           [ClipboardCheck, "Needs Review", s?.needsReview ?? "—"],
           [CheckCircle2, "Reviewed", s?.reviewed ?? "—"],
           [AlertTriangle, "Blockers", s?.blockers ?? "—"],
+          [Clock3, "Overdue", s?.overdue ?? "—"],
         ].map(([Icon, label, value]) => (
           <article
             key={label}
@@ -116,6 +127,7 @@ export default function DayEndReportsPage() {
         ))}
       </div>
       <section className="mt-5 flex flex-wrap gap-3 rounded-2xl border border-border bg-surface p-4">
+        <Button variant={attention ? "primary" : "secondary"} onClick={() => { setAttention((v) => !v); setPage(1); }}>Needs Attention</Button>
         <input
           type="date"
           value={date}
@@ -158,6 +170,12 @@ export default function DayEndReportsPage() {
           <option value="ALL">All blockers</option>
           <option value="HAS_BLOCKER">Has Blocker</option>
           <option value="NO_BLOCKER">No Blocker</option>
+          <option value="WAITING_ADMIN">Waiting for CEO/Admin</option>
+          <option value="WAITING_CLIENT">Waiting for Client</option>
+          <option value="WAITING_TEAM">Waiting for Team Member</option>
+          <option value="TECHNICAL">Technical Issue</option>
+          <option value="MISSING_ASSETS">Missing Information</option>
+          <option value="OTHER">Other</option>
         </select>
       </section>
       {error && (
@@ -178,7 +196,7 @@ export default function DayEndReportsPage() {
                 <div>
                   <h2 className="font-bold">{item.employeeName}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {item.displayStatus}
+                    {item.displayStatus.replaceAll("_", " ")}
                     {item.reportId
                       ? ` · ${item.itemCount} Work Items · ${duration(item.trackedMinutes)}`
                       : ""}
@@ -199,9 +217,13 @@ export default function DayEndReportsPage() {
                       {` · ${item.replyCount || 0} replies`}
                     </p>
                   )}
+                  {item.blockerType === "WAITING_ADMIN" && <p className="mt-2 text-xs font-black text-warning">⚠ ACTION NEEDED · Waiting for CEO/Admin</p>}
+                  {item.displayStatus === "REPORT_OVERDUE" && <p className="mt-2 text-xs font-bold text-danger">Still clocked in · Shift ended {item.minutesPastShiftEnd}m ago</p>}
+                  {item.displayStatus === "REPORT_DUE_SOON" && <p className="mt-2 text-xs font-bold text-warning">Shift ending soon · Report not submitted</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={() => openHistory(item)}>History</Button>
+                {item.attendanceId && !item.reportId && ["REPORT_OVERDUE", "REPORT_DUE_SOON", "WORKING"].includes(item.displayStatus) && <Button disabled={item.lastReminderAt && Date.now() - new Date(item.lastReminderAt).getTime() < Number(item.manualReminderCooldownMinutes) * 60000} onClick={() => setReminderTarget(item)}>{item.lastReminderAt && Date.now() - new Date(item.lastReminderAt).getTime() < Number(item.manualReminderCooldownMinutes) * 60000 ? "Reminder Sent" : "Send Reminder"}</Button>}
                 {item.reportId ? (
                   <Button
                     variant="secondary"
@@ -248,6 +270,10 @@ export default function DayEndReportsPage() {
         {detail && (
           <ReportDetail report={detail} onReview={() => setConfirm(true)} />
         )}
+      </Modal>
+      <Modal open={Boolean(reminderTarget)} title="Send Day-End Report Reminder?" onClose={() => !sendingReminder && setReminderTarget(null)}>
+        <p className="text-sm text-muted-foreground">{reminderTarget?.employeeName} will receive a notification asking them to complete the Day-End Report for this workday.</p>
+        <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" disabled={sendingReminder} onClick={() => setReminderTarget(null)}>Cancel</Button><Button disabled={sendingReminder} onClick={sendReminder}>{sendingReminder ? "Sending…" : "Send Reminder"}</Button></div>
       </Modal>
       <Modal open={Boolean(historyEmployee)} title={`${historyEmployee?.employeeName || "Employee"} · Report History`} onClose={() => { setHistoryEmployee(null); setHistory(null); }}>
         <div className="space-y-3">

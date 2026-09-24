@@ -100,6 +100,11 @@ const groups = [
       ["Day-End Report Submitted", "DAY_END_REPORT_SUBMITTED"],
       ["Day-End Report Reviewed", "DAY_END_REPORT_REVIEWED"],
       ["Day-End Report Replies", "DAY_END_REPORT_REPLY"],
+      ["Day-End Report Due Soon", "DAY_END_REPORT_DUE_SOON"],
+      ["Day-End Report Overdue", "DAY_END_REPORT_OVERDUE"],
+      ["Day-End Report Manual Reminder", "DAY_END_REPORT_MANUAL_REMINDER"],
+      ["Day-End Report Blocker", "DAY_END_REPORT_BLOCKER"],
+      ["Day-End Reports Awaiting Review", "DAY_END_REPORT_AWAITING_REVIEW"],
     ],
   ],
   [

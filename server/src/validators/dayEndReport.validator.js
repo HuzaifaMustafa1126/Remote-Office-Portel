@@ -57,6 +57,20 @@ export const idSchema = z
 export const employeeIdSchema = z
   .object({ employeeId: z.coerce.number().int().positive() })
   .strict();
+export const attendanceIdSchema = z
+  .object({ attendanceId: z.coerce.number().int().positive() })
+  .strict();
+export const followupSettingsSchema = z
+  .object({
+    reminderEnabled: z.boolean(),
+    reminderBeforeMinutes: z.number().int().refine((v) => [15, 30, 45, 60].includes(v)),
+    overdueGraceMinutes: z.number().int().refine((v) => [5, 10, 15, 30, 60].includes(v)),
+    overdueNotificationsEnabled: z.boolean(),
+    reviewRemindersEnabled: z.boolean(),
+    reviewReminderAfterMinutes: z.number().int().refine((v) => [240, 480, 720, 1440].includes(v)),
+    manualReminderCooldownMinutes: z.number().int().refine((v) => [5, 10, 15, 30].includes(v)),
+  })
+  .strict();
 export const replySchema = z
   .object({ message: z.string().trim().min(1).max(2000) })
   .strict();
@@ -77,7 +91,8 @@ export const historyQuerySchema = z
         new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" }).slice(0, 7),
       ),
     status: z.enum(["ALL", "SUBMITTED", "REVIEWED"]).default("ALL"),
-    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER"]).default("ALL"),
+    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER", "WAITING_ADMIN", "WAITING_CLIENT", "WAITING_TEAM", "TECHNICAL", "MISSING_ASSETS", "OTHER"]).default("ALL"),
+    attention: z.enum(["0", "1"]).default("0"),
   })
   .strict();
 export const managementQuerySchema = z
