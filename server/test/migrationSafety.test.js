@@ -8,25 +8,26 @@ import {
   refusesProtectedReplay,
 } from "../src/scripts/migrationSafety.js";
 
-test("protected migration boundary is exactly 001 through 048", () => {
-  assert.equal(PROTECTED_MIGRATION_MAX_VERSION, 48);
-  assert.equal(migrationVersion("048_availability_notifications.sql"), 48);
+test("protected migration boundary is exactly 001 through 060", () => {
+  assert.equal(PROTECTED_MIGRATION_MAX_VERSION, 60);
+  assert.equal(migrationVersion("060_day_end_report_followups.sql"), 60);
   assert.equal(isProtectedMigration("001_initial_schema.sql"), true);
   assert.equal(isProtectedMigration("048_availability_notifications.sql"), true);
-  assert.equal(isProtectedMigration("049_future_feature.sql"), false);
+  assert.equal(isProtectedMigration("060_day_end_report_followups.sql"), true);
+  assert.equal(isProtectedMigration("061_future_feature.sql"), false);
 });
 
 test("clean databases may bootstrap protected history while existing databases refuse replay", () => {
   assert.equal(refusesProtectedReplay(false, "001_initial_schema.sql"), false);
   assert.equal(refusesProtectedReplay(false, "048_availability_notifications.sql"), false);
-  assert.equal(refusesProtectedReplay(true, "048_availability_notifications.sql"), true);
-  assert.equal(refusesProtectedReplay(true, "049_future_feature.sql"), false);
+  assert.equal(refusesProtectedReplay(true, "060_day_end_report_followups.sql"), true);
+  assert.equal(refusesProtectedReplay(true, "061_future_feature.sql"), false);
 });
 
 test("audit coverage reports missing and orphan protected definitions", () => {
-  const files = ["001_initial_schema.sql", "048_availability_notifications.sql", "049_future_feature.sql"];
+  const files = ["001_initial_schema.sql", "060_day_end_report_followups.sql", "061_future_feature.sql"];
   assert.deepEqual(auditCoverage(files, ["001_initial_schema.sql"]), {
-    missingChecks: ["048_availability_notifications.sql"],
+    missingChecks: ["060_day_end_report_followups.sql"],
     orphanChecks: [],
   });
   assert.deepEqual(

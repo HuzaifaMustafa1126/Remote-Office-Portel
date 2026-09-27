@@ -27,6 +27,11 @@ const duration = (minutes) =>
   minutes >= 60
     ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`
     : `${minutes}m`;
+const sameWorkItem = (candidate, selected) =>
+  selected.reportItemId
+    ? Number(candidate.reportItemId) === Number(selected.reportItemId)
+    : candidate.sourceType === selected.sourceType &&
+      Number(candidate.sourceId) === Number(selected.sourceId);
 
 export default function DayEndReportModal({
   open,
@@ -43,7 +48,14 @@ export default function DayEndReportModal({
     [blockerType, setBlockerType] = useState("NONE"),
     [blockerDetails, setBlockerDetails] = useState(""),
     [tomorrowPriority, setTomorrowPriority] = useState(""),
+    [dirty, setDirty] = useState(false),
     [error, setError] = useState("");
+  useEffect(() => {
+    if (!open || !dirty || saving) return;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [open, dirty, saving]);
   useEffect(() => {
     if (!open) return;
     setLoading(true);
@@ -64,7 +76,8 @@ export default function DayEndReportModal({
                 `${item.sourceType}:${item.sourceId}`,
                 {
                   sourceType: item.sourceType,
-                  sourceId: Number(item.sourceId),
+                  sourceId: item.sourceId ? Number(item.sourceId) : null,
+                  reportItemId: Number(item.reportItemId),
                   summary: item.summary || "",
                   whatsLeft: item.whatsLeft || "",
                   estimatedRemainingMinutes: item.estimatedRemainingMinutes,
@@ -76,16 +89,23 @@ export default function DayEndReportModal({
           setBlockerType(report.blockerType);
           setBlockerDetails(report.blockerDetails || "");
           setTomorrowPriority(report.tomorrowPriority);
+          setDirty(false);
           return;
         }
         setExisting(null);
         setData(work);
         setSelected({});
+        setOtherWork("");
+        setBlockerType("NONE");
+        setBlockerDetails("");
+        setTomorrowPriority("");
+        setDirty(false);
       })
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   }, [open, editExisting]);
-  const toggle = (item) =>
+  const toggle = (item) => {
+    setDirty(true);
     setSelected((old) => {
       const key = `${item.sourceType}:${item.sourceId}`,
         next = { ...old };
@@ -100,10 +120,48 @@ export default function DayEndReportModal({
         };
       return next;
     });
+  };
   const setItem = (key, field, value) =>
     setSelected((old) => ({ ...old, [key]: { ...old[key], [field]: value } }));
+  const changeItem = (key, field, value) => { setDirty(true); setItem(key, field, value); };
+  const requestClose = () => {
+    if (saving) return;
+    if (dirty && !window.confirm("Discard your unsaved Day-End Report changes?")) return;
+    onClose();
+  };
   const submit = async () => {
     if (existing?.status === "REVIEWED") return;
+    const chosen = Object.values(selected);
+    if (!chosen.length && !otherWork.trim()) {
+      setError("Select at least one work item or describe other work completed today.");
+      return;
+    }
+    const missingWork = chosen.find((item) => {
+      const source = data?.items?.find((candidate) => sameWorkItem(candidate, item));
+      return source?.status !== "COMPLETED" && !item.whatsLeft?.trim();
+    });
+    if (missingWork) {
+      const source = data?.items?.find((item) => sameWorkItem(item, missingWork));
+      setError(`Please add what's left for “${source?.title || "the selected work item"}”.`);
+      return;
+    }
+    const missingEstimate = chosen.find((item) => {
+      const source = data?.items?.find((candidate) => sameWorkItem(candidate, item));
+      return source?.status !== "COMPLETED" && !item.estimatedRemainingMinutes;
+    });
+    if (missingEstimate) {
+      const source = data?.items?.find((item) => sameWorkItem(item, missingEstimate));
+      setError(`Please select an estimated remaining time for “${source?.title || "the selected work item"}”.`);
+      return;
+    }
+    if (blockerType !== "NONE" && !blockerDetails.trim()) {
+      setError("Please explain the selected blocker.");
+      return;
+    }
+    if (!tomorrowPriority.trim()) {
+      setError("Please add tomorrow's priority.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -116,6 +174,7 @@ export default function DayEndReportModal({
       };
       if (existing) await api.update(existing.id, payload);
       else await api.submit(payload);
+      setDirty(false);
       await onSubmitted();
     } catch (e) {
       setError(errorMessage(e));
@@ -127,7 +186,7 @@ export default function DayEndReportModal({
     <Modal
       open={open}
       title="DAY-END REPORT"
-      onClose={() => !saving && onClose()}
+      onClose={requestClose}
     >
       {loading ? (
         <Loader />
@@ -147,7 +206,7 @@ export default function DayEndReportModal({
             )}
           </div>
           {error && (
-            <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
+            <p role="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
               {error}
             </p>
           )}
@@ -177,13 +236,11 @@ export default function DayEndReportModal({
                         />
                         <span className="flex-1">
                           <b className="block">{item.title}</b>
-                          <small className="text-muted-foreground">
-                            {item.sourceType === "TASK"
-                              ? "Task Management"
-                              : "Ongoing Work"}{" "}
-                            · {item.status.replaceAll("_", " ")}
+                          <small className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary-text">{item.sourceType === "TASK" ? "TASK" : "ONGOING WORK"}</span>
+                            <span>{item.status.replaceAll("_", " ")}</span>
                             {item.trackedMinutes
-                              ? ` · ${duration(item.trackedMinutes)} tracked`
+                              ? ` · ${duration(item.trackedMinutes)} tracked today`
                               : ""}
                           </small>
                         </span>
@@ -195,8 +252,9 @@ export default function DayEndReportModal({
                             <textarea
                               value={value.summary || ""}
                               onChange={(e) =>
-                                setItem(key, "summary", e.target.value)
+                                changeItem(key, "summary", e.target.value)
                               }
+                              maxLength={2000}
                               className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"
                             />
                           </label>
@@ -207,8 +265,9 @@ export default function DayEndReportModal({
                                 <textarea
                                   value={value.whatsLeft || ""}
                                   onChange={(e) =>
-                                    setItem(key, "whatsLeft", e.target.value)
+                                    changeItem(key, "whatsLeft", e.target.value)
                                   }
+                                  maxLength={2000}
                                   className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"
                                 />
                               </label>
@@ -217,7 +276,7 @@ export default function DayEndReportModal({
                                 <select
                                   value={value.estimatedRemainingMinutes || ""}
                                   onChange={(e) =>
-                                    setItem(
+                                    changeItem(
                                       key,
                                       "estimatedRemainingMinutes",
                                       Number(e.target.value) || null,
@@ -254,7 +313,8 @@ export default function DayEndReportModal({
             </h3>
             <textarea
               value={otherWork}
-              onChange={(e) => setOtherWork(e.target.value)}
+              onChange={(e) => { setOtherWork(e.target.value); setDirty(true); }}
+              maxLength={2000}
               placeholder="Anything completed that is not listed above?"
               className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
             />
@@ -265,7 +325,7 @@ export default function DayEndReportModal({
             </h3>
             <select
               value={blockerType}
-              onChange={(e) => setBlockerType(e.target.value)}
+              onChange={(e) => { setBlockerType(e.target.value); setDirty(true); }}
               className="mt-2 w-full rounded-xl border border-border bg-surface p-3"
             >
               {blockerOptions.map(([v, l]) => (
@@ -277,7 +337,8 @@ export default function DayEndReportModal({
             {blockerType !== "NONE" && (
               <textarea
                 value={blockerDetails}
-                onChange={(e) => setBlockerDetails(e.target.value)}
+                onChange={(e) => { setBlockerDetails(e.target.value); setDirty(true); }}
+                maxLength={2000}
                 placeholder="Explain the issue *"
                 className="mt-2 min-h-20 w-full rounded-xl border border-border bg-surface p-3"
               />
@@ -289,17 +350,18 @@ export default function DayEndReportModal({
             </h3>
             <textarea
               value={tomorrowPriority}
-              onChange={(e) => setTomorrowPriority(e.target.value)}
+              onChange={(e) => { setTomorrowPriority(e.target.value); setDirty(true); }}
+              maxLength={1000}
               placeholder="What should you focus on next?"
               className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
             />
           </section>
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <Button variant="secondary" disabled={saving} onClick={onClose}>
+            <Button variant="secondary" disabled={saving} onClick={requestClose}>
               Cancel
             </Button>
             <Button disabled={saving} onClick={submit}>
-              {saving ? "Submitting…" : "Submit Report & Clock Out →"}
+              {saving ? "Submitting…" : "Submit Report & Clock Out"}
             </Button>
           </div>
         </div>

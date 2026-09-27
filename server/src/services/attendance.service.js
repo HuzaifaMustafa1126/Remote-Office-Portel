@@ -543,22 +543,20 @@ export async function clockOut(user) {
       at: entry.clock_out_at,
     };
   });
-  await notifyByPolicy("CLOCK_OUT", user, {
-    title: "Employee Clocked Out",
-    message: `${outcome.name} clocked out at ${formatAuditTime(outcome.at)}.`,
-    referenceType: "ATTENDANCE",
-    referenceId: outcome.recordId,
-    actionUrl: "/attendance",
-  });
-  if (outcome.data.pausedOngoingWorkId)
-    await notifyByPolicy("ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT", user, {
-      title: "Ongoing work paused at clock out",
-      message: `${outcome.name}'s active Ongoing Work was paused when they clocked out.`,
-      referenceType: "ONGOING_WORK",
-      referenceId: outcome.data.pausedOngoingWorkId,
-      actionUrl: "/team-ongoing-work",
-      eventKey: `ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT:${outcome.recordId}`,
+  try {
+    await notifyByPolicy("CLOCK_OUT", user, {
+      title: "Employee Clocked Out", message: `${outcome.name} clocked out at ${formatAuditTime(outcome.at)}.`,
+      referenceType: "ATTENDANCE", referenceId: outcome.recordId, actionUrl: "/attendance",
     });
+    if (outcome.data.pausedOngoingWorkId)
+      await notifyByPolicy("ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT", user, {
+        title: "Ongoing work paused at clock out", message: `${outcome.name}'s active Ongoing Work was paused when they clocked out.`,
+        referenceType: "ONGOING_WORK", referenceId: outcome.data.pausedOngoingWorkId,
+        actionUrl: "/team-ongoing-work", eventKey: `ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT:${outcome.recordId}`,
+      });
+  } catch (error) {
+    console.error("Clock Out notification delivery failed:", error.message);
+  }
   return outcome.data;
 }
 

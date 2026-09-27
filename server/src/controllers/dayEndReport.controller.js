@@ -1,5 +1,6 @@
 import * as service from "../services/dayEndReport.service.js";
 import * as followups from "../services/dayEndReportFollowup.service.js";
+import * as analyticsService from "../services/dayEndReportAnalytics.service.js";
 export const today = async (req, res) =>
   res.json({ success: true, data: await service.today(req.user) });
 export const workItems = async (req, res) =>
@@ -46,3 +47,5 @@ export const updateSettings = async (req, res) =>
   res.json({ success: true, data: await followups.updateSettings(req.body, req.user) });
 export const sendReminder = async (req, res) =>
   res.json({ success: true, data: await followups.sendManualReminder(req.params.attendanceId, req.user) });
+export const analytics = async (req, res) =>
+  res.json({ success: true, data: await analyticsService.analytics(req.validatedQuery) });

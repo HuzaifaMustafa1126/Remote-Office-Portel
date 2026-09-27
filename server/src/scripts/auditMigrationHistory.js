@@ -470,6 +470,130 @@ const checks = {
   "048_availability_notifications.sql": async () =>
     (await column("notification_preferences", "availability_notifications")) &&
     (await policy("AVAILABILITY_CHANGED")),
+  "049_ongoing_work_multiple_items.sql": async () =>
+    (await columns([
+      ["ongoing_work", "completion_note"],
+      ["ongoing_work", "total_duration_seconds"],
+    ])) &&
+    (await enumHas("ongoing_work", "status", "WORKING")) &&
+    !(await enumHas("ongoing_work", "status", "ONGOING")),
+  "050_ongoing_work_time_tracking.sql": async () =>
+    (await table("ongoing_work_sessions")) &&
+    (await columns([
+      ["ongoing_work_sessions", "ongoing_work_id"],
+      ["ongoing_work_sessions", "employee_id"],
+      ["ongoing_work_sessions", "user_id"],
+      ["ongoing_work_sessions", "started_at"],
+      ["ongoing_work_sessions", "ended_at"],
+      ["ongoing_work_sessions", "duration_seconds"],
+      ["ongoing_work_sessions", "active_employee_id"],
+    ])) &&
+    (await indexes([
+      ["ongoing_work_sessions", "uq_one_active_ongoing_work_per_employee"],
+      ["ongoing_work_sessions", "idx_ongoing_work_sessions_work"],
+      ["ongoing_work_sessions", "idx_ongoing_work_sessions_employee"],
+    ])) &&
+    (await foreignKeys([
+      ["ongoing_work_sessions", "fk_ongoing_work_session_work", "CASCADE"],
+      ["ongoing_work_sessions", "fk_ongoing_work_session_employee", "RESTRICT"],
+      ["ongoing_work_sessions", "fk_ongoing_work_session_user", "RESTRICT"],
+    ])),
+  "051_team_ongoing_work_monitoring.sql": async () =>
+    (await permission("ongoing_work.view_team")) &&
+    (await index("ongoing_work", "idx_ongoing_work_status_completed_employee")),
+  "052_ongoing_work_attendance_link.sql": async () =>
+    (await column("ongoing_work_sessions", "attendance_record_id")) &&
+    (await index("ongoing_work_sessions", "idx_ongoing_work_sessions_attendance")) &&
+    (await foreignKeyTarget(
+      "ongoing_work_sessions",
+      "attendance_record_id",
+      "attendance_records",
+      "RESTRICT",
+    )),
+  "053_break_ongoing_work_context.sql": async () =>
+    (await column("attendance_breaks", "auto_paused_ongoing_work_id")) &&
+    (await index("attendance_breaks", "idx_attendance_breaks_ongoing_work")) &&
+    (await foreignKeyTarget(
+      "attendance_breaks",
+      "auto_paused_ongoing_work_id",
+      "ongoing_work",
+      "SET NULL",
+    )),
+  "054_ongoing_work_notifications.sql": () =>
+    policies(["ONGOING_WORK_STARTED", "ONGOING_WORK_COMPLETED"]),
+  "055_ongoing_work_retention.sql": async () =>
+    (await columns([
+      ["ongoing_work", "deleted_at"],
+      ["ongoing_work", "deleted_by_user_id"],
+      ["ongoing_work", "deletion_reason"],
+    ])) &&
+    (await table("ongoing_work_retention_settings")) &&
+    (await index("ongoing_work", "idx_ongoing_work_retention")) &&
+    (await foreignKeyTarget(
+      "ongoing_work",
+      "deleted_by_user_id",
+      "users",
+      "SET NULL",
+    )) &&
+    (await permission("ongoing_work.retention_manage")),
+  "056_ongoing_work_lifecycle_notifications.sql": () =>
+    policies([
+      "ONGOING_WORK_CREATED",
+      "ONGOING_WORK_UPDATED",
+      "ONGOING_WORK_PAUSED",
+      "ONGOING_WORK_SWITCHED",
+      "ONGOING_WORK_DELETED",
+      "ONGOING_WORK_AUTO_PAUSED_BREAK",
+      "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT",
+    ]),
+  "057_day_end_report_phase1.sql": async () =>
+    (await tables(["day_end_reports", "day_end_report_items"])) &&
+    (await indexes([
+      ["day_end_reports", "uq_day_end_report_attendance"],
+      ["day_end_reports", "idx_day_end_report_employee_date"],
+      ["day_end_report_items", "uq_day_end_report_task"],
+      ["day_end_report_items", "uq_day_end_report_ongoing"],
+    ])) &&
+    (await foreignKeyTarget(
+      "day_end_report_items",
+      "report_id",
+      "day_end_reports",
+      "CASCADE",
+    )) &&
+    (await permission("day_end_report.submit")) &&
+    (await policy("DAY_END_REPORT_SUBMITTED")),
+  "058_day_end_report_phase2.sql": async () =>
+    (await permissions(["day_end_report.view_all", "day_end_report.review"])) &&
+    (await index("day_end_reports", "idx_day_end_report_date_status_employee")) &&
+    (await policy("DAY_END_REPORT_REVIEWED")),
+  "059_day_end_report_discussion_history.sql": async () =>
+    (await table("day_end_report_replies")) &&
+    (await indexes([
+      ["day_end_report_replies", "idx_day_end_reply_report_created"],
+      ["day_end_report_replies", "idx_day_end_reply_author"],
+    ])) &&
+    (await foreignKeyTarget(
+      "day_end_report_replies",
+      "report_id",
+      "day_end_reports",
+      "CASCADE",
+    )) &&
+    (await policy("DAY_END_REPORT_REPLY")),
+  "060_day_end_report_followups.sql": async () =>
+    (await tables(["day_end_report_settings", "day_end_report_followups"])) &&
+    (await indexes([
+      ["day_end_report_followups", "uq_day_end_followup_event"],
+      ["day_end_report_followups", "idx_day_end_followup_attendance"],
+      ["day_end_report_followups", "idx_day_end_followup_report"],
+      ["day_end_report_followups", "idx_day_end_followup_employee"],
+    ])) &&
+    (await policies([
+      "DAY_END_REPORT_DUE_SOON",
+      "DAY_END_REPORT_OVERDUE",
+      "DAY_END_REPORT_MANUAL_REMINDER",
+      "DAY_END_REPORT_BLOCKER",
+      "DAY_END_REPORT_AWAITING_REVIEW",
+    ])),
 };
 
 const migrationFiles = (await fs.readdir(migrationsDir))

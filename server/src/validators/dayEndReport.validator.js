@@ -3,7 +3,8 @@ import { z } from "zod";
 const item = z
   .object({
     sourceType: z.enum(["TASK", "ONGOING_WORK"]),
-    sourceId: z.number().int().positive(),
+    sourceId: z.number().int().positive().optional().nullable(),
+    reportItemId: z.number().int().positive().optional(),
     summary: z.string().trim().max(2000).optional().nullable(),
     whatsLeft: z.string().trim().max(2000).optional().nullable(),
     estimatedRemainingMinutes: z
@@ -14,7 +15,10 @@ const item = z
       .optional()
       .nullable(),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.sourceId || value.reportItemId, {
+    message: "A work-item reference is required",
+  });
 
 export const submitSchema = z
   .object({
@@ -91,10 +95,21 @@ export const historyQuerySchema = z
         new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" }).slice(0, 7),
       ),
     status: z.enum(["ALL", "SUBMITTED", "REVIEWED"]).default("ALL"),
-    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER", "WAITING_ADMIN", "WAITING_CLIENT", "WAITING_TEAM", "TECHNICAL", "MISSING_ASSETS", "OTHER"]).default("ALL"),
-    attention: z.enum(["0", "1"]).default("0"),
+    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER"]).default("ALL"),
   })
   .strict();
+export const analyticsQuerySchema = z
+  .object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    employeeId: z.coerce.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const from = new Date(`${value.from}T00:00:00Z`), to = new Date(`${value.to}T00:00:00Z`);
+    if (to < from) context.addIssue({ code: "custom", path: ["to"], message: "End date must be on or after start date" });
+    if ((to - from) / 86400000 > 366) context.addIssue({ code: "custom", path: ["to"], message: "Analytics range cannot exceed 366 days" });
+  });
 export const managementQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).default(1),
@@ -109,6 +124,7 @@ export const managementQuerySchema = z
     status: z
       .enum(["ALL", "SUBMITTED", "REVIEWED", "NOT_SUBMITTED"])
       .default("ALL"),
-    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER"]).default("ALL"),
+    blocker: z.enum(["ALL", "HAS_BLOCKER", "NO_BLOCKER", "WAITING_ADMIN", "WAITING_CLIENT", "WAITING_TEAM", "TECHNICAL", "MISSING_ASSETS", "OTHER"]).default("ALL"),
+    attention: z.enum(["0", "1"]).default("0"),
   })
   .strict();

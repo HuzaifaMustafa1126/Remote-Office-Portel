@@ -45,3 +45,5 @@ export const saveFollowupSettings = (data) =>
   api.patch("/day-end-reports/settings/followups", data).then((r) => r.data.data);
 export const sendReminder = (attendanceId) =>
   api.post(`/day-end-reports/attendance/${attendanceId}/reminder`).then((r) => r.data.data);
+export const getAnalytics = (params) =>
+  api.get("/day-end-reports/analytics/summary", { params }).then((r) => r.data.data);

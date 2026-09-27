@@ -36,6 +36,7 @@ import TeamOngoingWorkPage from "../pages/TeamOngoingWorkPage";
 import DayEndReportsPage from "../pages/DayEndReportsPage";
 import MyDayEndReportsPage from "../pages/MyDayEndReportsPage";
 import DayEndReportSettingsPage from "../pages/DayEndReportSettingsPage";
+import DayEndReportAnalyticsPage from "../pages/DayEndReportAnalyticsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -115,6 +116,7 @@ export default function AppRoutes() {
             </Gate>
           }
         />
+        <Route path="day-end-reports/analytics" element={<Gate permission={P.DAY_END_REPORT_VIEW_ALL}><DayEndReportAnalyticsPage /></Gate>} />
         <Route
           path="my-day-end-reports"
           element={

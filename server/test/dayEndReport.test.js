@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { historyQuerySchema, replySchema, submitSchema } from "../src/validators/dayEndReport.validator.js";
+import { analyticsQuerySchema, historyQuerySchema, managementQuerySchema, replySchema, submitSchema } from "../src/validators/dayEndReport.validator.js";
 
 const base = { items: [], otherWork: "Helped resolve deployment issue", blockerType: "NONE", tomorrowPriority: "Finish QA" };
 
@@ -97,4 +97,49 @@ test("Phase 4 derives reminders from attendance shift snapshots without clock-ou
   assert.match(source, /DAY_END_REPORT_REMINDER_COOLDOWN/);
   assert.doesNotMatch(source, /UPDATE attendance_records/);
   assert.doesNotMatch(source, /payroll|salary/i);
+});
+
+test("Phase 5 analytics ranges are bounded and employee filters are validated", () => {
+  assert.equal(analyticsQuerySchema.safeParse({ from: "2026-09-01", to: "2026-09-30" }).success, true);
+  assert.equal(analyticsQuerySchema.safeParse({ from: "2026-09-30", to: "2026-09-01" }).success, false);
+  assert.equal(analyticsQuerySchema.safeParse({ from: "2025-01-01", to: "2026-09-30" }).success, false);
+  assert.equal(analyticsQuerySchema.safeParse({ from: "2026-09-01", to: "2026-09-30", employeeId: "2" }).success, true);
+});
+
+test("Phase 5 analytics use snapshots and latest-state carry-forward without payroll mutations", () => {
+  const source = fs.readFileSync(new URL("../src/services/dayEndReportAnalytics.service.js", import.meta.url), "utf8");
+  assert.match(source, /status_snapshot='COMPLETED'/);
+  assert.match(source, /tracked_minutes_snapshot/);
+  assert.match(source, /source_type='TASK'/);
+  assert.match(source, /ROW_NUMBER\(\) OVER\(PARTITION BY/);
+  assert.match(source, /WHERE rn=1 AND status<>'COMPLETED'/);
+  assert.match(source, /ar\.clock_in_at IS NOT NULL/);
+  assert.doesNotMatch(source, /UPDATE |INSERT |DELETE /);
+  assert.doesNotMatch(source, /payroll|salary/i);
+});
+
+test("daily management filters accept attention and specific blocker drill-downs", () => {
+  const base = { date: "2026-09-24", page: "1", limit: "20", search: "", status: "ALL" };
+  assert.equal(managementQuerySchema.safeParse({ ...base, blocker: "ALL", attention: "0" }).success, true);
+  assert.equal(managementQuerySchema.safeParse({ ...base, blocker: "WAITING_ADMIN", attention: "1" }).success, true);
+  assert.equal(managementQuerySchema.safeParse({ ...base, blocker: "TECHNICAL", attention: "0" }).success, true);
+});
+
+test("Phase 6 preserves owned historical items whose source row was deleted", () => {
+  assert.equal(submitSchema.safeParse({ ...base, items: [{ sourceType: "TASK", reportItemId: 7, summary: "Historical snapshot" }] }).success, true);
+  assert.equal(submitSchema.safeParse({ ...base, items: [{ sourceType: "TASK", summary: "Missing reference" }] }).success, false);
+  const source = fs.readFileSync(new URL("../src/services/dayEndReport.service.js", import.meta.url), "utf8");
+  assert.match(source, /existingItems\.get\(Number\(input\.reportItemId\)\)/);
+  assert.match(source, /Selected historical work item does not belong to this report/);
+  assert.match(source, /getEffectivePermission\(user\.id, "day_end_report\.view_all"/);
+});
+
+test("Phase 6 keeps clock-out enforcement transactional and protects unsaved form data", () => {
+  const attendance = fs.readFileSync(new URL("../src/services/attendance.service.js", import.meta.url), "utf8");
+  const modal = fs.readFileSync(new URL("../../client/src/components/dayEndReport/DayEndReportModal.jsx", import.meta.url), "utf8");
+  assert.match(attendance, /currentRecord\(conn, user\.employee_id, true\)/);
+  assert.match(attendance, /assertSubmittedForAttendance\(conn, record\.id, user\.employee_id\)/);
+  assert.match(attendance, /await conn\.rollback\(\)/);
+  assert.match(modal, /beforeunload/);
+  assert.match(modal, /Discard your unsaved Day-End Report changes/);
 });

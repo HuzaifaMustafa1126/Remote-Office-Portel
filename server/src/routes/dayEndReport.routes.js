@@ -10,11 +10,18 @@ import {
   historyQuerySchema,
   attendanceIdSchema,
   followupSettingsSchema,
+  analyticsQuerySchema,
 } from "../validators/dayEndReport.validator.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
 import asyncHandler from "../utils/asyncHandler.js";
 const router = Router();
+router.get(
+  "/analytics/summary",
+  requirePermission("day_end_report.view_all"),
+  validate(analyticsQuerySchema, "query"),
+  asyncHandler(controller.analytics),
+);
 router.get(
   "/settings/followups",
   requirePermission("day_end_report.view_all"),

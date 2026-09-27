@@ -2,6 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { notifyByPolicy } from "./notification.service.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
+import { getEffectivePermission } from "./effectivePermission.service.js";
 
 async function activeAttendance(user, executor = pool, lock = false) {
   if (!user.employee_id) throw new ApiError(403, "Employee profile required");
@@ -32,11 +33,7 @@ async function existing(attendanceId, executor = pool) {
 }
 
 async function isManagement(user, executor = pool) {
-  const [[row]] = await executor.execute(
-    "SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN')) yes",
-    [user.id],
-  );
-  return Boolean(row.yes);
+  return getEffectivePermission(user.id, "day_end_report.view_all", executor);
 }
 
 async function reportDetails(id, executor = pool) {
@@ -54,7 +51,7 @@ async function reportDetails(id, executor = pool) {
   );
   if (!report) throw new ApiError(404, "Day-End Report not found");
   const [items] = await executor.execute(
-    `SELECT id,source_type sourceType,COALESCE(task_id,ongoing_work_id) sourceId,
+    `SELECT id reportItemId,source_type sourceType,COALESCE(task_id,ongoing_work_id) sourceId,
       title_snapshot title,status_snapshot status,tracked_minutes_snapshot trackedMinutes,
       summary,whats_left whatsLeft,estimated_remaining_minutes estimatedRemainingMinutes
      FROM day_end_report_items WHERE report_id=? ORDER BY id`,
@@ -150,13 +147,14 @@ export async function todayWorkItems(user) {
 
 export async function submit(data, user) {
   const connection = await pool.getConnection();
-  let outcome;
+  let outcome, attendanceId;
   try {
     await connection.beginTransaction();
     await connection.execute("SELECT id FROM employees WHERE id=? FOR UPDATE", [
       user.employee_id,
     ]);
     const record = await activeAttendance(user, connection, true);
+    attendanceId = record.id;
     const prior = await existing(record.id, connection);
     if (prior) {
       await connection.commit();
@@ -172,6 +170,8 @@ export async function submit(data, user) {
     );
     const unique = new Set();
     const resolved = data.items.map((input) => {
+      if (input.reportItemId)
+        throw new ApiError(400, "Existing report-item references cannot be used in a new report");
       const key = `${input.sourceType}:${input.sourceId}`;
       if (unique.has(key))
         throw new ApiError(400, "A work item can only be included once");
@@ -246,22 +246,24 @@ export async function submit(data, user) {
   } catch (error) {
     await connection.rollback();
     if (error.code === "ER_DUP_ENTRY") {
-      const record = await activeAttendance(user);
-      return { report: await existing(record.id), alreadySubmitted: true };
+      const prior = attendanceId ? await existing(attendanceId) : null;
+      if (prior) return { report: await reportDetails(prior.id), alreadySubmitted: true };
     }
     throw error;
   } finally {
     connection.release();
   }
   const submissionEvent = outcome.report.blockerType === "NONE" ? "DAY_END_REPORT_SUBMITTED" : "DAY_END_REPORT_BLOCKER";
-  await notifyByPolicy(submissionEvent, user, {
-    title: outcome.report.blockerType === "NONE" ? "Day-End Report submitted" : "Day-End Report Submitted · Blocker",
-    message: `${outcome.report.employeeName} submitted a Day-End Report for ${outcome.report.reportDate}.${outcome.report.blockerType !== "NONE" ? ` Blocker: ${outcome.report.blockerType.replaceAll("_", " ")}.` : ""}`,
-    referenceType: "DAY_END_REPORT",
-    referenceId: outcome.report.id,
-    actionUrl: "/day-end-reports",
-    eventKey: `${submissionEvent}:${outcome.report.id}`,
-  });
+  try {
+    await notifyByPolicy(submissionEvent, user, {
+      title: outcome.report.blockerType === "NONE" ? "Day-End Report submitted" : "Day-End Report Submitted · Blocker",
+      message: `${outcome.report.employeeName} submitted a Day-End Report for ${outcome.report.reportDate}.${outcome.report.blockerType !== "NONE" ? ` Blocker: ${outcome.report.blockerType.replaceAll("_", " ")}.` : ""}`,
+      referenceType: "DAY_END_REPORT", referenceId: outcome.report.id,
+      actionUrl: "/day-end-reports", eventKey: `${submissionEvent}:${outcome.report.id}`,
+    });
+  } catch (error) {
+    console.error("Day-End Report submission notification failed:", error.message);
+  }
   return outcome;
 }
 
@@ -312,10 +314,15 @@ export async function update(id, data, user) {
     const byKey = new Map(
       available.map((item) => [`${item.sourceType}:${item.sourceId}`, item]),
     );
+    const currentDetails = await reportDetails(id, connection);
+    const existingItems = new Map(currentDetails.items.map((item) => [Number(item.reportItemId), item]));
     const seen = new Set(),
       resolved = data.items.map((input) => {
-        const key = `${input.sourceType}:${input.sourceId}`,
-          source = byKey.get(key);
+        const preserved = input.reportItemId ? existingItems.get(Number(input.reportItemId)) : null;
+        if (input.reportItemId && (!preserved || preserved.sourceType !== input.sourceType))
+          throw new ApiError(403, "Selected historical work item does not belong to this report");
+        const key = preserved ? `REPORT_ITEM:${input.reportItemId}` : `${input.sourceType}:${input.sourceId}`,
+          source = preserved || byKey.get(key);
         if (seen.has(key))
           throw new ApiError(400, "A work item can only be included once");
         seen.add(key);
@@ -580,7 +587,7 @@ export async function activity(user, id) {
 }
 
 export async function review(user, id) {
-  if (!(await isManagement(user)))
+  if (!(await getEffectivePermission(user.id, "day_end_report.review")))
     throw new ApiError(403, "Management access required");
   const connection = await pool.getConnection();
   let result;
@@ -619,7 +626,8 @@ export async function review(user, id) {
     [result.employeeId],
   );
   if (recipient)
-    await notifyByPolicy("DAY_END_REPORT_REVIEWED", user, {
+    try {
+      await notifyByPolicy("DAY_END_REPORT_REVIEWED", user, {
       title: "Day-End Report Reviewed",
       message: `Your Day-End Report for ${result.reportDate} was reviewed by ${result.reviewerName || "management"}.`,
       referenceType: "DAY_END_REPORT",
@@ -627,6 +635,9 @@ export async function review(user, id) {
       actionUrl: `/my-day-end-reports?report=${id}`,
       recipientUserIds: [recipient.id],
       eventKey: `DAY_END_REPORT_REVIEWED:${id}`,
-    });
+      });
+    } catch (error) {
+      console.error("Day-End Report review notification failed:", error.message);
+    }
   return result;
 }

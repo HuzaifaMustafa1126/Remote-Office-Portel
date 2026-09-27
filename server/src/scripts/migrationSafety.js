@@ -1,4 +1,8 @@
-export const PROTECTED_MIGRATION_MAX_VERSION = 48;
+// Every historical migration that can mutate existing rows, add non-idempotent
+// indexes/constraints, or create tables without IF NOT EXISTS must be audited
+// before a missing ledger entry is repaired. Keep this boundary in step with
+// auditMigrationHistory.js whenever a new migration is added.
+export const PROTECTED_MIGRATION_MAX_VERSION = 60;
 
 export const migrationVersion = (name) => {
   const match = /^(\d{3})_/.exec(name);

@@ -15,6 +15,8 @@ import * as api from "../services/dayEndReport.service";
 import { errorMessage } from "../utils/helpers";
 import ReportDiscussion from "../components/dayEndReport/ReportDiscussion";
 import ReportActivity from "../components/dayEndReport/ReportActivity";
+import { Link } from "react-router-dom";
+import DayEndReportStatus, { reportDate } from "../components/dayEndReport/DayEndReportStatus";
 const today = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
 const duration = (m) =>
@@ -39,8 +41,8 @@ const blocker = (v) =>
 export default function DayEndReportsPage() {
   const [date, setDate] = useState(() => new URLSearchParams(window.location.search).get("date") || today()),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState("ALL"),
-    [blockerFilter, setBlockerFilter] = useState("ALL"),
+    [status, setStatus] = useState(() => new URLSearchParams(window.location.search).get("status") || "ALL"),
+    [blockerFilter, setBlockerFilter] = useState(() => new URLSearchParams(window.location.search).get("blocker") || "ALL"),
     [attention, setAttention] = useState(() => new URLSearchParams(window.location.search).get("attention") === "1"),
     [page, setPage] = useState(1),
     [data, setData] = useState(null),
@@ -108,6 +110,7 @@ export default function DayEndReportsPage() {
         title="Day-End Reports"
         description="Monitor team work, pending items, blockers and employee priorities."
       />
+      <nav className="mb-5 flex gap-2" aria-label="Day-End Report views"><span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">Daily</span><Link to="/day-end-reports/analytics" className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold">Analytics</Link></nav>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           [Users, "Reports", s ? `${s.submitted} / ${s.expected}` : "—"],
@@ -118,10 +121,10 @@ export default function DayEndReportsPage() {
         ].map(([Icon, label, value]) => (
           <article
             key={label}
-            className="rounded-2xl border border-border bg-surface p-4 shadow-sm"
+            className="rounded-2xl border border-border bg-surface p-3 shadow-sm"
           >
             <Icon size={18} className="text-primary-text" />
-            <p className="mt-3 text-2xl font-black">{value}</p>
+            <p className="mt-2 text-xl font-black">{value}</p>
             <p className="text-xs text-muted-foreground">{label}</p>
           </article>
         ))}
@@ -177,30 +180,31 @@ export default function DayEndReportsPage() {
           <option value="MISSING_ASSETS">Missing Information</option>
           <option value="OTHER">Other</option>
         </select>
+        <Button variant="secondary" onClick={() => { setDate(today()); setSearch(""); setStatus("ALL"); setBlockerFilter("ALL"); setAttention(false); setPage(1); }}>Reset</Button>
       </section>
       {error && (
-        <p className="mt-4 rounded-xl bg-danger-soft p-3 text-danger">
-          {error}
-        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger"><p>Unable to load Day-End Reports. {error}</p><Button variant="secondary" onClick={load}>Try Again</Button></div>
       )}
       {loading && !data ? (
         <Loader />
       ) : (
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-2">
+          {!data?.items?.length && <section className="rounded-2xl border border-border bg-surface p-8 text-center"><h2 className="font-bold">No Day-End Reports found</h2><p className="mt-1 text-sm text-muted-foreground">No employees match the selected date and filters.</p></section>}
           {data?.items?.map((item) => (
             <article
               key={item.employeeId}
-              className="rounded-2xl border border-border bg-surface p-4 shadow-sm"
+              className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="font-bold">{item.employeeName}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {item.displayStatus.replaceAll("_", " ")}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <DayEndReportStatus status={item.displayStatus} />
+                    <span>{reportDate(date)}</span>
                     {item.reportId
-                      ? ` · ${item.itemCount} Work Items · ${duration(item.trackedMinutes)}`
+                      ? ` · ${item.itemCount} ${item.itemCount === 1 ? "Work Item" : "Work Items"}${Number(item.trackedMinutes) > 0 ? ` · ${duration(item.trackedMinutes)} tracked` : ""}`
                       : ""}
-                  </p>
+                  </div>
                   {item.reportId && (
                     <p className="mt-1 text-xs">
                       {item.completedCount} completed · {item.pendingCount}{" "}
@@ -232,9 +236,7 @@ export default function DayEndReportsPage() {
                     View Report →
                   </Button>
                 ) : (
-                  <span className="rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold">
-                    {item.displayStatus}
-                  </span>
+                  null
                 )}
                 </div>
               </div>
@@ -312,14 +314,10 @@ export function ReportDetail({ report, onReview }) {
       <div>
         <h2 className="text-xl font-black">{report.employeeName}</h2>
         <p className="text-muted-foreground">
-          {report.reportDate} · Submitted {stamp(report.submittedAt)}
+          Day-End Report · {reportDate(report.reportDate)}
         </p>
-        <p className="mt-1 font-bold">
-          {report.status}
-          {report.reviewedAt
-            ? ` · ${report.reviewerName} · ${stamp(report.reviewedAt)}`
-            : ""}
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2"><DayEndReportStatus status={report.status}/><span className="text-xs text-muted-foreground">Submitted {stamp(report.submittedAt)}</span></div>
+        {report.reviewedAt && <p className="mt-2 text-xs text-muted-foreground">Reviewed by <b className="text-foreground">{report.reviewerName || "Management"}</b> · {stamp(report.reviewedAt)}</p>}
       </div>
       <div className="grid grid-cols-3 gap-2">
         {[
@@ -347,7 +345,7 @@ export function ReportDetail({ report, onReview }) {
       <div className="space-y-3">
         {report.items.map((item) => (
           <article
-            key={item.id}
+            key={item.reportItemId}
             className="rounded-xl border border-border p-4"
           >
             <span className="rounded-full bg-primary-soft px-2 py-1 text-[10px] font-bold text-primary-text">

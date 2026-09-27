@@ -7,6 +7,7 @@ import Loader from "../components/common/Loader";
 import { ReportDetail } from "./DayEndReportsPage";
 import * as api from "../services/dayEndReport.service";
 import { errorMessage } from "../utils/helpers";
+import DayEndReportStatus, { reportDate } from "../components/dayEndReport/DayEndReportStatus";
 
 const currentMonth = () =>
   new Date()
@@ -91,11 +92,10 @@ export default function MyDayEndReportsPage() {
           <option value="HAS_BLOCKER">Has blocker</option>
           <option value="NO_BLOCKER">No blocker</option>
         </select>
+        <Button variant="secondary" onClick={() => { setMonth(currentMonth()); setStatus("ALL"); setBlocker("ALL"); setPage(1); }}>Reset</Button>
       </section>
       {error && (
-        <p className="mt-4 rounded-xl bg-danger-soft p-3 text-danger">
-          {error}
-        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger"><p>{error}</p><Button variant="secondary" onClick={load}>Try Again</Button></div>
       )}
       {loading ? (
         <Loader />
@@ -108,15 +108,15 @@ export default function MyDayEndReportsPage() {
           </p>
         </section>
       ) : (
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
           {data.items.map((item) => (
             <article
               key={item.id}
-              className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
+              className="rounded-2xl border border-border bg-surface p-4 shadow-sm"
             >
               <div className="flex justify-between gap-3">
                 <div>
-                  <h2 className="font-black">{item.reportDate}</h2>
+                  <h2 className="font-black">{reportDate(item.reportDate)}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Submitted{" "}
                     {new Intl.DateTimeFormat("en-PK", {
@@ -124,36 +124,21 @@ export default function MyDayEndReportsPage() {
                     }).format(new Date(item.submittedAt))}
                   </p>
                 </div>
-                <span
-                  className={`h-fit rounded-full px-2 py-1 text-[10px] font-bold ${item.status === "REVIEWED" ? "bg-success-soft text-success" : "bg-primary-soft text-primary-text"}`}
-                >
-                  {item.status}
-                </span>
+                <DayEndReportStatus status={item.status} />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-lg bg-surface-secondary p-2">
-                  <b className="block">{item.itemCount}</b>Items
-                </div>
-                <div className="rounded-lg bg-surface-secondary p-2">
-                  <Clock3 size={13} className="mx-auto" />
-                  <span>{duration(item.trackedMinutes)}</span>
-                </div>
-                <div className="rounded-lg bg-surface-secondary p-2">
-                  <MessageSquare size={13} className="mx-auto" />
-                  <span>{item.replyCount}</span>
-                </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-border py-3 text-xs text-muted-foreground">
+                <span><b className="text-foreground">{item.itemCount}</b> work {item.itemCount === 1 ? "item" : "items"}</span>
+                {Number(item.trackedMinutes) > 0 && <span className="inline-flex items-center gap-1"><Clock3 size={13}/><b className="text-foreground">{duration(item.trackedMinutes)}</b> tracked</span>}
+                <span className="inline-flex items-center gap-1"><MessageSquare size={13}/><b className="text-foreground">{item.replyCount}</b> {item.replyCount === 1 ? "reply" : "replies"}</span>
               </div>
-              <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-                {item.tomorrowPriority}
-              </p>
-              <Button
-                className="mt-4 w-full"
+              <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground"><span className="font-semibold text-foreground">Next priority: </span>{item.tomorrowPriority}</p>
+              <div className="mt-3 flex justify-end"><Button
                 variant="secondary"
                 onClick={() => open(item.id)}
               >
                 {item.status === "REVIEWED" ? <CheckCircle2 size={15} /> : null}{" "}
                 View Report
-              </Button>
+              </Button></div>
             </article>
           ))}
         </div>
