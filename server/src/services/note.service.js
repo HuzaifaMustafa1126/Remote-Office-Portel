@@ -18,7 +18,7 @@ import {
 } from "docx";
 
 const selectSql = (viewerId) =>
-  `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.is_archived isArchived,n.author_user_id authorUserId,n.related_task_id relatedTaskId,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CONCAT(e.first_name,' ',e.last_name) authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount,(SELECT COUNT(*) FROM note_replies nr WHERE nr.note_id=n.id AND nr.deleted_at IS NULL) replyCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id`;
+  `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.is_archived isArchived,n.author_user_id authorUserId,n.related_task_id relatedTaskId,n.category_id categoryId,nc.name categoryName,nc.color categoryColor,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CONCAT(e.first_name,' ',e.last_name) authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount,(SELECT COUNT(*) FROM note_replies nr WHERE nr.note_id=n.id AND nr.deleted_at IS NULL) replyCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id LEFT JOIN note_categories nc ON nc.id=n.category_id`;
 const map = (row) => ({
   ...row,
   isImportant: Boolean(row.isImportant),
@@ -31,7 +31,7 @@ const map = (row) => ({
 
 async function isCeo(user, connection = pool) {
   const [[row]] = await connection.execute(
-    "SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name)='CEO') yes",
+    "SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=? AND UPPER(r.name) IN ('CEO','SUPER_ADMIN')) yes",
     [user.id],
   );
   return Boolean(row.yes);
@@ -110,6 +110,14 @@ async function buildAccessibleNotesQuery(filters, user) {
     where.push("n.related_task_id=?");
     params.push(filters.relatedTaskId);
   }
+  if (filters.categoryId) {
+    if (filters.categoryId === "UNCATEGORIZED")
+      where.push("n.category_id IS NULL");
+    else {
+      where.push("n.category_id=?");
+      params.push(Number(filters.categoryId));
+    }
+  }
   if (filters.search) {
     const query = `%${filters.search}%`;
     where.push(
@@ -175,6 +183,256 @@ export async function authors(user) {
     params,
   );
   return rows;
+}
+
+async function requireActiveCategory(categoryId, executor = pool) {
+  const [[category]] = await executor.execute(
+    "SELECT id,name FROM note_categories WHERE id=? AND is_active=1",
+    [categoryId],
+  );
+  if (!category)
+    throw new ApiError(400, "Please select an active note category");
+  return category;
+}
+
+async function requireCategoryManager(user, executor = pool) {
+  if (!(await isCeo(user, executor)))
+    throw new ApiError(403, "Only the CEO can manage note categories");
+}
+
+export async function categories(user, includeInactive = false) {
+  if (includeInactive) await requireCategoryManager(user);
+  const accessParams = [];
+  const predicate = await access(user, accessParams);
+  const [rows] = await pool.execute(
+    `SELECT nc.id,nc.name,nc.color,nc.sort_order sortOrder,nc.is_active isActive,
+       COUNT(n.id) noteCount
+     FROM note_categories nc
+     LEFT JOIN work_notes n ON n.category_id=nc.id AND n.status='PUBLISHED'
+       AND n.is_archived=0 AND ${predicate}
+     ${includeInactive ? "" : "WHERE nc.is_active=1"}
+     GROUP BY nc.id,nc.name,nc.color,nc.sort_order,nc.is_active
+     ORDER BY nc.is_active DESC,nc.sort_order,nc.name,nc.id`,
+    accessParams,
+  );
+  const uncategorizedParams = [];
+  const uncategorizedPredicate = await access(user, uncategorizedParams);
+  const [[uncategorized]] = await pool.execute(
+    `SELECT COUNT(*) noteCount FROM work_notes n
+     WHERE n.category_id IS NULL AND n.status='PUBLISHED' AND n.is_archived=0
+       AND ${uncategorizedPredicate}`,
+    uncategorizedParams,
+  );
+  return {
+    categories: rows.map((row) => ({
+      ...row,
+      isActive: Boolean(row.isActive),
+      noteCount: Number(row.noteCount),
+    })),
+    uncategorizedCount: Number(uncategorized.noteCount),
+    canManage: await isCeo(user),
+  };
+}
+
+export async function createCategory(data, user) {
+  await requireCategoryManager(user);
+  const [[duplicate]] = await pool.execute(
+    "SELECT id FROM note_categories WHERE LOWER(name)=LOWER(?)",
+    [data.name],
+  );
+  if (duplicate)
+    throw new ApiError(409, "A note category with this name already exists");
+  const [[position]] = await pool.execute(
+    "SELECT COALESCE(MAX(sort_order),0)+10 nextPosition FROM note_categories",
+  );
+  const [result] = await pool.execute(
+    "INSERT INTO note_categories(name,color,sort_order,created_by) VALUES(?,?,?,?)",
+    [data.name, data.color || null, position.nextPosition, user.id],
+  );
+  await logAudit({
+    userId: user.id,
+    employeeId: user.employee_id,
+    action: "NOTE_CATEGORY_CREATED",
+    entityType: "NOTE_CATEGORY",
+    entityId: result.insertId,
+    description: `Note category “${data.name}” was created.`,
+  });
+  return { id: Number(result.insertId) };
+}
+
+export async function updateCategory(id, data, user) {
+  await requireCategoryManager(user);
+  const [[existing]] = await pool.execute(
+    "SELECT id,name,color,is_active isActive FROM note_categories WHERE id=?",
+    [id],
+  );
+  if (!existing) throw new ApiError(404, "Note category not found");
+  if (data.name) {
+    const [[duplicate]] = await pool.execute(
+      "SELECT id FROM note_categories WHERE LOWER(name)=LOWER(?) AND id<>?",
+      [data.name, id],
+    );
+    if (duplicate)
+      throw new ApiError(409, "A note category with this name already exists");
+  }
+  if (data.isActive === false)
+    throw new ApiError(
+      400,
+      "Archive the category and choose how to move its notes",
+    );
+  await pool.execute(
+    `UPDATE note_categories SET name=COALESCE(?,name),color=?,is_active=COALESCE(?,is_active),
+       archived_at=IF(?=1,NULL,archived_at) WHERE id=?`,
+    [
+      data.name || null,
+      Object.prototype.hasOwnProperty.call(data, "color")
+        ? data.color
+        : existing.color,
+      data.isActive ?? null,
+      data.isActive ?? null,
+      id,
+    ],
+  );
+  await logAudit({
+    userId: user.id,
+    employeeId: user.employee_id,
+    action: "NOTE_CATEGORY_UPDATED",
+    entityType: "NOTE_CATEGORY",
+    entityId: id,
+    description: `Note category “${existing.name}” was updated.`,
+  });
+  return { id: Number(id) };
+}
+
+export async function reorderCategories(categoryIds, user) {
+  await requireCategoryManager(user);
+  if (new Set(categoryIds.map(Number)).size !== categoryIds.length)
+    throw new ApiError(400, "Category order contains duplicate entries");
+  const [existing] = await pool.query(
+    "SELECT id FROM note_categories WHERE is_active=1 ORDER BY id",
+  );
+  const expected = existing.map((row) => Number(row.id)).sort((a, b) => a - b);
+  const received = categoryIds.map(Number).sort((a, b) => a - b);
+  if (
+    expected.length !== received.length ||
+    expected.some((id, i) => id !== received[i])
+  )
+    throw new ApiError(
+      400,
+      "Category order must include every active category once",
+    );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    for (const [index, categoryId] of categoryIds.entries())
+      await connection.execute(
+        "UPDATE note_categories SET sort_order=? WHERE id=?",
+        [(index + 1) * 10, categoryId],
+      );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await logAudit({
+    userId: user.id,
+    employeeId: user.employee_id,
+    action: "NOTE_CATEGORIES_REORDERED",
+    entityType: "NOTE_CATEGORY",
+    description: "Active note categories were reordered.",
+  });
+  return { categoryIds: categoryIds.map(Number) };
+}
+
+export async function archiveCategory(id, data, user) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await requireCategoryManager(user, connection);
+    const [[category]] = await connection.execute(
+      "SELECT id,name,is_active isActive FROM note_categories WHERE id=? FOR UPDATE",
+      [id],
+    );
+    if (!category) throw new ApiError(404, "Note category not found");
+    if (data.mode === "REASSIGN") {
+      if (Number(data.targetCategoryId) === Number(id))
+        throw new ApiError(400, "Choose a different destination category");
+      await requireActiveCategory(data.targetCategoryId, connection);
+    }
+    const target = data.mode === "REASSIGN" ? data.targetCategoryId : null;
+    const [moved] = await connection.execute(
+      "UPDATE work_notes SET category_id=? WHERE category_id=?",
+      [target, id],
+    );
+    await connection.execute(
+      "UPDATE note_categories SET is_active=0,archived_at=CURRENT_TIMESTAMP WHERE id=?",
+      [id],
+    );
+    await connection.execute(
+      "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description) VALUES(?,?,'NOTE_CATEGORY_ARCHIVED','NOTE_CATEGORY',?,?)",
+      [
+        user.id,
+        user.employee_id,
+        id,
+        `Note category “${category.name}” was archived; ${moved.affectedRows} note(s) were ${target ? "reassigned" : "set to Uncategorized"}.`,
+      ],
+    );
+    await connection.commit();
+    return { id: Number(id), affectedNotes: Number(moved.affectedRows) };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function deleteCategory(id, data, user) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await requireCategoryManager(user, connection);
+    const [[category]] = await connection.execute(
+      "SELECT id,name,is_active isActive FROM note_categories WHERE id=? FOR UPDATE",
+      [id],
+    );
+    if (!category) throw new ApiError(404, "Note category not found");
+    if (category.isActive)
+      throw new ApiError(
+        409,
+        "Archive this category before deleting it permanently",
+      );
+    const [[usage]] = await connection.execute(
+      "SELECT COUNT(*) noteCount FROM work_notes WHERE category_id=?",
+      [id],
+    );
+    if (Number(usage.noteCount))
+      throw new ApiError(
+        409,
+        "Reassign this category's notes before deleting it",
+      );
+    if (data.confirmName !== category.name)
+      throw new ApiError(400, "Category name confirmation does not match");
+    await connection.execute("DELETE FROM note_categories WHERE id=?", [id]);
+    await connection.execute(
+      "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description) VALUES(?,?,'NOTE_CATEGORY_DELETED','NOTE_CATEGORY',?,?)",
+      [
+        user.id,
+        user.employee_id,
+        id,
+        `Archived note category “${category.name}” was permanently deleted. No notes were deleted.`,
+      ],
+    );
+    await connection.commit();
+    return { id: Number(id), deleted: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function get(id, user, includeArchived = false) {
@@ -324,6 +582,7 @@ export async function create(data, user) {
   let noteId;
   try {
     await connection.beginTransaction();
+    await requireActiveCategory(data.categoryId, connection);
     let task = null;
     if (data.relatedTaskId) {
       const [[row]] = await connection.execute(
@@ -349,7 +608,7 @@ export async function create(data, user) {
       task = row;
     }
     const [result] = await connection.execute(
-      "INSERT INTO work_notes(title,summary,content,author_user_id,visibility,is_important,related_task_id,related_task_title,status,published_at)VALUES(?,?,?,?,?,?,?,?,'PUBLISHED',CURRENT_TIMESTAMP)",
+      "INSERT INTO work_notes(title,summary,content,author_user_id,visibility,is_important,related_task_id,related_task_title,category_id,status,published_at)VALUES(?,?,?,?,?,?,?,?,?,'PUBLISHED',CURRENT_TIMESTAMP)",
       [
         data.title,
         data.summary,
@@ -359,6 +618,7 @@ export async function create(data, user) {
         data.isImportant,
         task?.id || null,
         task?.title || null,
+        data.categoryId,
       ],
     );
     noteId = result.insertId;
@@ -418,14 +678,16 @@ export async function update(id, data, user) {
     previous = await requireNoteOwner(id, user, connection, true);
     if (previous.isArchived)
       throw new ApiError(400, "Restore this note before editing it");
+    await requireActiveCategory(data.categoryId, connection);
     await connection.execute(
-      "UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=? WHERE id=?",
+      "UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=?,category_id=? WHERE id=?",
       [
         data.title,
         data.summary,
         data.content,
         data.visibility,
         data.isImportant,
+        data.categoryId,
         id,
       ],
     );
@@ -643,6 +905,7 @@ export async function exportDocx(filters, user) {
     );
     const details = [
       `Created by: ${note.authorName}`,
+      `Category: ${note.categoryName || "Uncategorized"}`,
       `Created: ${displayDate(note.createdAt)}`,
       `Updated: ${displayDate(note.updatedAt)}`,
       `Visibility: ${{ TEAM: "All Team Members", PRIVATE: "Private", CEO_ONLY: "Only CEO" }[note.visibility]}`,

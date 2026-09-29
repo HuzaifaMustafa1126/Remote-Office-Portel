@@ -14,6 +14,10 @@ const listFields = {
   endDate: z.string().date().optional(),
   sort: z.enum(["NEWEST", "OLDEST", "UPDATED", "IMPORTANT"]).default("NEWEST"),
   relatedTaskId: z.coerce.number().int().positive().optional(),
+  categoryId: z
+    .string()
+    .regex(/^(UNCATEGORIZED|[1-9]\d*)$/)
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 };
@@ -39,6 +43,7 @@ const fields = {
   visibility: z.enum(["TEAM", "PRIVATE", "CEO_ONLY"]),
   isImportant: z.boolean().default(false),
   relatedTaskId: z.number().int().positive().optional().nullable(),
+  categoryId: z.number().int().positive(),
 };
 export const createSchema = z.object(fields).strict();
 export const updateSchema = z
@@ -52,3 +57,40 @@ export const exportSchema = z
   .omit({ page: true, limit: true })
   .strict()
   .superRefine(validDates);
+const color = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a six-digit hex value")
+  .optional()
+  .nullable();
+export const categoryCreateSchema = z
+  .object({ name: z.string().trim().min(1).max(80), color })
+  .strict();
+export const categoryUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    color,
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "No changes supplied");
+export const categoryReorderSchema = z
+  .object({ categoryIds: z.array(identifier).min(1).max(200) })
+  .strict();
+export const categoryRemoveSchema = z
+  .object({
+    mode: z.enum(["UNCATEGORIZED", "REASSIGN"]),
+    targetCategoryId: identifier.optional().nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.mode === "REASSIGN" && !value.targetCategoryId)
+      context.addIssue({
+        code: "custom",
+        path: ["targetCategoryId"],
+        message: "A destination category is required",
+      });
+  });
+export const categoryDeleteSchema = z
+  .object({ confirmName: z.string().trim().min(1).max(80) })
+  .strict();

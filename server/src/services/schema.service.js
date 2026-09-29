@@ -80,6 +80,7 @@ const requiredColumns = {
     "estimated_remaining_value",
     "estimated_remaining_unit",
   ],
+  note_categories: ["color", "sort_order", "created_by", "updated_at", "archived_at"],
   notification_preferences: ["availability_notifications"],
   auth_sessions: [
     "browser",
@@ -141,6 +142,7 @@ const requiredMigrations = [
   "059_day_end_report_discussion_history.sql",
   "060_day_end_report_followups.sql",
   "061_flexible_estimates_multiple_ongoing_timers.sql",
+  "062_note_category_management.sql",
 ];
 
 export async function validateSchema() {

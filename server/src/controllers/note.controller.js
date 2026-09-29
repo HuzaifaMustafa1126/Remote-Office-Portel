@@ -1,6 +1,34 @@
 import * as s from "../services/note.service.js";
 export const authors = async (req, res) =>
   res.json({ success: true, data: await s.authors(req.user) });
+export const categories = async (req, res) =>
+  res.json({ success: true, data: await s.categories(req.user) });
+export const managedCategories = async (req, res) =>
+  res.json({ success: true, data: await s.categories(req.user, true) });
+export const createCategory = async (req, res) =>
+  res
+    .status(201)
+    .json({ success: true, data: await s.createCategory(req.body, req.user) });
+export const updateCategory = async (req, res) =>
+  res.json({
+    success: true,
+    data: await s.updateCategory(req.params.categoryId, req.body, req.user),
+  });
+export const reorderCategories = async (req, res) =>
+  res.json({
+    success: true,
+    data: await s.reorderCategories(req.body.categoryIds, req.user),
+  });
+export const archiveCategory = async (req, res) =>
+  res.json({
+    success: true,
+    data: await s.archiveCategory(req.params.categoryId, req.body, req.user),
+  });
+export const deleteCategory = async (req, res) =>
+  res.json({
+    success: true,
+    data: await s.deleteCategory(req.params.categoryId, req.body, req.user),
+  });
 export const togglePin = async (req, res) =>
   res.json({ success: true, data: await s.togglePin(req.params.id, req.user) });
 export const list = async (req, res) =>

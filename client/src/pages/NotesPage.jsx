@@ -8,6 +8,7 @@ import {
   Download,
   Eye,
   FileText,
+  Folder,
   Image,
   Info,
   Lock,
@@ -23,6 +24,9 @@ import {
   Trash2,
   Upload,
   Users,
+  Settings2,
+  ArrowUp,
+  ArrowDown,
   X,
 } from "lucide-react";
 import {
@@ -45,6 +49,7 @@ const empty = {
     content: "",
     visibility: "TEAM",
     isImportant: false,
+    categoryId: "",
   },
   stamp = (v) =>
     new Intl.DateTimeFormat("en-PK", {
@@ -67,6 +72,9 @@ export default function NotesPage() {
     [visibility, setVisibility] = useState(() => remembered("visibility")),
     [importance, setImportance] = useState(() => remembered("importance")),
     [source, setSource] = useState(() => remembered("source")),
+    [categoryId, setCategoryId] = useState(() => remembered("categoryId")),
+    [categoryData, setCategoryData] = useState({ categories: [], uncategorizedCount: 0, canManage: false }),
+    [categoryManagerOpen, setCategoryManagerOpen] = useState(false),
     [tab, setTab] = useState(
       () => sessionStorage.getItem("notes.tab") || "ALL",
     ),
@@ -123,6 +131,7 @@ export default function NotesPage() {
         visibility: visibility || undefined,
         importance: importance || undefined,
         source: source || undefined,
+        categoryId: categoryId || undefined,
         tab,
         authorEmployeeId: author || undefined,
         dateRange,
@@ -142,6 +151,7 @@ export default function NotesPage() {
     visibility,
     importance,
     source,
+    categoryId,
     tab,
     author,
     dateRange,
@@ -159,6 +169,10 @@ export default function NotesPage() {
       .then(setAuthors)
       .catch(() => {});
   }, []);
+  const loadCategories = useCallback(() => {
+    api.listNoteCategories().then(setCategoryData).catch(() => {});
+  }, []);
+  useEffect(() => { loadCategories(); }, [loadCategories]);
   useEffect(() => {
     Object.entries({
       tab,
@@ -166,6 +180,7 @@ export default function NotesPage() {
       visibility,
       importance,
       source,
+      categoryId,
       author,
       dateRange,
       startDate,
@@ -178,6 +193,7 @@ export default function NotesPage() {
     visibility,
     importance,
     source,
+    categoryId,
     author,
     dateRange,
     startDate,
@@ -228,6 +244,7 @@ export default function NotesPage() {
         visibility: visibility || undefined,
         importance: importance || undefined,
         source: source || undefined,
+        categoryId: categoryId || undefined,
         authorEmployeeId: author || undefined,
         dateRange,
         startDate: startDate || undefined,
@@ -322,13 +339,20 @@ export default function NotesPage() {
             Keep track of important work information and updates.
           </p>
         </div>
-        <Button
-          onClick={() => setEditing({ ...empty })}
-          className="inline-flex items-center gap-2 !bg-success hover:!brightness-95"
-        >
-          <Plus size={17} />
-          Add Note
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {categoryData.canManage && (
+            <Button variant="secondary" onClick={() => setCategoryManagerOpen(true)}>
+              <Settings2 size={16} className="mr-2 inline" /> Manage Categories
+            </Button>
+          )}
+          <Button
+            onClick={() => setEditing({ ...empty })}
+            className="inline-flex items-center gap-2 !bg-success hover:!brightness-95"
+          >
+            <Plus size={17} />
+            Add Note
+          </Button>
+        </div>
       </header>
       <nav
         className="flex overflow-x-auto border-b border-border"
@@ -363,8 +387,37 @@ export default function NotesPage() {
           Archived
         </button>
       </nav>
-      <section className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-[220px] flex-1 xl:max-w-[360px]">
+      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Note categories">
+        <button
+          type="button"
+          onClick={() => { setCategoryId(""); setPage(1); }}
+          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${!categoryId ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
+        >
+          All categories
+        </button>
+        {categoryData.categories.map((category) => (
+          <button
+            type="button"
+            key={category.id}
+            onClick={() => { setCategoryId(String(category.id)); setPage(1); }}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${String(categoryId) === String(category.id) ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color || "#64748b" }} />
+            {category.name} <span className="text-muted-foreground">{category.noteCount}</span>
+          </button>
+        ))}
+        {categoryData.uncategorizedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => { setCategoryId("UNCATEGORIZED"); setPage(1); }}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${categoryId === "UNCATEGORIZED" ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
+          >
+            Uncategorized <span className="text-muted-foreground">{categoryData.uncategorizedCount}</span>
+          </button>
+        )}
+      </nav>
+      <section className="grid grid-cols-1 items-center gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-[minmax(220px,1.5fr)_repeat(6,minmax(125px,1fr))_auto]">
+        <label className="relative min-w-0">
           <Search
             size={17}
             className="absolute left-3.5 top-3.5 text-muted-foreground"
@@ -380,6 +433,18 @@ export default function NotesPage() {
             placeholder="Search notes..."
           />
         </label>
+        <CompactFilter
+          label="Category"
+          icon={Folder}
+          value={categoryId}
+          setValue={setCategoryId}
+          setPage={setPage}
+          options={[
+            ["", "All categories"],
+            ...categoryData.categories.map((category) => [String(category.id), category.name]),
+            ...(categoryData.uncategorizedCount ? [["UNCATEGORIZED", "Uncategorized"]] : []),
+          ]}
+        />
         <CompactFilter
           label="Visibility"
           icon={Eye}
@@ -443,7 +508,7 @@ export default function NotesPage() {
             ["IMPORTANT", "Important First"],
           ]}
         />
-        <span className="relative ml-auto">
+        <span className="relative sm:col-span-2 lg:col-span-1 lg:justify-self-end 2xl:col-span-1">
           <button
             type="button"
             disabled={exporting}
@@ -452,7 +517,7 @@ export default function NotesPage() {
               setExportOpen((value) => !value);
               setMenuId(null);
             }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border border-success/40 px-3.5 text-sm font-semibold text-success disabled:opacity-55"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-success/40 px-3.5 text-sm font-semibold text-success disabled:opacity-55 2xl:w-auto"
           >
             <Download size={16} />
             {exporting ? "Exporting..." : "Export"}
@@ -585,6 +650,9 @@ export default function NotesPage() {
                         ↗ Related Task: {n.relatedTaskTitle}
                       </span>
                     )}
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <Folder size={13} /> {n.categoryName || "Uncategorized"}
+                    </span>
                   </span>
                 </span>
               </button>
@@ -727,7 +795,7 @@ export default function NotesPage() {
       ) : (
         <Empty
           title={
-            query || visibility || importance || source || dateRange !== "ALL"
+            query || visibility || importance || source || categoryId || dateRange !== "ALL"
               ? "No matching notes found."
               : tab === "PINNED"
                 ? "No pinned notes yet."
@@ -742,7 +810,7 @@ export default function NotesPage() {
                         : "No notes yet"
           }
           detail={
-            query || visibility || importance || source || dateRange !== "ALL"
+            query || visibility || importance || source || categoryId || dateRange !== "ALL"
               ? "Try changing your search or filters."
               : "Create your first note to keep track of important work information."
           }
@@ -788,13 +856,21 @@ export default function NotesPage() {
         <Editor
           note={editing}
           author={user.name}
+          categories={categoryData.categories}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setEditing(null);
             load();
+            loadCategories();
             setSelected(saved);
             navigate(`/notes/${saved.id}`);
           }}
+        />
+      )}
+      {categoryManagerOpen && (
+        <CategoryManager
+          onClose={() => setCategoryManagerOpen(false)}
+          onChanged={() => { loadCategories(); load(); }}
         />
       )}
       {selected && (
@@ -889,7 +965,7 @@ function CompactFilter({
   options,
 }) {
   return (
-    <label className="relative inline-flex h-11 items-center rounded-xl border border-border bg-surface pl-3 text-muted-foreground">
+    <label className="relative flex h-11 min-w-0 w-full items-center rounded-xl border border-border bg-surface pl-3 text-muted-foreground transition focus-within:border-success focus-within:ring-2 focus-within:ring-success/15">
       {Icon && <Icon size={15} />}
       <span className="sr-only">{label}</span>
       <select
@@ -899,7 +975,7 @@ function CompactFilter({
           setValue(e.target.value);
           setPage(1);
         }}
-        className="h-full max-w-[154px] appearance-none bg-transparent py-0 pl-2 pr-7 text-sm font-semibold text-foreground outline-none"
+        className="h-full min-w-0 w-full appearance-none truncate bg-transparent py-0 pl-2 pr-7 text-sm font-semibold text-foreground outline-none focus-visible:outline-none"
       >
         {options.map(([key, text]) => (
           <option key={key} value={key}>
@@ -965,7 +1041,129 @@ function Empty({ title, detail, action, onAction }) {
     </section>
   );
 }
-function Editor({ note, author, onClose, onSaved }) {
+function CategoryManager({ onClose, onChanged }) {
+  const [items, setItems] = useState([]),
+    [name, setName] = useState(""),
+    [color, setColor] = useState("#64748b"),
+    [editing, setEditing] = useState(null),
+    [archiving, setArchiving] = useState(null),
+    [deleting, setDeleting] = useState(null),
+    [deleteConfirmation, setDeleteConfirmation] = useState(""),
+    [target, setTarget] = useState("UNCATEGORIZED"),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    const result = await api.listNoteCategories(true);
+    setItems(result.categories);
+  }, []);
+  useEffect(() => { refresh().catch((e) => setError(errorMessage(e))); }, [refresh]);
+  const perform = async (action) => {
+    setBusy(true); setError("");
+    try { await action(); await refresh(); onChanged(); }
+    catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(false); }
+  };
+  const active = items.filter((item) => item.isActive);
+  const move = (id, offset) => {
+    const index = active.findIndex((item) => Number(item.id) === Number(id));
+    const next = index + offset;
+    if (index < 0 || next < 0 || next >= active.length) return;
+    const ordered = [...active];
+    [ordered[index], ordered[next]] = [ordered[next], ordered[index]];
+    perform(() => api.reorderNoteCategories(ordered.map((item) => item.id)));
+  };
+  return (
+    <Modal open title="Manage Note Categories" onClose={() => !busy && onClose()}>
+      <p className="text-sm text-muted-foreground">Categories are shared with the company. Archiving one never deletes its notes.</p>
+      {error && <p className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+      <form
+        className="mt-4 flex flex-wrap gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          perform(async () => {
+            await api.createNoteCategory({ name: name.trim(), color });
+            setName("");
+          });
+        }}
+      >
+        <input required maxLength="80" className="input mt-0 min-w-[190px] flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name" />
+        <input type="color" aria-label="Category color" className="h-11 w-12 rounded-lg border border-border bg-surface p-1" value={color} onChange={(e) => setColor(e.target.value)} />
+        <Button disabled={busy || !name.trim()} type="submit"><Plus size={15} className="mr-1 inline" /> Add</Button>
+      </form>
+      <div className="mt-4 max-h-[46vh] space-y-2 overflow-y-auto pr-1">
+        {items.map((item) => (
+          <div key={item.id} className={`rounded-xl border border-border p-3 ${item.isActive ? "" : "opacity-65"}`}>
+            {editing?.id === item.id ? (
+              <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); perform(async () => { await api.updateNoteCategory(item.id, { name: editing.name.trim(), color: editing.color }); setEditing(null); }); }}>
+                <input required maxLength="80" className="input mt-0 min-w-[180px] flex-1" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+                <input type="color" aria-label="Category color" className="h-11 w-12 rounded-lg border border-border p-1" value={editing.color || "#64748b"} onChange={(e) => setEditing({ ...editing, color: e.target.value })} />
+                <Button disabled={busy} type="submit">Save</Button>
+                <Button variant="secondary" type="button" onClick={() => setEditing(null)}>Cancel</Button>
+              </form>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color || "#64748b" }} />
+                <strong className="min-w-0 flex-1 truncate text-sm">{item.name}</strong>
+                <span className="text-xs text-muted-foreground">{item.noteCount} notes</span>
+                {item.isActive ? <>
+                  <button type="button" disabled={busy} aria-label={`Move ${item.name} up`} onClick={() => move(item.id, -1)} className="rounded-lg border border-border p-2"><ArrowUp size={14} /></button>
+                  <button type="button" disabled={busy} aria-label={`Move ${item.name} down`} onClick={() => move(item.id, 1)} className="rounded-lg border border-border p-2"><ArrowDown size={14} /></button>
+                  <button type="button" disabled={busy} onClick={() => setEditing({ id: item.id, name: item.name, color: item.color || "#64748b" })} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">Edit</button>
+                  <button type="button" disabled={busy} onClick={() => { setArchiving(item); setTarget("UNCATEGORIZED"); }} className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger">Archive</button>
+                </> : <>
+                  <button type="button" disabled={busy} onClick={() => perform(() => api.updateNoteCategory(item.id, { isActive: true }))} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">Reactivate</button>
+                  <button type="button" disabled={busy} onClick={() => { setDeleting(item); setDeleteConfirmation(""); setArchiving(null); }} className="inline-flex items-center gap-1 rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger"><Trash2 size={13} /> Delete</button>
+                </>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {archiving && (
+        <div className="mt-4 rounded-xl border border-warning/30 bg-warning-soft p-4">
+          <p className="text-sm font-bold">Archive “{archiving.name}”?</p>
+          <p className="mt-1 text-xs text-muted-foreground">Choose where its {archiving.noteCount} note(s) should go.</p>
+          <select className="input mt-3" value={target} onChange={(e) => setTarget(e.target.value)}>
+            <option value="UNCATEGORIZED">Move to Uncategorized</option>
+            {active.filter((item) => item.id !== archiving.id).map((item) => <option key={item.id} value={item.id}>Reassign to {item.name}</option>)}
+          </select>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="secondary" disabled={busy} onClick={() => setArchiving(null)}>Cancel</Button>
+            <Button disabled={busy} onClick={() => perform(async () => { await api.archiveNoteCategory(archiving.id, target === "UNCATEGORIZED" ? { mode: "UNCATEGORIZED", targetCategoryId: null } : { mode: "REASSIGN", targetCategoryId: Number(target) }); setArchiving(null); })}>Archive Category</Button>
+          </div>
+        </div>
+      )}
+      {deleting && (
+        <div className="mt-4 rounded-xl border border-danger/30 bg-danger-soft p-4">
+          <p className="text-sm font-bold text-danger">Permanently delete “{deleting.name}”?</p>
+          <p className="mt-1 text-xs text-muted-foreground">This removes only the archived category. Notes are never deleted. Type the category name to confirm.</p>
+          <input
+            className="input mt-3"
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            placeholder={deleting.name}
+            autoComplete="off"
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button
+              disabled={busy || deleteConfirmation !== deleting.name}
+              onClick={() => perform(async () => {
+                await api.deleteNoteCategory(deleting.id, deleteConfirmation);
+                setDeleting(null);
+                setDeleteConfirmation("");
+              })}
+            >
+              Delete Permanently
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function Editor({ note, author, categories, onClose, onSaved }) {
   const initial = useRef({ ...empty, ...note }),
     fileInput = useRef(null);
   const [form, setForm] = useState(initial.current),
@@ -1019,6 +1217,7 @@ function Editor({ note, author, onClose, onSaved }) {
           visibility: form.visibility,
           isImportant: form.isImportant,
           relatedTaskId: form.relatedTaskId || null,
+          categoryId: Number(form.categoryId),
           ...(note.id ? { notifyViewers: Boolean(form.notifyViewers) } : {}),
         },
         initialSaved = note.id
@@ -1130,6 +1329,17 @@ function Editor({ note, author, onClose, onSaved }) {
               placeholder="Write a short summary..."
             />
           </CounterField>
+          <label className="block text-xs font-semibold text-foreground">
+            Category <span className="text-danger">*</span>
+            <SearchableCategoryPicker
+              categories={categories}
+              value={form.categoryId}
+              onChange={(value) => setForm({ ...form, categoryId: value })}
+            />
+            {!categories.length && (
+              <span className="mt-1 block text-[11px] text-danger">No active category is available. Ask the CEO to create one.</span>
+            )}
+          </label>
           <label className="block text-xs font-semibold text-foreground">
             Note Content <span className="text-danger">*</span>
             <textarea
@@ -1368,6 +1578,33 @@ function CounterField({ label, count, max, children }) {
     </label>
   );
 }
+function SearchableCategoryPicker({ categories, value, onChange }) {
+  const selectedName = categories.find((item) => String(item.id) === String(value))?.name || "";
+  const [text, setText] = useState(selectedName);
+  useEffect(() => { setText(selectedName); }, [selectedName]);
+  return (
+    <>
+      <input
+        required
+        list="active-note-categories"
+        className="input mt-1.5 h-11"
+        value={text}
+        placeholder="Search and select a category..."
+        onChange={(event) => {
+          const next = event.target.value;
+          const match = categories.find((item) => item.name.toLowerCase() === next.trim().toLowerCase());
+          setText(next);
+          onChange(match ? String(match.id) : "");
+          event.target.setCustomValidity(match || !next ? "" : "Select a category from the list");
+        }}
+        onBlur={(event) => event.target.setCustomValidity(value ? "" : "Select a category from the list")}
+      />
+      <datalist id="active-note-categories">
+        {categories.map((category) => <option key={category.id} value={category.name} />)}
+      </datalist>
+    </>
+  );
+}
 function ImagePreview({ name, onRemove, children }) {
   return (
     <span className="relative w-28 overflow-hidden rounded-xl border border-border bg-surface-secondary p-1.5 text-xs">
@@ -1416,6 +1653,9 @@ function Detail({
         <header className="flex justify-between border-b p-5">
           <div>
             <div className="flex gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[10px] text-success">
+                <Folder size={11} /> {note.categoryName || "Uncategorized"}
+              </span>
               <span className="rounded-full bg-surface-secondary px-2 py-1 text-[10px]">
                 {labels[note.visibility]}
               </span>
