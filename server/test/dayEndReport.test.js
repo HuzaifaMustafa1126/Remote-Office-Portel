@@ -25,6 +25,21 @@ test("migration links one report to one attendance workday and stores relational
   assert.match(sql, /ON DELETE SET NULL/);
 });
 
+test("flexible estimates preserve units and historical minute snapshots", () => {
+  assert.equal(submitSchema.safeParse({
+    ...base,
+    items: [{ sourceType: "TASK", sourceId: 1, whatsLeft: "Testing", estimatedRemaining: { value: 3, unit: "DAYS" } }],
+  }).success, true);
+  assert.equal(submitSchema.safeParse({
+    ...base,
+    items: [{ sourceType: "TASK", sourceId: 1, whatsLeft: "Testing", estimatedRemaining: { value: 31, unit: "DAYS" } }],
+  }).success, false);
+  const sql = fs.readFileSync(new URL("../database/migrations/061_flexible_estimates_multiple_ongoing_timers.sql", import.meta.url), "utf8");
+  assert.match(sql, /estimated_remaining_value/);
+  assert.match(sql, /estimated_remaining_unit ENUM\('MINUTES','HOURS','DAYS'\)/);
+  assert.match(sql, /estimated_remaining_value=estimated_remaining_minutes/);
+});
+
 test("clock out is backend-protected by submitted report enforcement", () => {
   const attendance = fs.readFileSync(new URL("../src/services/attendance.service.js", import.meta.url), "utf8");
   const reports = fs.readFileSync(new URL("../src/services/dayEndReport.service.js", import.meta.url), "utf8");

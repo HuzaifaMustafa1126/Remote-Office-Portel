@@ -149,8 +149,8 @@ export default function TeamOngoingWorkPage() {
   return (
     <main className="min-w-0">
       <PageHeader title="Team Ongoing Work" description="Live, read-only visibility into employee-created ongoing work." />
-      {summary && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[[Users, "Employees Working Now", summary.employeesWorkingNow], [PauseCircle, "Paused Work", summary.pausedWork], [CheckCircle2, "Completed Today", summary.completedToday], [Clock3, "Total Active Work Items", summary.totalActiveWorkItems]].map(([Icon, label, value]) => (
+      {summary && <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[[Users, "Employees Working Now", summary.employeesWorkingNow], [Clock3, "Active Ongoing Work Items", summary.activeOngoingWorkItems], [PauseCircle, "Paused Work", summary.pausedWork], [CheckCircle2, "Completed Today", summary.completedToday], [Clock3, "Total Ongoing Items", summary.totalActiveWorkItems]].map(([Icon, label, value]) => (
           <article key={label} className="rounded-2xl border border-border bg-surface p-4 shadow-sm"><Icon size={18} className="text-primary-text" /><p className="mt-3 text-2xl font-black">{value}</p><p className="text-xs text-muted-foreground">{label}</p></article>
         ))}
       </div>}

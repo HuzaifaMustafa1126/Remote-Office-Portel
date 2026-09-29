@@ -72,8 +72,13 @@ const requiredColumns = {
     "started_at",
     "ended_at",
     "duration_seconds",
-    "active_employee_id",
+    "active_ongoing_work_id",
     "attendance_record_id",
+  ],
+  day_end_report_items: [
+    "estimated_remaining_minutes",
+    "estimated_remaining_value",
+    "estimated_remaining_unit",
   ],
   notification_preferences: ["availability_notifications"],
   auth_sessions: [
@@ -135,6 +140,7 @@ const requiredMigrations = [
   "058_day_end_report_phase2.sql",
   "059_day_end_report_discussion_history.sql",
   "060_day_end_report_followups.sql",
+  "061_flexible_estimates_multiple_ongoing_timers.sql",
 ];
 
 export async function validateSchema() {

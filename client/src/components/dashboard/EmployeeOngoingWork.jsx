@@ -146,10 +146,8 @@ export default function EmployeeOngoingWork({ attendanceStatus, previousOngoingW
   };
   const timerLabel = (row) => {
     const hasPreviousTime = Number(row.totalTimeSpent || 0) > 0;
-    const switching = activeRows.some((item) => item.status === "WORKING" && item.id !== row.id);
     if (busyId === row.id) {
       if (row.status === "WORKING") return "Pausing…";
-      if (switching) return "Switching…";
       return hasPreviousTime ? "Resuming…" : "Starting…";
     }
     if (row.status === "WORKING") return "Pause";

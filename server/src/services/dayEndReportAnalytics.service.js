@@ -70,6 +70,7 @@ export async function analytics({ from, to, employeeId }) {
        SELECT r.id reportId,r.employee_id employeeId,CONCAT(e.first_name,' ',e.last_name) employeeName,r.report_date reportDate,
         r.blocker_type blockerType,i.source_type sourceType,i.title_snapshot title,i.status_snapshot status,
         i.whats_left whatsLeft,i.estimated_remaining_minutes estimatedRemainingMinutes,
+        i.estimated_remaining_value estimatedRemainingValue,i.estimated_remaining_unit estimatedRemainingUnit,
         ROW_NUMBER() OVER(PARTITION BY r.employee_id,i.source_type,
           COALESCE(CAST(i.task_id AS CHAR),CAST(i.ongoing_work_id AS CHAR),CONCAT('TITLE:',i.title_snapshot))
           ORDER BY r.report_date DESC,r.id DESC,i.id DESC) rn

@@ -1,10 +1,10 @@
 import pool from "../config/database.js";
 
 const checks = {
-  multipleActiveTimers: `
-    SELECT employee_id employeeId,COUNT(*) activeTimers
+  duplicateActiveItemSessions: `
+    SELECT employee_id employeeId,ongoing_work_id ongoingWorkId,COUNT(*) activeSessions
     FROM ongoing_work_sessions WHERE ended_at IS NULL
-    GROUP BY employee_id HAVING COUNT(*)>1`,
+    GROUP BY employee_id,ongoing_work_id HAVING COUNT(*)>1`,
   statusSessionMismatch: `
     SELECT ow.id ongoingWorkId,ow.employee_id employeeId,ow.status,
       COUNT(s.id) activeSessions

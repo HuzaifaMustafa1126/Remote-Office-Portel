@@ -3,6 +3,7 @@ import ApiError from "../utils/ApiError.js";
 import { notifyByPolicy } from "./notification.service.js";
 import { getCompanyDayStatus } from "../utils/workingDay.js";
 import { getEffectivePermission } from "./effectivePermission.service.js";
+import { normalizeEstimate } from "../utils/reportDuration.js";
 
 async function activeAttendance(user, executor = pool, lock = false) {
   if (!user.employee_id) throw new ApiError(403, "Employee profile required");
@@ -53,11 +54,18 @@ async function reportDetails(id, executor = pool) {
   const [items] = await executor.execute(
     `SELECT id reportItemId,source_type sourceType,COALESCE(task_id,ongoing_work_id) sourceId,
       title_snapshot title,status_snapshot status,tracked_minutes_snapshot trackedMinutes,
-      summary,whats_left whatsLeft,estimated_remaining_minutes estimatedRemainingMinutes
+      summary,whats_left whatsLeft,estimated_remaining_minutes estimatedRemainingMinutes,
+      estimated_remaining_value estimatedRemainingValue,estimated_remaining_unit estimatedRemainingUnit
      FROM day_end_report_items WHERE report_id=? ORDER BY id`,
     [id],
   );
-  return { ...report, items };
+  return { ...report, items: items.map((item) => ({
+    ...item,
+    estimatedRemaining: item.estimatedRemainingValue == null ? null : {
+      value: Number(item.estimatedRemainingValue),
+      unit: item.estimatedRemainingUnit,
+    },
+  })) };
 }
 
 export async function workItemsForAttendance(
@@ -184,7 +192,7 @@ export async function submit(data, user) {
         );
       if (
         source.status !== "COMPLETED" &&
-        (!input.whatsLeft || !input.estimatedRemainingMinutes)
+        (!input.whatsLeft || !normalizeEstimate(input))
       )
         throw new ApiError(
           400,
@@ -209,8 +217,9 @@ export async function submit(data, user) {
     for (const { input, source } of resolved)
       await connection.execute(
         `INSERT INTO day_end_report_items(report_id,source_type,task_id,ongoing_work_id,title_snapshot,
-         status_snapshot,tracked_minutes_snapshot,summary,whats_left,estimated_remaining_minutes)
-         VALUES(?,?,?,?,?,?,?,?,?,?)`,
+         status_snapshot,tracked_minutes_snapshot,summary,whats_left,estimated_remaining_minutes,
+         estimated_remaining_value,estimated_remaining_unit)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           created.insertId,
           source.sourceType,
@@ -221,9 +230,9 @@ export async function submit(data, user) {
           source.trackedMinutes,
           input.summary || null,
           source.status === "COMPLETED" ? null : input.whatsLeft,
-          source.status === "COMPLETED"
-            ? null
-            : input.estimatedRemainingMinutes,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).minutes,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).value,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).unit,
         ],
       );
     await connection.execute(
@@ -333,7 +342,7 @@ export async function update(id, data, user) {
           );
         if (
           source.status !== "COMPLETED" &&
-          (!input.whatsLeft || !input.estimatedRemainingMinutes)
+          (!input.whatsLeft || !normalizeEstimate(input))
         )
           throw new ApiError(
             400,
@@ -357,7 +366,7 @@ export async function update(id, data, user) {
     );
     for (const { input, source } of resolved)
       await connection.execute(
-        `INSERT INTO day_end_report_items(report_id,source_type,task_id,ongoing_work_id,title_snapshot,status_snapshot,tracked_minutes_snapshot,summary,whats_left,estimated_remaining_minutes) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO day_end_report_items(report_id,source_type,task_id,ongoing_work_id,title_snapshot,status_snapshot,tracked_minutes_snapshot,summary,whats_left,estimated_remaining_minutes,estimated_remaining_value,estimated_remaining_unit) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           source.sourceType,
@@ -368,9 +377,9 @@ export async function update(id, data, user) {
           source.trackedMinutes,
           input.summary || null,
           source.status === "COMPLETED" ? null : input.whatsLeft,
-          source.status === "COMPLETED"
-            ? null
-            : input.estimatedRemainingMinutes,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).minutes,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).value,
+          source.status === "COMPLETED" ? null : normalizeEstimate(input).unit,
         ],
       );
     await connection.execute(

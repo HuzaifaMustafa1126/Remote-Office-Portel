@@ -98,12 +98,21 @@ export default function TaskFormDrawer({ task, onClose, onSaved }) {
   };
   const chooseFiles = (e) => {
     const next = [...e.target.files],
-      allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      allowed = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/x-ms-bmp",
+        "image/avif",
+      ];
     let error = "";
     if (existing.length + files.length + next.length > 5)
       error = "Maximum 5 images allowed";
     else if (next.some((x) => !allowed.includes(x.type)))
-      error = "Unsupported image type";
+      error = "Use a JPG, PNG, WebP, GIF, BMP, or AVIF image";
     else if (next.some((x) => x.size > 10 * 1024 * 1024))
       error = "Image exceeds allowed size (10 MB)";
     if (error) setErrors((x) => ({ ...x, images: error }));
@@ -374,7 +383,7 @@ export default function TaskFormDrawer({ task, onClose, onSaved }) {
                   <input
                     type="file"
                     multiple
-                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif"
                     className="hidden"
                     onChange={chooseFiles}
                   />

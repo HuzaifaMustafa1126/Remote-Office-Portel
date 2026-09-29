@@ -16,7 +16,10 @@ import { errorMessage } from "../utils/helpers";
 import ReportDiscussion from "../components/dayEndReport/ReportDiscussion";
 import ReportActivity from "../components/dayEndReport/ReportActivity";
 import { Link } from "react-router-dom";
-import DayEndReportStatus, { reportDate } from "../components/dayEndReport/DayEndReportStatus";
+import DayEndReportStatus, {
+  reportDate,
+} from "../components/dayEndReport/DayEndReportStatus";
+import { formatEstimate } from "../utils/reportDuration";
 const today = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
 const duration = (m) =>
@@ -39,11 +42,20 @@ const blocker = (v) =>
     OTHER: "Other",
   })[v] || v;
 export default function DayEndReportsPage() {
-  const [date, setDate] = useState(() => new URLSearchParams(window.location.search).get("date") || today()),
+  const [date, setDate] = useState(
+      () => new URLSearchParams(window.location.search).get("date") || today(),
+    ),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState(() => new URLSearchParams(window.location.search).get("status") || "ALL"),
-    [blockerFilter, setBlockerFilter] = useState(() => new URLSearchParams(window.location.search).get("blocker") || "ALL"),
-    [attention, setAttention] = useState(() => new URLSearchParams(window.location.search).get("attention") === "1"),
+    [status, setStatus] = useState(
+      () => new URLSearchParams(window.location.search).get("status") || "ALL",
+    ),
+    [blockerFilter, setBlockerFilter] = useState(
+      () => new URLSearchParams(window.location.search).get("blocker") || "ALL",
+    ),
+    [attention, setAttention] = useState(
+      () =>
+        new URLSearchParams(window.location.search).get("attention") === "1",
+    ),
     [page, setPage] = useState(1),
     [data, setData] = useState(null),
     [loading, setLoading] = useState(true),
@@ -59,7 +71,15 @@ export default function DayEndReportsPage() {
     setLoading(true);
     setError("");
     return api
-      .list({ date, search, status, blocker: blockerFilter, attention: attention ? "1" : "0", page, limit: 20 })
+      .list({
+        date,
+        search,
+        status,
+        blocker: blockerFilter,
+        attention: attention ? "1" : "0",
+        page,
+        limit: 20,
+      })
       .then(setData)
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
@@ -94,14 +114,30 @@ export default function DayEndReportsPage() {
   };
   const openHistory = async (item) => {
     setHistoryEmployee(item);
-    try { setHistory(await api.employeeHistory(item.employeeId, { month: date.slice(0, 7), page: 1, limit: 50 })); }
-    catch (e) { setError(errorMessage(e)); }
+    try {
+      setHistory(
+        await api.employeeHistory(item.employeeId, {
+          month: date.slice(0, 7),
+          page: 1,
+          limit: 50,
+        }),
+      );
+    } catch (e) {
+      setError(errorMessage(e));
+    }
   };
   const sendReminder = async () => {
-    setSendingReminder(true); setError("");
-    try { await api.sendReminder(reminderTarget.attendanceId); setReminderTarget(null); await load(); }
-    catch (e) { setError(errorMessage(e)); }
-    finally { setSendingReminder(false); }
+    setSendingReminder(true);
+    setError("");
+    try {
+      await api.sendReminder(reminderTarget.attendanceId);
+      setReminderTarget(null);
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSendingReminder(false);
+    }
   };
   const s = data?.summary;
   return (
@@ -110,7 +146,17 @@ export default function DayEndReportsPage() {
         title="Day-End Reports"
         description="Monitor team work, pending items, blockers and employee priorities."
       />
-      <nav className="mb-5 flex gap-2" aria-label="Day-End Report views"><span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">Daily</span><Link to="/day-end-reports/analytics" className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold">Analytics</Link></nav>
+      <nav className="mb-5 flex gap-2" aria-label="Day-End Report views">
+        <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+          Daily
+        </span>
+        <Link
+          to="/day-end-reports/analytics"
+          className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold"
+        >
+          Analytics
+        </Link>
+      </nav>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           [Users, "Reports", s ? `${s.submitted} / ${s.expected}` : "—"],
@@ -130,7 +176,15 @@ export default function DayEndReportsPage() {
         ))}
       </div>
       <section className="mt-5 flex flex-wrap gap-3 rounded-2xl border border-border bg-surface p-4">
-        <Button variant={attention ? "primary" : "secondary"} onClick={() => { setAttention((v) => !v); setPage(1); }}>Needs Attention</Button>
+        <Button
+          variant={attention ? "primary" : "secondary"}
+          onClick={() => {
+            setAttention((v) => !v);
+            setPage(1);
+          }}
+        >
+          Needs Attention
+        </Button>
         <input
           type="date"
           value={date}
@@ -180,16 +234,40 @@ export default function DayEndReportsPage() {
           <option value="MISSING_ASSETS">Missing Information</option>
           <option value="OTHER">Other</option>
         </select>
-        <Button variant="secondary" onClick={() => { setDate(today()); setSearch(""); setStatus("ALL"); setBlockerFilter("ALL"); setAttention(false); setPage(1); }}>Reset</Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setDate(today());
+            setSearch("");
+            setStatus("ALL");
+            setBlockerFilter("ALL");
+            setAttention(false);
+            setPage(1);
+          }}
+        >
+          Reset
+        </Button>
       </section>
       {error && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger"><p>Unable to load Day-End Reports. {error}</p><Button variant="secondary" onClick={load}>Try Again</Button></div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger">
+          <p>Unable to load Day-End Reports. {error}</p>
+          <Button variant="secondary" onClick={load}>
+            Try Again
+          </Button>
+        </div>
       )}
       {loading && !data ? (
         <Loader />
       ) : (
         <div className="mt-4 space-y-2">
-          {!data?.items?.length && <section className="rounded-2xl border border-border bg-surface p-8 text-center"><h2 className="font-bold">No Day-End Reports found</h2><p className="mt-1 text-sm text-muted-foreground">No employees match the selected date and filters.</p></section>}
+          {!data?.items?.length && (
+            <section className="rounded-2xl border border-border bg-surface p-8 text-center">
+              <h2 className="font-bold">No Day-End Reports found</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                No employees match the selected date and filters.
+              </p>
+            </section>
+          )}
           {data?.items?.map((item) => (
             <article
               key={item.employeeId}
@@ -221,23 +299,55 @@ export default function DayEndReportsPage() {
                       {` · ${item.replyCount || 0} replies`}
                     </p>
                   )}
-                  {item.blockerType === "WAITING_ADMIN" && <p className="mt-2 text-xs font-black text-warning">⚠ ACTION NEEDED · Waiting for CEO/Admin</p>}
-                  {item.displayStatus === "REPORT_OVERDUE" && <p className="mt-2 text-xs font-bold text-danger">Still clocked in · Shift ended {item.minutesPastShiftEnd}m ago</p>}
-                  {item.displayStatus === "REPORT_DUE_SOON" && <p className="mt-2 text-xs font-bold text-warning">Shift ending soon · Report not submitted</p>}
+                  {item.blockerType === "WAITING_ADMIN" && (
+                    <p className="mt-2 text-xs font-black text-warning">
+                      ⚠ ACTION NEEDED · Waiting for CEO/Admin
+                    </p>
+                  )}
+                  {item.displayStatus === "REPORT_OVERDUE" && (
+                    <p className="mt-2 text-xs font-bold text-danger">
+                      Still clocked in · Shift ended {item.minutesPastShiftEnd}m
+                      ago
+                    </p>
+                  )}
+                  {item.displayStatus === "REPORT_DUE_SOON" && (
+                    <p className="mt-2 text-xs font-bold text-warning">
+                      Shift ending soon · Report not submitted
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => openHistory(item)}>History</Button>
-                {item.attendanceId && !item.reportId && ["REPORT_OVERDUE", "REPORT_DUE_SOON", "WORKING"].includes(item.displayStatus) && <Button disabled={item.lastReminderAt && Date.now() - new Date(item.lastReminderAt).getTime() < Number(item.manualReminderCooldownMinutes) * 60000} onClick={() => setReminderTarget(item)}>{item.lastReminderAt && Date.now() - new Date(item.lastReminderAt).getTime() < Number(item.manualReminderCooldownMinutes) * 60000 ? "Reminder Sent" : "Send Reminder"}</Button>}
-                {item.reportId ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => open(item.reportId)}
-                  >
-                    View Report →
+                  <Button variant="secondary" onClick={() => openHistory(item)}>
+                    History
                   </Button>
-                ) : (
-                  null
-                )}
+                  {item.attendanceId &&
+                    !item.reportId &&
+                    ["REPORT_OVERDUE", "REPORT_DUE_SOON", "WORKING"].includes(
+                      item.displayStatus,
+                    ) && (
+                      <Button
+                        disabled={
+                          item.lastReminderAt &&
+                          Date.now() - new Date(item.lastReminderAt).getTime() <
+                            Number(item.manualReminderCooldownMinutes) * 60000
+                        }
+                        onClick={() => setReminderTarget(item)}
+                      >
+                        {item.lastReminderAt &&
+                        Date.now() - new Date(item.lastReminderAt).getTime() <
+                          Number(item.manualReminderCooldownMinutes) * 60000
+                          ? "Reminder Sent"
+                          : "Send Reminder"}
+                      </Button>
+                    )}
+                  {item.reportId ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => open(item.reportId)}
+                    >
+                      View Report →
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </article>
@@ -273,14 +383,56 @@ export default function DayEndReportsPage() {
           <ReportDetail report={detail} onReview={() => setConfirm(true)} />
         )}
       </Modal>
-      <Modal open={Boolean(reminderTarget)} title="Send Day-End Report Reminder?" onClose={() => !sendingReminder && setReminderTarget(null)}>
-        <p className="text-sm text-muted-foreground">{reminderTarget?.employeeName} will receive a notification asking them to complete the Day-End Report for this workday.</p>
-        <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" disabled={sendingReminder} onClick={() => setReminderTarget(null)}>Cancel</Button><Button disabled={sendingReminder} onClick={sendReminder}>{sendingReminder ? "Sending…" : "Send Reminder"}</Button></div>
+      <Modal
+        open={Boolean(reminderTarget)}
+        title="Send Day-End Report Reminder?"
+        onClose={() => !sendingReminder && setReminderTarget(null)}
+      >
+        <p className="text-sm text-muted-foreground">
+          {reminderTarget?.employeeName} will receive a notification asking them
+          to complete the Day-End Report for this workday.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            disabled={sendingReminder}
+            onClick={() => setReminderTarget(null)}
+          >
+            Cancel
+          </Button>
+          <Button disabled={sendingReminder} onClick={sendReminder}>
+            {sendingReminder ? "Sending…" : "Send Reminder"}
+          </Button>
+        </div>
       </Modal>
-      <Modal open={Boolean(historyEmployee)} title={`${historyEmployee?.employeeName || "Employee"} · Report History`} onClose={() => { setHistoryEmployee(null); setHistory(null); }}>
+      <Modal
+        open={Boolean(historyEmployee)}
+        title={`${historyEmployee?.employeeName || "Employee"} · Report History`}
+        onClose={() => {
+          setHistoryEmployee(null);
+          setHistory(null);
+        }}
+      >
         <div className="space-y-3">
-          {!history?.items?.length && <p className="text-sm text-muted-foreground">No reports in this month.</p>}
-          {history?.items?.map((item) => <button type="button" key={item.id} onClick={() => open(item.id)} className="w-full rounded-xl border border-border p-4 text-left hover:bg-surface-secondary"><b>{item.reportDate}</b><p className="mt-1 text-xs text-muted-foreground">{item.status} · {item.itemCount} items · {duration(item.trackedMinutes)} · {item.replyCount} replies</p></button>)}
+          {!history?.items?.length && (
+            <p className="text-sm text-muted-foreground">
+              No reports in this month.
+            </p>
+          )}
+          {history?.items?.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              onClick={() => open(item.id)}
+              className="w-full rounded-xl border border-border p-4 text-left hover:bg-surface-secondary"
+            >
+              <b>{item.reportDate}</b>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item.status} · {item.itemCount} items ·{" "}
+                {duration(item.trackedMinutes)} · {item.replyCount} replies
+              </p>
+            </button>
+          ))}
         </div>
       </Modal>
       <Modal
@@ -316,8 +468,21 @@ export function ReportDetail({ report, onReview }) {
         <p className="text-muted-foreground">
           Day-End Report · {reportDate(report.reportDate)}
         </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2"><DayEndReportStatus status={report.status}/><span className="text-xs text-muted-foreground">Submitted {stamp(report.submittedAt)}</span></div>
-        {report.reviewedAt && <p className="mt-2 text-xs text-muted-foreground">Reviewed by <b className="text-foreground">{report.reviewerName || "Management"}</b> · {stamp(report.reviewedAt)}</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <DayEndReportStatus status={report.status} />
+          <span className="text-xs text-muted-foreground">
+            Submitted {stamp(report.submittedAt)}
+          </span>
+        </div>
+        {report.reviewedAt && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Reviewed by{" "}
+            <b className="text-foreground">
+              {report.reviewerName || "Management"}
+            </b>{" "}
+            · {stamp(report.reviewedAt)}
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-3 gap-2">
         {[
@@ -362,11 +527,8 @@ export function ReportDetail({ report, onReview }) {
             {item.whatsLeft && (
               <Field label="What's Left" value={item.whatsLeft} />
             )}{" "}
-            {item.estimatedRemainingMinutes && (
-              <Field
-                label="Estimated Remaining"
-                value={duration(item.estimatedRemainingMinutes)}
-              />
+            {(item.estimatedRemaining || item.estimatedRemainingMinutes) && (
+              <Field label="Estimated Remaining" value={formatEstimate(item)} />
             )}
           </article>
         ))}

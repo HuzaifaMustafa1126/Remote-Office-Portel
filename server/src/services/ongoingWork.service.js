@@ -153,13 +153,14 @@ async function teamSummary(executor = pool) {
   const [[row]] = await executor.execute(
     `SELECT
       COUNT(DISTINCT CASE WHEN active.employee_id IS NOT NULL THEN active.employee_id END) employeesWorkingNow,
+      COUNT(DISTINCT active.ongoing_work_id) activeOngoingWorkItems,
       SUM(CASE WHEN ow.status IN('PAUSED','ONGOING') THEN 1 ELSE 0 END) pausedWork,
       SUM(CASE WHEN ow.status='COMPLETED' AND DATE(ow.completed_at)=CURDATE() THEN 1 ELSE 0 END) completedToday,
       SUM(CASE WHEN ow.status IN('WORKING','PAUSED','ONGOING') THEN 1 ELSE 0 END) totalActiveWorkItems
      FROM ongoing_work ow
      LEFT JOIN (
-       SELECT DISTINCT employee_id FROM ongoing_work_sessions WHERE ended_at IS NULL
-     ) active ON active.employee_id=ow.employee_id
+       SELECT DISTINCT employee_id,ongoing_work_id FROM ongoing_work_sessions WHERE ended_at IS NULL
+     ) active ON active.ongoing_work_id=ow.id
      WHERE ow.deleted_at IS NULL`,
   );
   return Object.fromEntries(
@@ -433,10 +434,9 @@ export async function startOngoingWork(connection, id, user) {
           stale.startedAt,
         ],
       );
-      await pauseActiveOngoingWork(
+      const recoveredWorkIds = await pauseAllActiveOngoingWork(
         connection,
         employeeId,
-        stale.ongoingWorkId,
         boundary.recoveryTime,
       );
       await connection.execute(
@@ -448,7 +448,7 @@ export async function startOngoingWork(connection, id, user) {
           "ONGOING_WORK_ATTENDANCE_INTEGRITY_RECOVERY",
           stale.ongoingWorkId,
           "A stale ongoing work timer was paused because no active attendance session existed.",
-          JSON.stringify({ endedAt: boundary.recoveryTime }),
+          JSON.stringify({ endedAt: boundary.recoveryTime, workIds: recoveredWorkIds }),
         ],
       );
       return { attendanceRequired: true };
@@ -470,10 +470,9 @@ export async function startOngoingWork(connection, id, user) {
           "End your break before starting ongoing work.",
           "BREAK_ACTIVE",
         );
-      await pauseActiveOngoingWork(
+      const recoveredWorkIds = await pauseAllActiveOngoingWork(
         connection,
         employeeId,
-        stale.ongoingWorkId,
         activeBreak.breakStartedAt,
       );
       await connection.execute(
@@ -485,72 +484,71 @@ export async function startOngoingWork(connection, id, user) {
           "ONGOING_WORK_BREAK_INTEGRITY_RECOVERY",
           stale.ongoingWorkId,
           "A stale ongoing work timer was paused at the active break boundary.",
-          JSON.stringify({ breakId: activeBreak.id, endedAt: activeBreak.breakStartedAt }),
+          JSON.stringify({ breakId: activeBreak.id, endedAt: activeBreak.breakStartedAt, workIds: recoveredWorkIds }),
         ],
       );
       return { breakActive: true };
     }
     const [[active]] = await connection.execute(
-      `SELECT s.id,s.ongoing_work_id ongoingWorkId,ow.title
-       FROM ongoing_work_sessions s JOIN ongoing_work ow ON ow.id=s.ongoing_work_id
-       WHERE s.employee_id=? AND s.ended_at IS NULL LIMIT 1 FOR UPDATE`,
-      [employeeId],
+      `SELECT s.id,s.ongoing_work_id ongoingWorkId FROM ongoing_work_sessions s
+       WHERE s.employee_id=? AND s.ongoing_work_id=? AND s.ended_at IS NULL LIMIT 1 FOR UPDATE`,
+      [employeeId, id],
     );
-    if (active && Number(active.ongoingWorkId) === Number(id)) {
+    if (active) {
       return {
         activeWork: await getOwn(id, user, connection),
         pausedWork: null,
         serverTime: row.serverTime,
       };
     }
-    const [[clock]] = await connection.execute(
-      "SELECT CURRENT_TIMESTAMP switchTime",
-    );
-    let pausedWork = null;
-    if (active) {
-      await pauseActiveOngoingWork(
-        connection,
-        employeeId,
-        Number(active.ongoingWorkId),
-        clock.switchTime,
-      );
-      pausedWork = await getOwn(
-        active.ongoingWorkId,
-        user,
-        connection,
-      );
-    }
+    const [[clock]] = await connection.execute("SELECT CURRENT_TIMESTAMP startTime");
     const [createdSession] = await connection.execute(
       `INSERT INTO ongoing_work_sessions(ongoing_work_id,employee_id,user_id,attendance_record_id,started_at)
        VALUES(?,?,?,?,?)`,
-      [id, employeeId, user.id, attendance.id, clock.switchTime],
+      [id, employeeId, user.id, attendance.id, clock.startTime],
     );
     await connection.execute(statusUpdateStatement("WORKING"), [id]);
     const startedWork = await getOwn(id, user, connection);
-    const switched = Boolean(active);
     await auditOngoingWork(connection, {
       user, employeeId,
-      action: switched ? ONGOING_WORK_EVENTS.SWITCHED : ONGOING_WORK_EVENTS.STARTED,
+      action: ONGOING_WORK_EVENTS.STARTED,
       workId: id,
-      description: switched
-        ? `Switched ongoing work from “${active.title}” to “${startedWork.title}”.`
-        : `Started ongoing work “${startedWork.title}”.`,
-      oldValues: switched ? { activeWorkId: Number(active.ongoingWorkId), title: active.title } : null,
-      newValues: { activeWorkId: Number(id), title: startedWork.title, startedAt: clock.switchTime },
+      description: `Started ongoing work “${startedWork.title}”.`,
+      newValues: { activeWorkId: Number(id), title: startedWork.title, startedAt: clock.startTime },
     });
     return {
       activeWork: startedWork,
-      pausedWork,
-      serverTime: clock.switchTime,
+      pausedWork: null,
+      serverTime: clock.startTime,
       notification: {
-        type: switched ? ONGOING_WORK_EVENTS.SWITCHED : ONGOING_WORK_EVENTS.STARTED,
-        title: switched ? "Ongoing work switched" : "Ongoing work started",
-        message: switched
-          ? `${startedWork.employeeName} paused “${active.title}” and started “${startedWork.title}”.`
-          : `${startedWork.employeeName} ${Number(row.sessionCount || 0) ? "resumed" : "started"} “${startedWork.title}”.`,
-        eventKey: `${switched ? ONGOING_WORK_EVENTS.SWITCHED : ONGOING_WORK_EVENTS.STARTED}:${createdSession.insertId}`,
+        type: ONGOING_WORK_EVENTS.STARTED,
+        title: "Ongoing work started",
+        message: `${startedWork.employeeName} ${Number(row.sessionCount || 0) ? "resumed" : "started"} “${startedWork.title}”.`,
+        eventKey: `${ONGOING_WORK_EVENTS.STARTED}:${createdSession.insertId}`,
       },
     };
+}
+
+export async function pauseAllActiveOngoingWork(executor, employeeId, endedAt) {
+  const [sessions] = await executor.execute(
+    `SELECT id,ongoing_work_id ongoingWorkId FROM ongoing_work_sessions
+     WHERE employee_id=? AND ended_at IS NULL ORDER BY id FOR UPDATE`,
+    [employeeId],
+  );
+  if (!sessions.length) return [];
+  await executor.execute(
+    `UPDATE ongoing_work_sessions
+     SET ended_at=GREATEST(started_at,?),
+       duration_seconds=GREATEST(0,TIMESTAMPDIFF(SECOND,started_at,GREATEST(started_at,?)))
+     WHERE employee_id=? AND ended_at IS NULL`,
+    [endedAt, endedAt, employeeId],
+  );
+  const ids = [...new Set(sessions.map((session) => Number(session.ongoingWorkId)))];
+  await executor.execute(
+    `UPDATE ongoing_work SET status='PAUSED',completed_at=NULL WHERE id IN(${ids.map(() => "?").join(",")})`,
+    ids,
+  );
+  return ids;
 }
 
 export async function pauseActiveOngoingWork(

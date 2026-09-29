@@ -23,10 +23,10 @@ export default function TaskWorkflowDialog({
     review = action === "submit";
   const add = (e) => {
     const next = [...e.target.files],
-      allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/bmp", "image/x-ms-bmp", "image/avif"];
     if (files.length + next.length > 5) setError("Maximum 5 images allowed");
     else if (next.some((x) => !allowed.includes(x.type)))
-      setError("Unsupported image type");
+      setError("Use a JPG, PNG, WebP, GIF, BMP, or AVIF image");
     else if (next.some((x) => x.size > 10 * 1024 * 1024))
       setError("Image exceeds allowed size (10 MB)");
     else {
@@ -241,7 +241,7 @@ function ImagePicker({ files, setFiles, add }) {
             <input
               type="file"
               multiple
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif"
               className="hidden"
               onChange={add}
             />

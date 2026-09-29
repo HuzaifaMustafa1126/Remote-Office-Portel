@@ -32,11 +32,11 @@ test("startTaskSession locks employee and creates one server-timestamped session
   assert.deepEqual(db.calls[2].params, [4, 7]);
 });
 
-test("startTaskSession rejects an existing employee session", async () => {
+test("startTaskSession requires confirmation before switching an existing employee session", async () => {
   const db = executor([[[{ id: 7 }]], [[{ id: 2, taskId: 3 }]]]);
   await assert.rejects(
     startTaskSession(db, { taskId: 4, employeeId: 7 }),
-    (error) => error.statusCode === 409 && error.code === "TASK_SESSION_ACTIVE",
+    (error) => error.statusCode === 409 && error.code === "TASK_SWITCH_REQUIRED",
   );
   assert.equal(db.calls.length, 2);
 });

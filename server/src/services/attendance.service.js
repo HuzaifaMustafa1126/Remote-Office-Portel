@@ -8,7 +8,7 @@ import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
 import { current as currentPolicy } from "./attendancePolicy.service.js";
 import { classifyArrival } from "../utils/attendancePolicy.js";
 import { pauseActiveTask, resumeTaskAfterBreak } from "./taskTime.service.js";
-import { pauseActiveOngoingWork } from "./ongoingWork.service.js";
+import { pauseAllActiveOngoingWork } from "./ongoingWork.service.js";
 import { assertSubmittedForAttendance } from "./dayEndReport.service.js";
 import {
   getEmployeeAvailability,
@@ -233,12 +233,12 @@ export async function startBreak(user) {
       `UPDATE attendance_records SET status = 'ON_BREAK' WHERE id = ?`,
       [record.id],
     );
-    const pausedOngoingWorkId = await pauseActiveOngoingWork(
+    const pausedOngoingWorkIds = await pauseAllActiveOngoingWork(
       conn,
       user.employee_id,
-      null,
       clock.breakStartTime,
     );
+    const pausedOngoingWorkId = pausedOngoingWorkIds[0] || null;
     let pausedOngoingWork = null;
     if (pausedOngoingWorkId) {
       await conn.execute(
@@ -257,10 +257,11 @@ export async function startBreak(user) {
           user.employee_id,
           "ONGOING_WORK_AUTO_PAUSED_BREAK",
           pausedOngoingWorkId,
-          `${name}'s active ongoing work was paused by Break Start.`,
+          `${name}'s ${pausedOngoingWorkIds.length} active ongoing work timer(s) were paused by Break Start.`,
           JSON.stringify({
             breakId: result.insertId,
             endedAt: clock.breakStartTime,
+            workIds: pausedOngoingWorkIds,
           }),
         ],
       );
@@ -309,6 +310,7 @@ export async function startBreak(user) {
           ? Number(pausedOngoingWorkId)
           : null,
         previousOngoingWork: pausedOngoingWork,
+        pausedOngoingWorkIds,
       },
       name,
       recordId: record.id,
@@ -460,12 +462,12 @@ export async function clockOut(user) {
     const [[clock]] = await conn.execute(
       "SELECT CURRENT_TIMESTAMP clockOutTime",
     );
-    const pausedOngoingWorkId = await pauseActiveOngoingWork(
+    const pausedOngoingWorkIds = await pauseAllActiveOngoingWork(
       conn,
       user.employee_id,
-      null,
       clock.clockOutTime,
     );
+    const pausedOngoingWorkId = pausedOngoingWorkIds[0] || null;
     await conn.execute(
       `UPDATE attendance_records
        SET clock_out_at = ?, status = 'CLOCKED_OUT',
@@ -489,11 +491,12 @@ export async function clockOut(user) {
           user.employee_id,
           "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT",
           pausedOngoingWorkId,
-          `${name}'s active ongoing work was paused by Clock Out.`,
+          `${name}'s ${pausedOngoingWorkIds.length} active ongoing work timer(s) were paused by Clock Out.`,
           JSON.stringify({
             reason: "CLOCK_OUT",
             attendanceId: record.id,
             endedAt: clock.clockOutTime,
+            workIds: pausedOngoingWorkIds,
           }),
         ],
       );
@@ -537,6 +540,7 @@ export async function clockOut(user) {
         pausedOngoingWorkId: pausedOngoingWorkId
           ? Number(pausedOngoingWorkId)
           : null,
+        pausedOngoingWorkIds,
       },
       name,
       recordId: record.id,
@@ -550,7 +554,7 @@ export async function clockOut(user) {
     });
     if (outcome.data.pausedOngoingWorkId)
       await notifyByPolicy("ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT", user, {
-        title: "Ongoing work paused at clock out", message: `${outcome.name}'s active Ongoing Work was paused when they clocked out.`,
+        title: "Ongoing work paused at clock out", message: `${outcome.name}'s ${outcome.data.pausedOngoingWorkIds.length} active Ongoing Work timer(s) were paused when they clocked out.`,
         referenceType: "ONGOING_WORK", referenceId: outcome.data.pausedOngoingWorkId,
         actionUrl: "/team-ongoing-work", eventKey: `ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT:${outcome.recordId}`,
       });

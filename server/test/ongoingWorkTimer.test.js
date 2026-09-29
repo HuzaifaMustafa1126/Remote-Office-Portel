@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   completeOngoingWork,
   formatOngoingDuration,
+  pauseAllActiveOngoingWork,
   pauseActiveOngoingWork,
   startOngoingWork,
 } from "../src/services/ongoingWork.service.js";
@@ -62,6 +63,18 @@ test("timer migration enforces one active ongoing-work timer per employee", () =
   assert.match(sql, /UPDATE ongoing_work SET status='PAUSED' WHERE status='WORKING'/);
 });
 
+test("multiple-timer migration enforces one active session per work item", () => {
+  const sql = fs.readFileSync(
+    new URL("../database/migrations/061_flexible_estimates_multiple_ongoing_timers.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /DROP INDEX uq_one_active_ongoing_work_per_employee/);
+  assert.match(sql, /active_ongoing_work_id[\s\S]*IF\(ended_at IS NULL,ongoing_work_id,NULL\)/);
+  assert.match(sql, /UNIQUE KEY uq_one_active_session_per_ongoing_work\(active_ongoing_work_id\)/);
+  assert.match(sql, /FOREIGN KEY\(ongoing_work_id\) REFERENCES ongoing_work\(id\) ON DELETE RESTRICT/);
+  assert.doesNotMatch(sql, /DELETE FROM ongoing_work_sessions/);
+});
+
 test("pause finalizes a session once using database timestamps", async () => {
   const calls = [];
   const executor = {
@@ -84,6 +97,19 @@ test("pause finalizes a session once using database timestamps", async () => {
 test("pause is data-safe when no active session exists", async () => {
   const executor = { execute: async () => [[]] };
   assert.equal(await pauseActiveOngoingWork(executor, 7, 12), null);
+});
+
+test("attendance pause closes every active ongoing-work session at one timestamp", async () => {
+  const calls = [];
+  const executor = { execute: async (sql, params = []) => {
+    calls.push({ sql, params });
+    if (sql.includes("SELECT id,ongoing_work_id"))
+      return [[{ id: 1, ongoingWorkId: 11 }, { id: 2, ongoingWorkId: 12 }, { id: 3, ongoingWorkId: 13 }]];
+    return [{ affectedRows: 3 }];
+  } };
+  assert.deepEqual(await pauseAllActiveOngoingWork(executor, 7, "2026-09-29 18:00:00"), [11, 12, 13]);
+  assert.deepEqual(calls[1].params, ["2026-09-29 18:00:00", "2026-09-29 18:00:00", 7]);
+  assert.deepEqual(calls[2].params, [11, 12, 13]);
 });
 
 function timerExecutor(activeWorkId, { attendance = true, breakActive = false } = {}) {
@@ -118,10 +144,10 @@ function timerExecutor(activeWorkId, { attendance = true, breakActive = false } 
           serverTime: "2026-09-21 20:45:30",
         }]];
       }
-      if (sql.includes("JOIN ongoing_work ow ON ow.id=s.ongoing_work_id"))
-        return [[{ id: 31, ongoingWorkId: activeWorkId, title: "Work A" }]];
-      if (sql === "SELECT CURRENT_TIMESTAMP switchTime")
-        return [[{ switchTime: "2026-09-21 20:45:30" }]];
+      if (sql.includes("s.ongoing_work_id=?") && sql.includes("s.ended_at IS NULL"))
+        return Number(activeWorkId) === Number(params[1]) ? [[{ id: 31, ongoingWorkId: activeWorkId }]] : [[]];
+      if (sql === "SELECT CURRENT_TIMESTAMP startTime")
+        return [[{ startTime: "2026-09-21 20:45:30" }]];
       if (sql.includes("FROM ongoing_work_sessions s") && !sql.includes("JOIN"))
         return [[{ id: 31, ongoingWorkId: activeWorkId }]];
       if (sql.includes("UPDATE ongoing_work_sessions"))
@@ -153,17 +179,14 @@ test("starting the already-active item is idempotent", async () => {
   );
 });
 
-test("switch closes the old session and starts the new one at one timestamp", async () => {
+test("starting another item leaves the existing timer running", async () => {
   const executor = timerExecutor(11);
   const result = await startOngoingWork(executor, 12, { id: 7, employee_id: 7 });
-  assert.equal(result.pausedWork.id, 11);
-  assert.equal(result.pausedWork.status, "PAUSED");
+  assert.equal(result.pausedWork, null);
   assert.equal(result.activeWork.id, 12);
   assert.equal(result.activeWork.status, "WORKING");
-  const close = executor.calls.find((call) => call.sql.includes("UPDATE ongoing_work_sessions"));
   const insert = executor.calls.find((call) => call.sql.includes("INSERT INTO ongoing_work_sessions"));
-  assert.equal(close.params[0], "2026-09-21 20:45:30");
-  assert.equal(close.params[1], "2026-09-21 20:45:30");
+  assert.equal(executor.calls.some((call) => call.sql.includes("UPDATE ongoing_work_sessions")), false);
   assert.equal(insert.params[3], 81);
   assert.equal(insert.params[4], "2026-09-21 20:45:30");
   assert.equal(result.serverTime, "2026-09-21 20:45:30");
@@ -218,7 +241,7 @@ test("break start uses one timestamp and break end does not resume ongoing work"
     "utf8",
   );
   assert.match(source, /SELECT CURRENT_TIMESTAMP breakStartTime/);
-  assert.match(source, /pauseActiveOngoingWork\([\s\S]*?clock\.breakStartTime/);
+  assert.match(source, /pauseAllActiveOngoingWork\([\s\S]*?clock\.breakStartTime/);
   assert.doesNotMatch(source, /resumeOngoingWorkAfterBreak/);
   assert.match(source, /previousOngoingWork/);
 });
@@ -231,7 +254,7 @@ test("clock out shares its authoritative timestamp with ongoing-work pause", () 
   assert.match(source, /SELECT CURRENT_TIMESTAMP clockOutTime/);
   assert.match(
     source,
-    /pauseActiveOngoingWork\([\s\S]*?clock\.clockOutTime,[\s\S]*?SET clock_out_at = \?/,
+    /pauseAllActiveOngoingWork\([\s\S]*?clock\.clockOutTime,[\s\S]*?SET clock_out_at = \?/,
   );
   assert.match(source, /ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT/);
 });
@@ -336,7 +359,7 @@ test("ongoing-work diagnostics are read-only and cover timer integrity", () => {
     new URL("../src/scripts/auditOngoingWorkIntegrity.js", import.meta.url),
     "utf8",
   );
-  assert.match(source, /multipleActiveTimers/);
+  assert.match(source, /duplicateActiveItemSessions/);
   assert.match(source, /statusSessionMismatch/);
   assert.match(source, /activeWithoutAttendance/);
   assert.match(source, /activeDuringBreak/);

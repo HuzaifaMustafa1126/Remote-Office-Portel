@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+const estimate = z.object({
+  value: z.number().positive().max(43200),
+  unit: z.enum(["MINUTES", "HOURS", "DAYS"]),
+}).strict().superRefine((value, context) => {
+  const minutes = value.value * { MINUTES: 1, HOURS: 60, DAYS: 1440 }[value.unit];
+  if (minutes > 43200)
+    context.addIssue({ code: "custom", path: ["value"], message: "Estimate cannot exceed 30 days" });
+});
+
 const item = z
   .object({
     sourceType: z.enum(["TASK", "ONGOING_WORK"]),
@@ -14,6 +23,7 @@ const item = z
       .max(43200)
       .optional()
       .nullable(),
+    estimatedRemaining: estimate.optional().nullable(),
   })
   .strict()
   .refine((value) => value.sourceId || value.reportItemId, {

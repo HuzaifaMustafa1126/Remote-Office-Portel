@@ -7,7 +7,9 @@ import Loader from "../components/common/Loader";
 import { ReportDetail } from "./DayEndReportsPage";
 import * as api from "../services/dayEndReport.service";
 import { errorMessage } from "../utils/helpers";
-import DayEndReportStatus, { reportDate } from "../components/dayEndReport/DayEndReportStatus";
+import DayEndReportStatus, {
+  reportDate,
+} from "../components/dayEndReport/DayEndReportStatus";
 
 const currentMonth = () =>
   new Date()
@@ -92,10 +94,25 @@ export default function MyDayEndReportsPage() {
           <option value="HAS_BLOCKER">Has blocker</option>
           <option value="NO_BLOCKER">No blocker</option>
         </select>
-        <Button variant="secondary" onClick={() => { setMonth(currentMonth()); setStatus("ALL"); setBlocker("ALL"); setPage(1); }}>Reset</Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setMonth(currentMonth());
+            setStatus("ALL");
+            setBlocker("ALL");
+            setPage(1);
+          }}
+        >
+          Reset
+        </Button>
       </section>
       {error && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger"><p>{error}</p><Button variant="secondary" onClick={load}>Try Again</Button></div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft p-3 text-danger">
+          <p>{error}</p>
+          <Button variant="secondary" onClick={load}>
+            Try Again
+          </Button>
+        </div>
       )}
       {loading ? (
         <Loader />
@@ -127,18 +144,39 @@ export default function MyDayEndReportsPage() {
                 <DayEndReportStatus status={item.status} />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-border py-3 text-xs text-muted-foreground">
-                <span><b className="text-foreground">{item.itemCount}</b> work {item.itemCount === 1 ? "item" : "items"}</span>
-                {Number(item.trackedMinutes) > 0 && <span className="inline-flex items-center gap-1"><Clock3 size={13}/><b className="text-foreground">{duration(item.trackedMinutes)}</b> tracked</span>}
-                <span className="inline-flex items-center gap-1"><MessageSquare size={13}/><b className="text-foreground">{item.replyCount}</b> {item.replyCount === 1 ? "reply" : "replies"}</span>
+                <span>
+                  <b className="text-foreground">{item.itemCount}</b> work{" "}
+                  {item.itemCount === 1 ? "item" : "items"}
+                </span>
+                {Number(item.trackedMinutes) > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 size={13} />
+                    <b className="text-foreground">
+                      {duration(item.trackedMinutes)}
+                    </b>{" "}
+                    tracked
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1">
+                  <MessageSquare size={13} />
+                  <b className="text-foreground">{item.replyCount}</b>{" "}
+                  {item.replyCount === 1 ? "reply" : "replies"}
+                </span>
               </div>
-              <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground"><span className="font-semibold text-foreground">Next priority: </span>{item.tomorrowPriority}</p>
-              <div className="mt-3 flex justify-end"><Button
-                variant="secondary"
-                onClick={() => open(item.id)}
-              >
-                {item.status === "REVIEWED" ? <CheckCircle2 size={15} /> : null}{" "}
-                View Report
-              </Button></div>
+              <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Next priority:{" "}
+                </span>
+                {item.tomorrowPriority}
+              </p>
+              <div className="mt-3 flex justify-end">
+                <Button variant="secondary" onClick={() => open(item.id)}>
+                  {item.status === "REVIEWED" ? (
+                    <CheckCircle2 size={15} />
+                  ) : null}{" "}
+                  View Report
+                </Button>
+              </div>
             </article>
           ))}
         </div>

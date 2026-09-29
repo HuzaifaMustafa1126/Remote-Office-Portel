@@ -6,7 +6,10 @@ const states = {
   REPORT_DUE_SOON: ["Due Soon", "bg-warning-soft text-warning"],
   WORKING: ["Working", "bg-info-soft text-info"],
   MISSING: ["Missing", "bg-danger-soft text-danger"],
-  NOT_SUBMITTED: ["Not Submitted", "bg-surface-secondary text-muted-foreground"],
+  NOT_SUBMITTED: [
+    "Not Submitted",
+    "bg-surface-secondary text-muted-foreground",
+  ],
 };
 
 export const reportStatusLabel = (status) =>
@@ -21,6 +24,15 @@ export const reportDate = (value, options = {}) =>
     : "—";
 
 export default function DayEndReportStatus({ status, className = "" }) {
-  const [label, tone] = states[status] || [reportStatusLabel(status), "bg-surface-secondary text-foreground"];
-  return <span className={`inline-flex h-fit items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone} ${className}`}>{label}</span>;
+  const [label, tone] = states[status] || [
+    reportStatusLabel(status),
+    "bg-surface-secondary text-foreground",
+  ];
+  return (
+    <span
+      className={`inline-flex h-fit items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone} ${className}`}
+    >
+      {label}
+    </span>
+  );
 }

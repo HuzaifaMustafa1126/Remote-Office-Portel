@@ -4,16 +4,16 @@ import Button from "../common/Button";
 import Loader from "../common/Loader";
 import * as api from "../../services/dayEndReport.service";
 import { errorMessage } from "../../utils/helpers";
+import { estimateFromItem } from "../../utils/reportDuration";
 
-const remainingOptions = [
-  [30, "30 Minutes"],
-  [60, "1 Hour"],
-  [90, "1 Hour 30 Minutes"],
-  [120, "2 Hours"],
-  [180, "3 Hours"],
-  [240, "4 Hours"],
-  [480, "1 Working Day"],
+const hourOptions = [
+  [{ value: 30, unit: "MINUTES" }, "30 Minutes"],
+  ...[1, 2, 3, 4, 5, 6, 8, 12].map((value) => [
+    { value, unit: "HOURS" },
+    `${value} Hour${value === 1 ? "" : "s"}`,
+  ]),
 ];
+const dayOptions = [1, 2, 3, 4, 5, 7, 10, 15, 30];
 const blockerOptions = [
   ["NONE", "No Issues"],
   ["WAITING_ADMIN", "Waiting for CEO/Admin"],
@@ -52,7 +52,10 @@ export default function DayEndReportModal({
     [error, setError] = useState("");
   useEffect(() => {
     if (!open || !dirty || saving) return;
-    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [open, dirty, saving]);
@@ -80,7 +83,7 @@ export default function DayEndReportModal({
                   reportItemId: Number(item.reportItemId),
                   summary: item.summary || "",
                   whatsLeft: item.whatsLeft || "",
-                  estimatedRemainingMinutes: item.estimatedRemainingMinutes,
+                  estimatedRemaining: estimateFromItem(item),
                 },
               ]),
             ),
@@ -116,42 +119,63 @@ export default function DayEndReportModal({
           sourceId: item.sourceId,
           summary: item.summaryPrefill || "",
           whatsLeft: item.whatsLeftPrefill || "",
-          estimatedRemainingMinutes: null,
+          estimatedRemaining: null,
         };
       return next;
     });
   };
   const setItem = (key, field, value) =>
     setSelected((old) => ({ ...old, [key]: { ...old[key], [field]: value } }));
-  const changeItem = (key, field, value) => { setDirty(true); setItem(key, field, value); };
+  const changeItem = (key, field, value) => {
+    setDirty(true);
+    setItem(key, field, value);
+  };
   const requestClose = () => {
     if (saving) return;
-    if (dirty && !window.confirm("Discard your unsaved Day-End Report changes?")) return;
+    if (
+      dirty &&
+      !window.confirm("Discard your unsaved Day-End Report changes?")
+    )
+      return;
     onClose();
   };
   const submit = async () => {
     if (existing?.status === "REVIEWED") return;
     const chosen = Object.values(selected);
     if (!chosen.length && !otherWork.trim()) {
-      setError("Select at least one work item or describe other work completed today.");
+      setError(
+        "Select at least one work item or describe other work completed today.",
+      );
       return;
     }
     const missingWork = chosen.find((item) => {
-      const source = data?.items?.find((candidate) => sameWorkItem(candidate, item));
+      const source = data?.items?.find((candidate) =>
+        sameWorkItem(candidate, item),
+      );
       return source?.status !== "COMPLETED" && !item.whatsLeft?.trim();
     });
     if (missingWork) {
-      const source = data?.items?.find((item) => sameWorkItem(item, missingWork));
-      setError(`Please add what's left for “${source?.title || "the selected work item"}”.`);
+      const source = data?.items?.find((item) =>
+        sameWorkItem(item, missingWork),
+      );
+      setError(
+        `Please add what's left for “${source?.title || "the selected work item"}”.`,
+      );
       return;
     }
     const missingEstimate = chosen.find((item) => {
-      const source = data?.items?.find((candidate) => sameWorkItem(candidate, item));
-      return source?.status !== "COMPLETED" && !item.estimatedRemainingMinutes;
+      const source = data?.items?.find((candidate) =>
+        sameWorkItem(candidate, item),
+      );
+      return source?.status !== "COMPLETED" && !item.estimatedRemaining;
     });
     if (missingEstimate) {
-      const source = data?.items?.find((item) => sameWorkItem(item, missingEstimate));
-      setError(`Please select an estimated remaining time for “${source?.title || "the selected work item"}”.`);
+      const source = data?.items?.find((item) =>
+        sameWorkItem(item, missingEstimate),
+      );
+      setError(
+        `Please select an estimated remaining time for “${source?.title || "the selected work item"}”.`,
+      );
       return;
     }
     if (blockerType !== "NONE" && !blockerDetails.trim()) {
@@ -183,11 +207,7 @@ export default function DayEndReportModal({
     }
   };
   return (
-    <Modal
-      open={open}
-      title="DAY-END REPORT"
-      onClose={requestClose}
-    >
+    <Modal open={open} title="DAY-END REPORT" onClose={requestClose}>
       {loading ? (
         <Loader />
       ) : (
@@ -206,7 +226,10 @@ export default function DayEndReportModal({
             )}
           </div>
           {error && (
-            <p role="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
+            <p
+              role="alert"
+              className="rounded-xl bg-danger-soft p-3 text-sm text-danger"
+            >
               {error}
             </p>
           )}
@@ -237,7 +260,11 @@ export default function DayEndReportModal({
                         <span className="flex-1">
                           <b className="block">{item.title}</b>
                           <small className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary-text">{item.sourceType === "TASK" ? "TASK" : "ONGOING WORK"}</span>
+                            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary-text">
+                              {item.sourceType === "TASK"
+                                ? "TASK"
+                                : "ONGOING WORK"}
+                            </span>
                             <span>{item.status.replaceAll("_", " ")}</span>
                             {item.trackedMinutes
                               ? ` · ${duration(item.trackedMinutes)} tracked today`
@@ -271,27 +298,12 @@ export default function DayEndReportModal({
                                   className="mt-1 min-h-20 w-full rounded-xl border border-border bg-surface p-3 font-normal"
                                 />
                               </label>
-                              <label className="text-xs font-semibold">
-                                Estimated Remaining Time *
-                                <select
-                                  value={value.estimatedRemainingMinutes || ""}
-                                  onChange={(e) =>
-                                    changeItem(
-                                      key,
-                                      "estimatedRemainingMinutes",
-                                      Number(e.target.value) || null,
-                                    )
-                                  }
-                                  className="mt-1 w-full rounded-xl border border-border bg-surface p-3"
-                                >
-                                  <option value="">Select time</option>
-                                  {remainingOptions.map(([v, l]) => (
-                                    <option key={v} value={v}>
-                                      {l}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
+                              <EstimateInput
+                                value={value.estimatedRemaining}
+                                onChange={(next) =>
+                                  changeItem(key, "estimatedRemaining", next)
+                                }
+                              />
                             </>
                           )}
                         </div>
@@ -313,7 +325,10 @@ export default function DayEndReportModal({
             </h3>
             <textarea
               value={otherWork}
-              onChange={(e) => { setOtherWork(e.target.value); setDirty(true); }}
+              onChange={(e) => {
+                setOtherWork(e.target.value);
+                setDirty(true);
+              }}
               maxLength={2000}
               placeholder="Anything completed that is not listed above?"
               className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
@@ -325,7 +340,10 @@ export default function DayEndReportModal({
             </h3>
             <select
               value={blockerType}
-              onChange={(e) => { setBlockerType(e.target.value); setDirty(true); }}
+              onChange={(e) => {
+                setBlockerType(e.target.value);
+                setDirty(true);
+              }}
               className="mt-2 w-full rounded-xl border border-border bg-surface p-3"
             >
               {blockerOptions.map(([v, l]) => (
@@ -337,7 +355,10 @@ export default function DayEndReportModal({
             {blockerType !== "NONE" && (
               <textarea
                 value={blockerDetails}
-                onChange={(e) => { setBlockerDetails(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setBlockerDetails(e.target.value);
+                  setDirty(true);
+                }}
                 maxLength={2000}
                 placeholder="Explain the issue *"
                 className="mt-2 min-h-20 w-full rounded-xl border border-border bg-surface p-3"
@@ -350,14 +371,21 @@ export default function DayEndReportModal({
             </h3>
             <textarea
               value={tomorrowPriority}
-              onChange={(e) => { setTomorrowPriority(e.target.value); setDirty(true); }}
+              onChange={(e) => {
+                setTomorrowPriority(e.target.value);
+                setDirty(true);
+              }}
               maxLength={1000}
               placeholder="What should you focus on next?"
               className="mt-2 min-h-24 w-full rounded-xl border border-border bg-surface p-3"
             />
           </section>
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <Button variant="secondary" disabled={saving} onClick={requestClose}>
+            <Button
+              variant="secondary"
+              disabled={saving}
+              onClick={requestClose}
+            >
               Cancel
             </Button>
             <Button disabled={saving} onClick={submit}>
@@ -367,5 +395,118 @@ export default function DayEndReportModal({
         </div>
       )}
     </Modal>
+  );
+}
+
+function EstimateInput({ value, onChange }) {
+  const hourMatch = hourOptions.some(
+    ([option]) => option.value === value?.value && option.unit === value?.unit,
+  );
+  const dayMatch =
+    value?.unit === "DAYS" && dayOptions.includes(Number(value.value));
+  const [mode, setMode] = useState(
+    dayMatch ? "DAYS" : hourMatch || !value ? "HOURS" : "CUSTOM",
+  );
+  const [customUnit, setCustomUnit] = useState(value?.unit || "HOURS");
+  const chooseMode = (next) => {
+    setMode(next);
+    onChange(null);
+  };
+  return (
+    <fieldset>
+      <legend className="text-xs font-semibold">
+        Estimated Remaining Time *
+      </legend>
+      <div className="mt-1 grid grid-cols-3 gap-1 rounded-xl bg-surface-secondary p-1">
+        {["HOURS", "DAYS", "CUSTOM"].map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => chooseMode(option)}
+            className={`rounded-lg px-2 py-2 text-xs font-bold ${mode === option ? "bg-surface text-primary-text shadow-sm" : "text-muted-foreground"}`}
+          >
+            {option[0] + option.slice(1).toLowerCase()}
+          </button>
+        ))}
+      </div>
+      {mode === "HOURS" && (
+        <select
+          value={value ? `${value.value}:${value.unit}` : ""}
+          onChange={(event) => {
+            const [amount, unit] = event.target.value.split(":");
+            onChange(amount ? { value: Number(amount), unit } : null);
+          }}
+          className="mt-2 w-full rounded-xl border border-border bg-surface p-3"
+        >
+          <option value="">Select hours</option>
+          {hourOptions.map(([option, label]) => (
+            <option
+              key={`${option.value}:${option.unit}`}
+              value={`${option.value}:${option.unit}`}
+            >
+              {label}
+            </option>
+          ))}
+        </select>
+      )}
+      {mode === "DAYS" && (
+        <select
+          value={value?.unit === "DAYS" ? value.value : ""}
+          onChange={(event) =>
+            onChange(
+              event.target.value
+                ? { value: Number(event.target.value), unit: "DAYS" }
+                : null,
+            )
+          }
+          className="mt-2 w-full rounded-xl border border-border bg-surface p-3"
+        >
+          <option value="">Select days</option>
+          {dayOptions.map((days) => (
+            <option key={days} value={days}>
+              {days} Day{days === 1 ? "" : "s"}
+            </option>
+          ))}
+        </select>
+      )}
+      {mode === "CUSTOM" && (
+        <div className="mt-2 grid grid-cols-[1fr_1.2fr] gap-2">
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            max="43200"
+            aria-label="Custom duration value"
+            placeholder="Enter value"
+            value={value?.value || ""}
+            onChange={(event) =>
+              onChange(
+                event.target.value
+                  ? {
+                      value: Number(event.target.value),
+                      unit: customUnit,
+                    }
+                  : null,
+              )
+            }
+            className="rounded-xl border border-border bg-surface p-3"
+          />
+          <select
+            aria-label="Custom duration unit"
+            value={customUnit}
+            onChange={(event) => {
+              setCustomUnit(event.target.value);
+              if (value?.value)
+                onChange({ value: Number(value.value), unit: event.target.value });
+            }}
+            className="rounded-xl border border-border bg-surface p-3"
+          >
+            <option value="MINUTES">Minutes</option>
+            <option value="HOURS">Hours</option>
+            <option value="DAYS">Days</option>
+          </select>
+        </div>
+      )}
+    </fieldset>
   );
 }

@@ -16,7 +16,7 @@ test("notification event categories do not leak into attendance defaults",()=>{
 });
 
 test("persistent preferences require booleans and bounded volume",()=>{
-  const base={notificationsEnabled:true,inAppEnabled:true,doNotDisturb:false,volume:70,desktopEnabled:false,soundEnabled:true,taskEnabled:true,leaveEnabled:true,breakEnabled:false,attendanceEnabled:true,announcementEnabled:true,calendarEnabled:true,payrollEnabled:true,securityEnabled:true,employeeEnabled:true,shiftEnabled:true,eventPreferences:[]};
+  const base={notificationsEnabled:true,inAppEnabled:true,doNotDisturb:false,volume:70,desktopEnabled:false,soundEnabled:true,taskEnabled:true,noteEnabled:true,leaveEnabled:true,breakEnabled:false,attendanceEnabled:true,availabilityEnabled:true,announcementEnabled:true,calendarEnabled:true,payrollEnabled:true,securityEnabled:true,employeeEnabled:true,shiftEnabled:true,eventPreferences:[]};
   assert.equal(preferencesSchema.safeParse(base).success,true);
   assert.equal(preferencesSchema.safeParse({...base,volume:101}).success,false);
   assert.equal(preferencesSchema.safeParse({...base,desktopEnabled:1}).success,false);

@@ -145,8 +145,15 @@ export const imageSchema = z
       .trim()
       .min(1)
       .max(255)
-      .regex(/\.(jpe?g|png|webp|gif)$/i),
-    mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]),
+      .regex(/\.(jpe?g|png|webp|gif|bmp|avif)$/i),
+    mimeType: z.enum([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/bmp",
+      "image/avif",
+    ]),
     sizeBytes: z.number().int().positive().max(10485760),
   })
   .strict();
