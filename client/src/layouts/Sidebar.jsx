@@ -13,6 +13,7 @@ import {
   CalendarPlus,
   ClipboardCheck,
   CalendarDays,
+  CalendarClock,
   Clock4,
   WalletCards,
   ChartNoAxesCombined,
@@ -40,7 +41,13 @@ const groups = [
     label: "WORK",
     items: [
       ["Task Management", "/tasks", ClipboardList, P.TASK_VIEW_OWN],
-      ["My Day-End Reports", "/my-day-end-reports", ClipboardCheck, P.DAY_END_REPORT_SUBMIT],
+      ["Scheduled Work", "/scheduled-work", CalendarClock, null],
+      [
+        "My Day-End Reports",
+        "/my-day-end-reports",
+        ClipboardCheck,
+        P.DAY_END_REPORT_SUBMIT,
+      ],
       [
         "Team Ongoing Work",
         "/team-ongoing-work",
@@ -102,7 +109,12 @@ const groups = [
         SlidersHorizontal,
         P.TASK_SETTINGS,
       ],
-      ["Day-End Report Settings", "/settings/day-end-reports", SlidersHorizontal, P.DAY_END_REPORT_VIEW_ALL],
+      [
+        "Day-End Report Settings",
+        "/settings/day-end-reports",
+        SlidersHorizontal,
+        P.DAY_END_REPORT_VIEW_ALL,
+      ],
       ["Appearance", "/settings/appearance", Palette, null],
     ],
   },

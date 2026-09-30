@@ -41,6 +41,7 @@ import { listTasks, transitionTask } from "../services/task.service";
 import { getUpcoming } from "../services/companyCalendar.service";
 import { getLeaves } from "../services/leave.service";
 import DayEndReportModal from "../components/dayEndReport/DayEndReportModal";
+import TodayScheduledWork from "../components/dashboard/TodayScheduledWork";
 const clock = (v) =>
   v
     ? new Intl.DateTimeFormat("en-PK", {
@@ -350,7 +351,10 @@ export default function DashboardPage() {
       return refreshIntervals.includes(stored) ? stored : 0;
     });
   useEffect(() => {
-    if (canClock && new URLSearchParams(window.location.search).get("dayEndReport") === "open") {
+    if (
+      canClock &&
+      new URLSearchParams(window.location.search).get("dayEndReport") === "open"
+    ) {
       setDayEndEdit(false);
       setDayEndOpen(true);
     }
@@ -393,18 +397,19 @@ export default function DashboardPage() {
       setManagerLoading(true);
       setManagerError("");
       tasks.push(
-        Promise.all([attendance.getLive(), attendance.getActivity()]).then(
-          ([office, events]) => {
+        Promise.all([attendance.getLive(), attendance.getActivity()])
+          .then(([office, events]) => {
             setLive(office);
             setActivity(events);
-          },
-        ).catch((error) => {
-          setManagerError(
-            error.response?.data?.message ||
-              "Unable to load the management dashboard.",
-          );
-          throw error;
-        }).finally(() => setManagerLoading(false)),
+          })
+          .catch((error) => {
+            setManagerError(
+              error.response?.data?.message ||
+                "Unable to load the management dashboard.",
+            );
+            throw error;
+          })
+          .finally(() => setManagerLoading(false)),
       );
     }
     const results = await Promise.allSettled(tasks);
@@ -484,29 +489,31 @@ export default function DashboardPage() {
   }).format(new Date());
   return (
     <>
-      {!canViewAll && <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {canViewAll ? "Dashboard Overview" : `Welcome back, ${user.name}`}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {canViewAll
-              ? "Attendance, availability and security for your remote team — one clear view."
-              : date}
-          </p>
+      {!canViewAll && (
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">
+              {canViewAll ? "Dashboard Overview" : `Welcome back, ${user.name}`}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {canViewAll
+                ? "Attendance, availability and security for your remote team — one clear view."
+                : date}
+            </p>
+          </div>
+          {!canViewAll && (
+            <AutoRefreshControl
+              interval={refreshInterval}
+              onIntervalChange={changeRefreshInterval}
+              countdown={auto.countdown}
+              lastUpdated={auto.lastUpdated}
+              refreshing={auto.refreshing}
+              error={auto.error}
+              onRefresh={auto.refresh}
+            />
+          )}
         </div>
-        {!canViewAll && (
-          <AutoRefreshControl
-            interval={refreshInterval}
-            onIntervalChange={changeRefreshInterval}
-            countdown={auto.countdown}
-            lastUpdated={auto.lastUpdated}
-            refreshing={auto.refreshing}
-            error={auto.error}
-            onRefresh={auto.refresh}
-          />
-        )}
-      </div>}
+      )}
       {auto.error && canViewAll && (
         <div
           role="alert"
@@ -555,7 +562,10 @@ export default function DashboardPage() {
                 onClockIn: own.clockIn,
                 onStartBreak: own.startBreak,
                 onEndBreak: own.endBreak,
-                onClockOut: () => { setDayEndEdit(false); setDayEndOpen(true); },
+                onClockOut: () => {
+                  setDayEndEdit(false);
+                  setDayEndOpen(true);
+                },
               }}
             />
             {canViewOwnTasks && (
@@ -575,9 +585,33 @@ export default function DashboardPage() {
               />
             )}
           </div>
-          <EmployeeOngoingWork attendanceStatus={own.data?.status} previousOngoingWork={own.data?.previousOngoingWork} />
-          <div><button type="button" onClick={() => { setDayEndEdit(true); setDayEndOpen(true); }} className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-primary-text shadow-sm">Today’s Day-End Report</button></div>
-          <DayEndReportModal open={dayEndOpen} editExisting={dayEndEdit} onClose={() => setDayEndOpen(false)} onSubmitted={async () => { setDayEndOpen(false); if (!dayEndEdit) await own.clockOut(); else own.refresh(); }} />
+          <EmployeeOngoingWork
+            attendanceStatus={own.data?.status}
+            previousOngoingWork={own.data?.previousOngoingWork}
+          />
+          <TodayScheduledWork />
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setDayEndEdit(true);
+                setDayEndOpen(true);
+              }}
+              className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-primary-text shadow-sm"
+            >
+              Today’s Day-End Report
+            </button>
+          </div>
+          <DayEndReportModal
+            open={dayEndOpen}
+            editExisting={dayEndEdit}
+            onClose={() => setDayEndOpen(false)}
+            onSubmitted={async () => {
+              setDayEndOpen(false);
+              if (!dayEndEdit) await own.clockOut();
+              else own.refresh();
+            }}
+          />
           <div className="grid items-stretch gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.6fr)_minmax(0,.58fr)]">
             <TeamLeave rows={teamLeave} />
             <EmployeeDashboardSidebar

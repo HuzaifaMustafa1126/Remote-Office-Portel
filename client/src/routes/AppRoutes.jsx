@@ -35,6 +35,7 @@ import NotesPage from "../pages/NotesPage";
 import TeamOngoingWorkPage from "../pages/TeamOngoingWorkPage";
 import DayEndReportsPage from "../pages/DayEndReportsPage";
 import MyDayEndReportsPage from "../pages/MyDayEndReportsPage";
+import ScheduledWorkPage from "../pages/ScheduledWorkPage";
 import DayEndReportSettingsPage from "../pages/DayEndReportSettingsPage";
 import DayEndReportAnalyticsPage from "../pages/DayEndReportAnalyticsPage";
 import { PERMISSIONS as P } from "../utils/permissions";
@@ -116,7 +117,14 @@ export default function AppRoutes() {
             </Gate>
           }
         />
-        <Route path="day-end-reports/analytics" element={<Gate permission={P.DAY_END_REPORT_VIEW_ALL}><DayEndReportAnalyticsPage /></Gate>} />
+        <Route
+          path="day-end-reports/analytics"
+          element={
+            <Gate permission={P.DAY_END_REPORT_VIEW_ALL}>
+              <DayEndReportAnalyticsPage />
+            </Gate>
+          }
+        />
         <Route
           path="my-day-end-reports"
           element={
@@ -125,7 +133,14 @@ export default function AppRoutes() {
             </Gate>
           }
         />
-        <Route path="settings/day-end-reports" element={<Gate permission={P.DAY_END_REPORT_VIEW_ALL}><DayEndReportSettingsPage /></Gate>} />
+        <Route
+          path="settings/day-end-reports"
+          element={
+            <Gate permission={P.DAY_END_REPORT_VIEW_ALL}>
+              <DayEndReportSettingsPage />
+            </Gate>
+          }
+        />
         <Route
           path="notes"
           element={
@@ -134,6 +149,7 @@ export default function AppRoutes() {
             </Gate>
           }
         />
+        <Route path="scheduled-work" element={<ScheduledWorkPage />} />
         <Route
           path="notes/:noteId"
           element={

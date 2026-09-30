@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS scheduled_work (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  created_by BIGINT UNSIGNED NOT NULL,
+  assigned_to BIGINT UNSIGNED NOT NULL,
+  schedule_type ENUM('EXACT','RELATIVE') NOT NULL,
+  scheduled_at DATETIME NOT NULL,
+  relative_value INT UNSIGNED NULL,
+  relative_unit ENUM('MINUTES','HOURS','DAYS','WEEKS') NULL,
+  priority ENUM('LOW','NORMAL','HIGH','URGENT') NOT NULL DEFAULT 'NORMAL',
+  status ENUM('UPCOMING','COMPLETED','CANCELLED') NOT NULL DEFAULT 'UPCOMING',
+  started_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  cancelled_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_scheduled_work_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_scheduled_work_assignee FOREIGN KEY (assigned_to) REFERENCES employees(id) ON DELETE RESTRICT,
+  INDEX idx_scheduled_work_creator (created_by),
+  INDEX idx_scheduled_work_schedule (scheduled_at),
+  INDEX idx_scheduled_work_assignee_status_schedule (assigned_to,status,scheduled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

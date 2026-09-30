@@ -173,6 +173,13 @@ const categories = {
     "NOTE_DELETED",
     "NOTE_MARKED_IMPORTANT",
   ],
+  scheduledWork: [
+    "SCHEDULED_WORK_CREATED",
+    "SCHEDULED_WORK_UPDATED",
+    "SCHEDULED_WORK_RESCHEDULED",
+    "SCHEDULED_WORK_COMPLETED",
+    "SCHEDULED_WORK_CANCELLED",
+  ],
 };
 export async function searchAuditLogs(filters = {}) {
   const where = [],
