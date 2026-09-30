@@ -64,6 +64,20 @@ export const reminderIdSchema = z
     reminderId: z.coerce.number().int().positive(),
   })
   .strict();
+export const snoozeSchema = z
+  .object({
+    value: z.coerce.number().int().min(1).max(525600).optional(),
+    unit: z.enum(["MINUTES", "HOURS", "DAYS", "TOMORROW"]),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    reminderId: z.coerce.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.unit === "TOMORROW" && !value.time)
+      context.addIssue({ code: "custom", path: ["time"], message: "Choose a time for tomorrow" });
+    if (value.unit !== "TOMORROW" && !value.value)
+      context.addIssue({ code: "custom", path: ["value"], message: "Enter a reminder duration" });
+  });
 export const listSchema = z
   .object({
     status: z

@@ -25,6 +25,13 @@ r.delete(
   validate(v.reminderIdSchema, "params"),
   asyncHandler(c.removeReminder),
 );
+r.get("/:id/snoozes", validate(v.idSchema, "params"), asyncHandler(c.listSnoozes));
+r.post(
+  "/:id/snooze",
+  validate(v.idSchema, "params"),
+  validate(v.snoozeSchema),
+  asyncHandler(c.snooze),
+);
 r.get("/:id", validate(v.idSchema, "params"), asyncHandler(c.get));
 r.patch(
   "/:id",
@@ -43,5 +50,6 @@ r.post(
   validate(v.idSchema, "params"),
   asyncHandler(c.complete),
 );
+r.post("/:id/start", validate(v.idSchema, "params"), asyncHandler(c.start));
 r.post("/:id/cancel", validate(v.idSchema, "params"), asyncHandler(c.cancel));
 export default r;

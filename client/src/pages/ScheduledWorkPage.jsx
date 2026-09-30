@@ -188,12 +188,29 @@ export default function ScheduledWorkPage() {
                   {relative(x.scheduledAt)}
                 </p>
               )}
+              {x.activeSnooze && (
+                <p className="mt-2 text-xs font-semibold text-primary-text">
+                  Reminding again {fmt(x.activeSnooze.snoozedUntil)}
+                </p>
+              )}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="mr-auto text-[10px] font-bold text-muted-foreground">
                   {x.priority}
                 </span>
                 {x.status === "UPCOMING" && (
                   <>
+                    <button
+                      onClick={() => act(() => api.startScheduledWork(x.id))}
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
+                    >
+                      Do Now
+                    </button>
+                    <button
+                      onClick={() => act(() => api.snoozeScheduledWork(x.id, { value: 20, unit: "MINUTES" }))}
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
+                    >
+                      Remind 20m
+                    </button>
                     <button
                       onClick={() => act(() => api.completeScheduledWork(x.id))}
                       className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground"

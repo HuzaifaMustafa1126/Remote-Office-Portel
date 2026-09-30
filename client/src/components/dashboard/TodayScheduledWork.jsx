@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import {
   todayScheduledWork,
   completeScheduledWork,
+  startScheduledWork,
+  snoozeScheduledWork,
 } from "../../services/scheduledWork.service";
 export default function TodayScheduledWork() {
   const [items, setItems] = useState([]),
@@ -31,7 +33,7 @@ export default function TodayScheduledWork() {
           {items.map((x) => (
             <div
               key={x.id}
-              className="flex items-center gap-3 rounded-xl bg-surface-secondary p-3"
+              className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-secondary p-3"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{x.title}</p>
@@ -42,7 +44,37 @@ export default function TodayScheduledWork() {
                     minute: "2-digit",
                   })}
                 </p>
+                {x.activeSnooze && (
+                  <p className="text-[11px] font-semibold text-primary-text">
+                    Reminding again at{" "}
+                    {new Date(x.activeSnooze.snoozedUntil).toLocaleTimeString(
+                      "en-PK",
+                      {
+                        timeZone: "Asia/Karachi",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )}
+                  </p>
+                )}
               </div>
+              <button
+                onClick={() => startScheduledWork(x.id).then(load)}
+                className="text-xs font-bold text-primary-text"
+              >
+                Do Now
+              </button>
+              <button
+                onClick={() =>
+                  snoozeScheduledWork(x.id, {
+                    value: 20,
+                    unit: "MINUTES",
+                  }).then(load)
+                }
+                className="text-xs font-bold text-primary-text"
+              >
+                Snooze 20m
+              </button>
               <button
                 onClick={() => completeScheduledWork(x.id).then(load)}
                 className="text-xs font-bold text-primary-text"

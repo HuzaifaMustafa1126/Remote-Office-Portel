@@ -8,13 +8,16 @@ const label = (row) =>
 
 export default function ReminderManager({ work, onClose, onChanged }) {
   const [rows, setRows] = useState([]),
+    [snoozes, setSnoozes] = useState([]),
     [value, setValue] = useState(20),
     [unit, setUnit] = useState("MINUTES"),
     [error, setError] = useState("");
   const load = () =>
-    api
-      .listReminders(work.id)
-      .then(setRows)
+    Promise.all([api.listReminders(work.id), api.listSnoozes(work.id)])
+      .then(([reminders, snoozeHistory]) => {
+        setRows(reminders);
+        setSnoozes(snoozeHistory);
+      })
       .catch((e) =>
         setError(e.response?.data?.message || "Unable to load reminders."),
       );
@@ -55,6 +58,18 @@ export default function ReminderManager({ work, onClose, onChanged }) {
           </p>
         )}
         <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+          {work.startedAt && (
+            <div className="rounded-xl border border-border p-3">
+              <p className="text-sm font-semibold">Work Started</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(work.startedAt).toLocaleString("en-PK", {
+                  timeZone: "Asia/Karachi",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            </div>
+          )}
           {rows.map((row) => (
             <div
               key={row.id}
@@ -77,6 +92,33 @@ export default function ReminderManager({ work, onClose, onChanged }) {
                   Remove
                 </button>
               )}
+            </div>
+          ))}
+          {snoozes.map((row) => (
+            <div
+              key={`snooze-${row.id}`}
+              className="rounded-xl border border-border p-3"
+            >
+              <p className="text-sm font-semibold">
+                Remind Me Later ·{" "}
+                {row.unit === "TOMORROW"
+                  ? "Tomorrow"
+                  : `${row.value} ${row.unit.toLowerCase()}`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {row.status} ·{" "}
+                {new Date(row.snoozedAt).toLocaleString("en-PK", {
+                  timeZone: "Asia/Karachi",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+                {" → "}
+                {new Date(row.snoozedUntil).toLocaleString("en-PK", {
+                  timeZone: "Asia/Karachi",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
             </div>
           ))}
         </div>

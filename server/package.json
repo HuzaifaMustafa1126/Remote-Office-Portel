@@ -20,7 +20,7 @@
     "test:ongoing-work": "node --test test/ongoingWorkStatus.test.js",
     "test:ongoing-work-timer": "node --test test/ongoingWorkStatus.test.js test/ongoingWorkTimer.test.js",
     "test:day-end-report": "node --test test/dayEndReport.test.js",
-    "test:scheduled-work": "node --test test/scheduledWorkTime.test.js test/scheduledWorkReminder.test.js",
+    "test:scheduled-work": "node --test test/scheduledWorkTime.test.js test/scheduledWorkReminder.test.js test/scheduledWorkSnooze.test.js",
     "scheduled-work:process-reminders": "node src/scripts/processScheduledWorkReminders.js",
     "ongoing-work:audit": "node src/scripts/auditOngoingWorkIntegrity.js",
     "ongoing-work:cleanup": "node src/scripts/cleanupCompletedOngoingWork.js",

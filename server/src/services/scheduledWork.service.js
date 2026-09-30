@@ -17,7 +17,10 @@ const select = `SELECT id,title,description,created_by createdBy,assigned_to ass
  relative_unit relativeUnit,priority,status,started_at startedAt,completed_at completedAt,
  cancelled_at cancelledAt,created_at createdAt,updated_at updatedAt,
  (SELECT GROUP_CONCAT(CONCAT(r.reminder_type,':',COALESCE(r.reminder_value,''),':',COALESCE(r.reminder_unit,''),':',r.status) ORDER BY r.remind_at SEPARATOR '|')
-  FROM scheduled_work_reminders r WHERE r.scheduled_work_id=scheduled_work.id AND r.status='PENDING') reminderSummary FROM scheduled_work`;
+  FROM scheduled_work_reminders r WHERE r.scheduled_work_id=scheduled_work.id AND r.status='PENDING') reminderSummary,
+ (SELECT s.id FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozeId,
+ (SELECT s.snoozed_until FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozedUntil
+ FROM scheduled_work`;
 const isoFields = [
   "scheduledAt",
   "startedAt",
@@ -35,6 +38,11 @@ const present = (row, now = new Date()) => {
       })
     : [];
   delete result.reminderSummary;
+  result.activeSnooze = result.activeSnoozeId
+    ? { id: Number(result.activeSnoozeId), snoozedUntil: sqlToIso(result.activeSnoozedUntil) }
+    : null;
+  delete result.activeSnoozeId;
+  delete result.activeSnoozedUntil;
   isoFields.forEach((key) => {
     result[key] = sqlToIso(result[key]);
   });
@@ -238,6 +246,31 @@ export async function update(id, data, actor) {
     connection.release();
   }
 }
+export async function start(id, actor) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const row = await owned(id, actor, connection, true);
+    if (row.status !== "UPCOMING")
+      throw new ApiError(409, `This work is already ${row.status.toLowerCase()}`);
+    if (!row.startedAt) {
+      await connection.execute(
+        "UPDATE scheduled_work SET started_at=CURRENT_TIMESTAMP WHERE id=? AND started_at IS NULL",
+        [id],
+      );
+      await audit(connection, actor, "SCHEDULED_WORK_STARTED", id, {
+        scheduledWorkId: Number(id),
+      });
+    }
+    await connection.commit();
+    return present(await owned(id, actor));
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
 export async function reschedule(id, data, actor) {
   const timing = schedule(data);
   const connection = await pool.getConnection();
@@ -257,6 +290,10 @@ export async function reschedule(id, data, actor) {
       ],
     );
     await recalculateReminders(connection, id, timing.scheduledAt);
+    await connection.execute(
+      "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE scheduled_work_id=? AND status='PENDING'",
+      [id],
+    );
     await audit(connection, actor, "SCHEDULED_WORK_RESCHEDULED", id, {
       scheduledWorkId: Number(id),
       oldScheduledAt: row.scheduledAt,
@@ -288,6 +325,10 @@ async function action(id, actor, nextStatus) {
     );
     await connection.execute(
       "UPDATE scheduled_work_reminders SET status='CANCELLED' WHERE scheduled_work_id=? AND status='PENDING'",
+      [id],
+    );
+    await connection.execute(
+      "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE scheduled_work_id=? AND status='PENDING'",
       [id],
     );
     await audit(connection, actor, `SCHEDULED_WORK_${nextStatus}`, id, {

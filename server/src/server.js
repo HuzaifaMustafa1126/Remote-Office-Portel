@@ -8,6 +8,7 @@ import { publishDueScheduled,sendTaskDeadlineNotifications } from "./services/ta
 import { pauseStaleTaskSessions } from "./services/taskPresence.service.js";
 import { processDayEndReportFollowups } from "./services/dayEndReportFollowup.service.js";
 import { processReminderQueue } from "./services/scheduledWorkReminder.service.js";
+import { processSnoozeQueue } from "./services/scheduledWorkSnooze.service.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -78,7 +79,7 @@ async function start() {
       if (reminderRunning) return;
       reminderRunning = true;
       try {
-        await processReminderQueue();
+        await Promise.all([processReminderQueue(), processSnoozeQueue()]);
       } catch (error) {
         console.error("Scheduled work reminder check failed:", error.message);
       } finally {

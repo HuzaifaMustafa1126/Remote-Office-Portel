@@ -12,6 +12,7 @@ import {
   playNotificationSound,
   setSoundConfiguration,
 } from "../services/notificationSound.service";
+import ScheduledWorkReminderPopup from "../components/scheduledWork/ScheduledWorkReminderPopup";
 export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "", category = "") =>
@@ -243,6 +244,11 @@ export function NotificationProvider({ children }) {
       }}
     >
       {children}
+      <ScheduledWorkReminderPopup
+        notifications={items}
+        markRead={markRead}
+        reconcile={reconcile}
+      />
     </NotificationContext.Provider>
   );
 }

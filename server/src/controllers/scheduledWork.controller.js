@@ -1,5 +1,6 @@
 import * as service from "../services/scheduledWork.service.js";
 import * as reminders from "../services/scheduledWorkReminder.service.js";
+import * as snoozes from "../services/scheduledWorkSnooze.service.js";
 export const create = async (req, res) =>
   res
     .status(201)
@@ -31,6 +32,8 @@ export const update = async (req, res) =>
     success: true,
     data: await service.update(req.params.id, req.body, req.user),
   });
+export const start = async (req, res) =>
+  res.json({ success: true, data: await service.start(req.params.id, req.user) });
 export const reschedule = async (req, res) =>
   res.json({
     success: true,
@@ -65,3 +68,7 @@ export const removeReminder = async (req, res) =>
       req.user,
     ),
   });
+export const snooze = async (req, res) =>
+  res.status(201).json({ success: true, data: await snoozes.snooze(req.params.id, req.body, req.user) });
+export const listSnoozes = async (req, res) =>
+  res.json({ success: true, data: await snoozes.list(req.params.id, req.user) });

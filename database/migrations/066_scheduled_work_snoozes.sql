@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS scheduled_work_snoozes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  scheduled_work_id BIGINT UNSIGNED NOT NULL,
+  reminder_id BIGINT UNSIGNED NULL,
+  employee_id BIGINT UNSIGNED NOT NULL,
+  snooze_value INT UNSIGNED NULL,
+  snooze_unit ENUM('MINUTES','HOURS','DAYS','TOMORROW') NOT NULL,
+  snoozed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  snoozed_until DATETIME NOT NULL,
+  status ENUM('PENDING','TRIGGERED','CANCELLED') NOT NULL DEFAULT 'PENDING',
+  triggered_at DATETIME NULL,
+  notification_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_scheduled_work_snooze_work FOREIGN KEY (scheduled_work_id) REFERENCES scheduled_work(id) ON DELETE CASCADE,
+  CONSTRAINT fk_scheduled_work_snooze_reminder FOREIGN KEY (reminder_id) REFERENCES scheduled_work_reminders(id) ON DELETE SET NULL,
+  CONSTRAINT fk_scheduled_work_snooze_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_scheduled_work_snooze_notification FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE SET NULL,
+  INDEX idx_scheduled_work_snooze_due (status,snoozed_until),
+  INDEX idx_scheduled_work_snooze_work (scheduled_work_id,status,snoozed_until),
+  INDEX idx_scheduled_work_snooze_employee (employee_id,status,snoozed_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

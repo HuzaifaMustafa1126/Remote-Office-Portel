@@ -60,6 +60,7 @@ const requiredTables = [
   "day_end_report_followups",
   "scheduled_work",
   "scheduled_work_reminders",
+  "scheduled_work_snoozes",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
@@ -148,6 +149,7 @@ const requiredMigrations = [
   "063_ongoing_work_employee_soft_delete.sql",
   "064_scheduled_work_foundation.sql",
   "065_scheduled_work_reminders.sql",
+  "066_scheduled_work_snoozes.sql",
 ];
 
 export async function validateSchema() {
