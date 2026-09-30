@@ -7,6 +7,7 @@ import { validateSchema } from "./services/schema.service.js";
 import { publishDueScheduled,sendTaskDeadlineNotifications } from "./services/task.service.js";
 import { pauseStaleTaskSessions } from "./services/taskPresence.service.js";
 import { processDayEndReportFollowups } from "./services/dayEndReportFollowup.service.js";
+import { processReminderQueue } from "./services/scheduledWorkReminder.service.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -72,6 +73,24 @@ async function start() {
     );
     dayEndTimer.unref();
     processDayEndReportFollowups().catch((error) => console.error("Initial Day-End Report follow-up check failed:", error.message));
+    let reminderRunning = false;
+    const runReminders = async () => {
+      if (reminderRunning) return;
+      reminderRunning = true;
+      try {
+        await processReminderQueue();
+      } catch (error) {
+        console.error("Scheduled work reminder check failed:", error.message);
+      } finally {
+        reminderRunning = false;
+      }
+    };
+    const reminderTimer = setInterval(
+      runReminders,
+      60000,
+    );
+    reminderTimer.unref();
+    runReminders();
     server.listen(PORT, "0.0.0.0", () =>
       console.log(`API listening on port ${PORT}`),
     );

@@ -28,6 +28,10 @@ const audienceLabels = {
   NOBODY: "Nobody",
 };
 const categoryMeta = {
+  "Scheduled Work": {
+    Icon: CalendarClock,
+    description: "Advance reminders and due-time alerts for scheduled work.",
+  },
   Availability: {
     Icon: Users,
     description:
@@ -72,6 +76,8 @@ const categoryMeta = {
   },
 };
 const overrides = {
+  SCHEDULED_WORK_REMINDER: "Upcoming Work Reminder",
+  SCHEDULED_WORK_DUE: "Scheduled Work Due",
   ATTENDANCE_CLOCK_IN: "Clock In",
   ATTENDANCE_CLOCK_OUT: "Clock Out",
   ATTENDANCE_LATE: "Late Arrival",
@@ -148,7 +154,9 @@ const overrides = {
   SECURITY_PERMISSION_DENIED: "Unauthorized Access",
 };
 const categoryFor = (type) =>
-  type.startsWith("AVAILABILITY_")
+  type.startsWith("SCHEDULED_WORK_")
+    ? "Scheduled Work"
+    : type.startsWith("AVAILABILITY_")
     ? "Availability"
     : type.startsWith("BREAK_")
       ? "Break"
@@ -179,6 +187,10 @@ const friendly = (type) =>
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
 const descriptionFor = (type) => {
+  if (type === "SCHEDULED_WORK_REMINDER")
+    return "Remind the assigned employee before scheduled work is due.";
+  if (type === "SCHEDULED_WORK_DUE")
+    return "Notify the assigned employee when scheduled work reaches its due time.";
   if (type === "AVAILABILITY_CHANGED")
     return "Notify employees when a team member changes availability, such as Meeting, Away, Namaz or Break.";
   const noteDescriptions = {

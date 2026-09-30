@@ -7,11 +7,17 @@ import {
   sqlToIso,
   toSqlDateTime,
 } from "../utils/scheduledWorkTime.js";
+import {
+  createInitialReminders,
+  recalculateReminders,
+} from "./scheduledWorkReminder.service.js";
 
 const select = `SELECT id,title,description,created_by createdBy,assigned_to assignedTo,
  schedule_type scheduleType,scheduled_at scheduledAt,relative_value relativeValue,
  relative_unit relativeUnit,priority,status,started_at startedAt,completed_at completedAt,
- cancelled_at cancelledAt,created_at createdAt,updated_at updatedAt FROM scheduled_work`;
+ cancelled_at cancelledAt,created_at createdAt,updated_at updatedAt,
+ (SELECT GROUP_CONCAT(CONCAT(r.reminder_type,':',COALESCE(r.reminder_value,''),':',COALESCE(r.reminder_unit,''),':',r.status) ORDER BY r.remind_at SEPARATOR '|')
+  FROM scheduled_work_reminders r WHERE r.scheduled_work_id=scheduled_work.id AND r.status='PENDING') reminderSummary FROM scheduled_work`;
 const isoFields = [
   "scheduledAt",
   "startedAt",
@@ -22,6 +28,13 @@ const isoFields = [
 ];
 const present = (row, now = new Date()) => {
   const result = { ...row, displayStatus: displayStatus(row, now) };
+  result.reminders = result.reminderSummary
+    ? result.reminderSummary.split("|").map((item) => {
+        const [reminderType, value, unit, status] = item.split(":");
+        return { reminderType, value: value ? Number(value) : null, unit: unit || null, status };
+      })
+    : [];
+  delete result.reminderSummary;
   isoFields.forEach((key) => {
     result[key] = sqlToIso(result[key]);
   });
@@ -100,6 +113,12 @@ export async function create(data, actor) {
         timing.relativeUnit,
         data.priority,
       ],
+    );
+    await createInitialReminders(
+      connection,
+      result.insertId,
+      timing.scheduledAt,
+      data.reminders,
     );
     await audit(connection, actor, "SCHEDULED_WORK_CREATED", result.insertId, {
       scheduledWorkId: result.insertId,
@@ -237,6 +256,7 @@ export async function reschedule(id, data, actor) {
         id,
       ],
     );
+    await recalculateReminders(connection, id, timing.scheduledAt);
     await audit(connection, actor, "SCHEDULED_WORK_RESCHEDULED", id, {
       scheduledWorkId: Number(id),
       oldScheduledAt: row.scheduledAt,
@@ -265,6 +285,10 @@ async function action(id, actor, nextStatus) {
     await connection.execute(
       `UPDATE scheduled_work SET status=?,${column}=CURRENT_TIMESTAMP WHERE id=?`,
       [nextStatus, id],
+    );
+    await connection.execute(
+      "UPDATE scheduled_work_reminders SET status='CANCELLED' WHERE scheduled_work_id=? AND status='PENDING'",
+      [id],
     );
     await audit(connection, actor, `SCHEDULED_WORK_${nextStatus}`, id, {
       scheduledWorkId: Number(id),

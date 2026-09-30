@@ -7,6 +7,9 @@ const blank = {
   relativeValue: 48,
   relativeUnit: "HOURS",
   priority: "NORMAL",
+  reminders: [],
+  customReminderValue: 45,
+  customReminderUnit: "MINUTES",
 };
 const pakistanInputNow = () => {
   const p = Object.fromEntries(
@@ -75,6 +78,11 @@ export default function ScheduledWorkForm({
           description: form.description || null,
           priority: form.priority,
         });
+      if (!rescheduleOnly && !initial)
+        payload.reminders = form.reminders.map(([value, unit]) => ({
+          value,
+          unit,
+        }));
       await onSave(payload);
       onClose();
     } catch (err) {
@@ -231,6 +239,96 @@ export default function ScheduledWorkForm({
                 timeStyle: "short",
               })}
             </p>
+          </div>
+        )}
+        {!rescheduleOnly && !initial && (
+          <div className="mt-5 rounded-xl border border-border p-4">
+            <p className="text-sm font-semibold">Remind Me</p>
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked disabled /> At Scheduled Time
+            </label>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {[
+                [10, "MINUTES", "10 Minutes Before"],
+                [20, "MINUTES", "20 Minutes Before"],
+                [30, "MINUTES", "30 Minutes Before"],
+                [1, "HOURS", "1 Hour Before"],
+                [2, "HOURS", "2 Hours Before"],
+                [1, "DAYS", "1 Day Before"],
+              ].map(([value, unit, label]) => {
+                const checked = form.reminders.some(
+                  (x) => x[0] === value && x[1] === unit,
+                );
+                return (
+                  <label key={label} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        set(
+                          "reminders",
+                          checked
+                            ? form.reminders.filter(
+                                (x) => !(x[0] === value && x[1] === unit),
+                              )
+                            : [...form.reminders, [value, unit]],
+                        )
+                      }
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <input
+                aria-label="Custom reminder value"
+                type="number"
+                min="1"
+                value={form.customReminderValue}
+                onChange={(e) => set("customReminderValue", e.target.value)}
+                className="w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              <select
+                value={form.customReminderUnit}
+                onChange={(e) => set("customReminderUnit", e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="MINUTES">Minutes</option>
+                <option value="HOURS">Hours</option>
+                <option value="DAYS">Days</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    Number(form.customReminderValue),
+                    form.customReminderUnit,
+                  ];
+                  if (
+                    next[0] > 0 &&
+                    !form.reminders.some(
+                      (x) => x[0] === next[0] && x[1] === next[1],
+                    )
+                  )
+                    set("reminders", [...form.reminders, next]);
+                }}
+                className="rounded-lg border border-border px-3 py-2 text-sm font-semibold"
+              >
+                + Add Custom Reminder
+              </button>
+            </div>
+            {preview && (
+              <div className="mt-4 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">You'll be reminded:</p>
+                {form.reminders.map(([value, unit]) => {
+                  const ms = { MINUTES: 6e4, HOURS: 36e5, DAYS: 864e5 }[unit];
+                  const at = new Date(preview.getTime() - value * ms);
+                  return <p key={`${value}-${unit}`}>{at.toLocaleString("en-PK", { timeZone: "Asia/Karachi", dateStyle: "medium", timeStyle: "short" })}</p>;
+                })}
+                <p>{preview.toLocaleString("en-PK", { timeZone: "Asia/Karachi", dateStyle: "medium", timeStyle: "short" })} · At scheduled time</p>
+              </div>
+            )}
           </div>
         )}
         <div className="mt-6 flex justify-end gap-2">

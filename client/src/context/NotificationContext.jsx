@@ -15,7 +15,9 @@ import {
 export const NotificationContext = createContext(null);
 
 const categoryFor = (type = "", category = "") =>
-  category === "AVAILABILITY" || type.startsWith("AVAILABILITY_")
+  category === "SCHEDULED_WORK" || type.startsWith("SCHEDULED_WORK_")
+    ? "taskEnabled"
+    : category === "AVAILABILITY" || type.startsWith("AVAILABILITY_")
     ? "availabilityEnabled"
     : category === "TASK" || type.startsWith("TASK_")
       ? "taskEnabled"

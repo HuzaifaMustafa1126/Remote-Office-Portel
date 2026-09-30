@@ -1,4 +1,5 @@
 import * as service from "../services/scheduledWork.service.js";
+import * as reminders from "../services/scheduledWorkReminder.service.js";
 export const create = async (req, res) =>
   res
     .status(201)
@@ -44,4 +45,23 @@ export const cancel = async (req, res) =>
   res.json({
     success: true,
     data: await service.cancel(req.params.id, req.user),
+  });
+export const listReminders = async (req, res) =>
+  res.json({
+    success: true,
+    data: await reminders.list(req.params.id, req.user),
+  });
+export const addReminder = async (req, res) =>
+  res.status(201).json({
+    success: true,
+    data: await reminders.add(req.params.id, req.body, req.user),
+  });
+export const removeReminder = async (req, res) =>
+  res.json({
+    success: true,
+    data: await reminders.remove(
+      req.params.id,
+      req.params.reminderId,
+      req.user,
+    ),
   });

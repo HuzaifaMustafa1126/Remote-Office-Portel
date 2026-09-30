@@ -15,11 +15,27 @@ import useNotifications from "../../hooks/useNotifications";
 import NotificationSoundManager from "./NotificationSoundManager";
 const groups = [
   [
+    "Scheduled Work",
+    "Advance reminders and due-time alerts for your scheduled work.",
+    ["taskEnabled"],
+    CalendarCheck,
+    [
+      ["Upcoming Work Reminder", "SCHEDULED_WORK_REMINDER"],
+      ["Scheduled Work Due", "SCHEDULED_WORK_DUE"],
+    ],
+  ],
+  [
     "Availability Updates",
     "Updates when a team member changes availability.",
     ["availabilityEnabled"],
     Users,
-    [["Availability Updates", "AVAILABILITY_CHANGED", "Notify employees when a team member changes availability, such as Meeting, Away, Namaz or Break."]],
+    [
+      [
+        "Availability Updates",
+        "AVAILABILITY_CHANGED",
+        "Notify employees when a team member changes availability, such as Meeting, Away, Namaz or Break.",
+      ],
+    ],
   ],
   [
     "Notes",
@@ -27,14 +43,34 @@ const groups = [
     ["noteEnabled"],
     ClipboardCheck,
     [
-      ["New Team Notes", "NOTE_TEAM_PUBLISHED", "Notify employees when a new note is published for All Team Members."],
-      ["CEO Notes", "NOTE_CEO_PUBLISHED", "Notify CEO when a new note is published with Only CEO visibility."],
-      ["Important Notes", "NOTE_IMPORTANT_PUBLISHED", "Notify eligible users when an important note is published."],
+      [
+        "New Team Notes",
+        "NOTE_TEAM_PUBLISHED",
+        "Notify employees when a new note is published for All Team Members.",
+      ],
+      [
+        "CEO Notes",
+        "NOTE_CEO_PUBLISHED",
+        "Notify CEO when a new note is published with Only CEO visibility.",
+      ],
+      [
+        "Important Notes",
+        "NOTE_IMPORTANT_PUBLISHED",
+        "Notify eligible users when an important note is published.",
+      ],
       ["Note Update", "NOTE_UPDATED"],
       ["Note Shared", "NOTE_SHARED_TEAM"],
       ["Note Shared With CEO", "NOTE_SHARED_CEO"],
-      ["Note Replies", "NOTE_REPLY_CREATED", "Notify note creators when someone replies to their note."],
-      ["Note Mentions", "NOTE_REPLY_MENTION", "Notify employees when they are @mentioned in a note reply."],
+      [
+        "Note Replies",
+        "NOTE_REPLY_CREATED",
+        "Notify note creators when someone replies to their note.",
+      ],
+      [
+        "Note Mentions",
+        "NOTE_REPLY_MENTION",
+        "Notify employees when they are @mentioned in a note reply.",
+      ],
     ],
   ],
   [
@@ -56,9 +92,7 @@ const groups = [
     "Alerts when a break exceeds its allowed duration.",
     ["breakEnabled"],
     Coffee,
-    [
-      ["Break Running Too Long", "BREAK_EXCEEDED"],
-    ],
+    [["Break Running Too Long", "BREAK_EXCEEDED"]],
   ],
   [
     "Leave Updates",
@@ -96,7 +130,10 @@ const groups = [
       ["Ongoing Work Completed", "ONGOING_WORK_COMPLETED"],
       ["Ongoing Work Deleted", "ONGOING_WORK_DELETED"],
       ["Ongoing Work Paused for Break", "ONGOING_WORK_AUTO_PAUSED_BREAK"],
-      ["Ongoing Work Paused at Clock Out", "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT"],
+      [
+        "Ongoing Work Paused at Clock Out",
+        "ONGOING_WORK_AUTO_PAUSED_CLOCK_OUT",
+      ],
       ["Day-End Report Submitted", "DAY_END_REPORT_SUBMITTED"],
       ["Day-End Report Reviewed", "DAY_END_REPORT_REVIEWED"],
       ["Day-End Report Replies", "DAY_END_REPORT_REPLY"],

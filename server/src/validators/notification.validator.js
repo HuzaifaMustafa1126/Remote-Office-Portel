@@ -21,6 +21,7 @@ export const listSchema = z.object({
       "SHIFT",
       "ANNOUNCEMENT",
       "SYSTEM",
+      "SCHEDULED_WORK",
     ])
     .optional(),
   type: z.string().trim().max(50).optional(),

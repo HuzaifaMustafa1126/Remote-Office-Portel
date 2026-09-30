@@ -9,23 +9,25 @@ import {
   Users,
 } from "lucide-react";
 const icon = (type, category) =>
-  category === "CALENDAR"
+  category === "SCHEDULED_WORK"
     ? CalendarCheck
-    : category === "NOTE"
-      ? NotebookPen
-      : category === "PAYROLL"
-        ? DollarSign
-        : category === "SECURITY"
-          ? ShieldCheck
-          : ["EMPLOYEE", "SHIFT", "AVAILABILITY"].includes(category)
-            ? Users
-            : type.startsWith("LEAVE")
-              ? CalendarCheck
-              : type.startsWith("BREAK")
-                ? Coffee
-                : type.startsWith("TASK")
-                  ? ClipboardCheck
-                  : Bell;
+    : category === "CALENDAR"
+      ? CalendarCheck
+      : category === "NOTE"
+        ? NotebookPen
+        : category === "PAYROLL"
+          ? DollarSign
+          : category === "SECURITY"
+            ? ShieldCheck
+            : ["EMPLOYEE", "SHIFT", "AVAILABILITY"].includes(category)
+              ? Users
+              : type.startsWith("LEAVE")
+                ? CalendarCheck
+                : type.startsWith("BREAK")
+                  ? Coffee
+                  : type.startsWith("TASK")
+                    ? ClipboardCheck
+                    : Bell;
 export default function NotificationItem({ item, onClick, compact = false }) {
   const Icon = icon(item.type, item.category);
   return (

@@ -13,3 +13,9 @@ export const completeScheduledWork = (id) =>
   api.post(`/scheduled-work/${id}/complete`).then((r) => r.data.data);
 export const cancelScheduledWork = (id) =>
   api.post(`/scheduled-work/${id}/cancel`).then((r) => r.data.data);
+export const listReminders = (id) =>
+  api.get(`/scheduled-work/${id}/reminders`).then((r) => r.data.data);
+export const addReminder = (id, data) =>
+  api.post(`/scheduled-work/${id}/reminders`, data).then((r) => r.data.data);
+export const removeReminder = (id, reminderId) =>
+  api.delete(`/scheduled-work/${id}/reminders/${reminderId}`).then((r) => r.data.data);

@@ -179,6 +179,9 @@ const categories = {
     "SCHEDULED_WORK_RESCHEDULED",
     "SCHEDULED_WORK_COMPLETED",
     "SCHEDULED_WORK_CANCELLED",
+    "SCHEDULED_WORK_REMINDER_ADDED",
+    "SCHEDULED_WORK_REMINDER_UPDATED",
+    "SCHEDULED_WORK_REMINDER_REMOVED",
   ],
 };
 export async function searchAuditLogs(filters = {}) {

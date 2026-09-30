@@ -9,6 +9,22 @@ r.get("/upcoming", validate(v.listSchema, "query"), asyncHandler(c.upcoming));
 r.get("/overdue", validate(v.listSchema, "query"), asyncHandler(c.overdue));
 r.get("/", validate(v.listSchema, "query"), asyncHandler(c.list));
 r.post("/", validate(v.createSchema), asyncHandler(c.create));
+r.get(
+  "/:id/reminders",
+  validate(v.idSchema, "params"),
+  asyncHandler(c.listReminders),
+);
+r.post(
+  "/:id/reminders",
+  validate(v.idSchema, "params"),
+  validate(v.reminderSchema),
+  asyncHandler(c.addReminder),
+);
+r.delete(
+  "/:id/reminders/:reminderId",
+  validate(v.reminderIdSchema, "params"),
+  asyncHandler(c.removeReminder),
+);
 r.get("/:id", validate(v.idSchema, "params"), asyncHandler(c.get));
 r.patch(
   "/:id",

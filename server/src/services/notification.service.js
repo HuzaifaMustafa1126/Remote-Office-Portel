@@ -13,6 +13,7 @@ export function categoryFor(type = "") {
   if (prefix === "LEAVE") return "LEAVE";
   if (["CALENDAR", "HOLIDAY"].includes(prefix)) return "CALENDAR";
   if (prefix === "TASK" || type === "OPEN_TASK_CREATED") return "TASK";
+  if (type.startsWith("SCHEDULED_WORK_")) return "SCHEDULED_WORK";
   if (prefix === "ONGOING") return "TASK";
   if (type.startsWith("DAY_END_REPORT_")) return "TASK";
   if (prefix === "NOTE") return "NOTE";
@@ -37,11 +38,12 @@ const categoryPreference = {
   SECURITY: "security_notifications",
   EMPLOYEE: "employee_notifications",
   SHIFT: "shift_notifications",
+  SCHEDULED_WORK: "task_notifications",
   ANNOUNCEMENT: "announcement_notifications",
   SYSTEM: "announcement_notifications",
 };
 
-async function resolveDelivery(userId, type, requested = {}) {
+export async function resolveDelivery(userId, type, requested = {}) {
   const category = categoryFor(type);
   const column = categoryPreference[category];
   const [[row]] = await pool.execute(

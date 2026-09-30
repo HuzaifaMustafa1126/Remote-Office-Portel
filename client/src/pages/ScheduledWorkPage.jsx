@@ -8,6 +8,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import ScheduledWorkForm from "../components/scheduledWork/ScheduledWorkForm";
+import ReminderManager from "../components/scheduledWork/ReminderManager";
 import * as api from "../services/scheduledWork.service";
 const tabs = ["Today", "Upcoming", "Overdue", "Completed"];
 const fmt = (v) =>
@@ -33,7 +34,8 @@ export default function ScheduledWorkPage() {
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
     [priority, setPriority] = useState(""),
-    [form, setForm] = useState(null);
+    [form, setForm] = useState(null),
+    [reminderWork, setReminderWork] = useState(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -169,6 +171,16 @@ export default function ScheduledWorkPage() {
                 </span>
               </div>
               <p className="mt-4 text-sm font-semibold">{fmt(x.scheduledAt)}</p>
+              <button
+                onClick={() => setReminderWork(x)}
+                className="mt-2 text-left text-xs font-semibold text-primary-text"
+              >
+                Reminders: {x.reminders?.filter((r) => r.status !== "CANCELLED").map((r) =>
+                  r.reminderType === "AT_TIME"
+                    ? "at scheduled time"
+                    : `${r.value} ${r.unit.toLowerCase()} before`,
+                ).join(" + ") || "view history"}
+              </button>
               {x.status === "UPCOMING" && (
                 <p
                   className={`mt-1 text-xs ${x.displayStatus === "OVERDUE" ? "text-danger" : "text-muted-foreground"}`}
@@ -252,6 +264,13 @@ export default function ScheduledWorkPage() {
           await load();
         }}
       />
+      {reminderWork && (
+        <ReminderManager
+          work={reminderWork}
+          onClose={() => setReminderWork(null)}
+          onChanged={load}
+        />
+      )}
     </>
   );
 }

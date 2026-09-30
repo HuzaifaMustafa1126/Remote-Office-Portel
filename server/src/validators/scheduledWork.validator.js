@@ -3,6 +3,12 @@ import { z } from "zod";
 const scheduleType = z.enum(["EXACT", "RELATIVE"]);
 const relativeUnit = z.enum(["MINUTES", "HOURS", "DAYS", "WEEKS"]);
 const priority = z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]);
+const reminder = z
+  .object({
+    value: z.coerce.number().int().min(1).max(525600),
+    unit: z.enum(["MINUTES", "HOURS", "DAYS"]),
+  })
+  .strict();
 const scheduleFields = {
   scheduleType,
   scheduledAt: z.string().max(50).optional(),
@@ -32,6 +38,7 @@ export const createSchema = z
     description: z.string().trim().max(10000).optional().nullable(),
     ...scheduleFields,
     priority: priority.default("NORMAL"),
+    reminders: z.array(reminder).max(10).default([]),
   })
   .strict()
   .superRefine(validateSchedule);
@@ -49,6 +56,13 @@ export const rescheduleSchema = z
   .superRefine(validateSchedule);
 export const idSchema = z
   .object({ id: z.coerce.number().int().positive() })
+  .strict();
+export const reminderSchema = reminder;
+export const reminderIdSchema = z
+  .object({
+    id: z.coerce.number().int().positive(),
+    reminderId: z.coerce.number().int().positive(),
+  })
   .strict();
 export const listSchema = z
   .object({
