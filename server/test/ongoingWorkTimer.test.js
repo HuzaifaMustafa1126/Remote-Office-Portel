@@ -75,6 +75,23 @@ test("multiple-timer migration enforces one active session per work item", () =>
   assert.doesNotMatch(sql, /DELETE FROM ongoing_work_sessions/);
 });
 
+test("employee deletion preserves timer history through soft deletion", () => {
+  const service = fs.readFileSync(
+    new URL("../src/services/ongoingWork.service.js", import.meta.url),
+    "utf8",
+  );
+  const migration = fs.readFileSync(
+    new URL(
+      "../database/migrations/063_ongoing_work_employee_soft_delete.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(service, /deletion_reason='EMPLOYEE_DELETE'/);
+  assert.doesNotMatch(service, /DELETE FROM ongoing_work WHERE id=\?/);
+  assert.match(migration, /ENUM\('EMPLOYEE_DELETE','MANUAL_ADMIN_DELETE','RETENTION_POLICY'\)/);
+});
+
 test("pause finalizes a session once using database timestamps", async () => {
   const calls = [];
   const executor = {

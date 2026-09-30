@@ -39,7 +39,9 @@ const checks = {
       deleted_at deletedAt,deletion_reason deletionReason
     FROM ongoing_work
     WHERE deleted_at IS NOT NULL
-      AND (status<>'COMPLETED' OR completed_at IS NULL OR deletion_reason IS NULL)`,
+      AND (deletion_reason IS NULL OR
+        (deletion_reason IN('MANUAL_ADMIN_DELETE','RETENTION_POLICY')
+         AND (status<>'COMPLETED' OR completed_at IS NULL)))`,
 };
 
 try {

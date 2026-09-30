@@ -33,11 +33,13 @@ const column = (name, field) =>
     "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?) yes",
     [name, field],
   );
+const columnMissing = async (name, field) => !(await column(name, field));
 const index = (name, key) =>
   exists(
     "SELECT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=?) yes",
     [name, key],
   );
+const indexMissing = async (name, key) => !(await index(name, key));
 const enumHas = (name, field, value) =>
   exists(
     "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=? AND column_type LIKE ?) yes",
@@ -93,6 +95,16 @@ const roleHas = (role, permissionName) =>
 const roleLacks = async (role, names) =>
   (await Promise.all(names.map((name) => roleHas(role, name)))).every(
     (value) => !value,
+  );
+const permissionLimitedToRoles = (permissionName, allowedRoles) =>
+  exists(
+    `SELECT NOT EXISTS(
+       SELECT 1 FROM role_permissions rp
+       JOIN roles r ON r.id=rp.role_id
+       JOIN permissions p ON p.id=rp.permission_id
+       WHERE p.name=? AND UPPER(r.name) NOT IN (${allowedRoles.map(() => "?").join(",")})
+     ) yes`,
+    [permissionName, ...allowedRoles.map((role) => role.toUpperCase())],
   );
 
 // Verify durable footprints without rewriting production configuration. The
@@ -593,6 +605,72 @@ const checks = {
       "DAY_END_REPORT_MANUAL_REMINDER",
       "DAY_END_REPORT_BLOCKER",
       "DAY_END_REPORT_AWAITING_REVIEW",
+    ])),
+  "061_flexible_estimates_multiple_ongoing_timers.sql": async () =>
+    (await columns([
+      ["day_end_report_items", "estimated_remaining_value"],
+      ["day_end_report_items", "estimated_remaining_unit"],
+      ["ongoing_work_sessions", "active_ongoing_work_id"],
+    ])) &&
+    (await enumHas(
+      "day_end_report_items",
+      "estimated_remaining_unit",
+      "MINUTES",
+    )) &&
+    (await enumHas(
+      "day_end_report_items",
+      "estimated_remaining_unit",
+      "HOURS",
+    )) &&
+    (await enumHas(
+      "day_end_report_items",
+      "estimated_remaining_unit",
+      "DAYS",
+    )) &&
+    (await columnMissing("ongoing_work_sessions", "active_employee_id")) &&
+    (await indexMissing(
+      "ongoing_work_sessions",
+      "uq_one_active_ongoing_work_per_employee",
+    )) &&
+    (await index(
+      "ongoing_work_sessions",
+      "uq_one_active_session_per_ongoing_work",
+    )) &&
+    (await foreignKeys([
+      ["ongoing_work_sessions", "fk_ongoing_work_session_work", "RESTRICT"],
+      [
+        "ongoing_work_sessions",
+        "fk_ongoing_work_session_employee",
+        "RESTRICT",
+      ],
+      ["ongoing_work_sessions", "fk_ongoing_work_session_user", "RESTRICT"],
+      [
+        "ongoing_work_sessions",
+        "fk_ongoing_work_session_attendance",
+        "RESTRICT",
+      ],
+    ])),
+  "062_note_category_management.sql": async () =>
+    (await columns([
+      ["note_categories", "color"],
+      ["note_categories", "sort_order"],
+      ["note_categories", "created_by"],
+      ["note_categories", "updated_at"],
+      ["note_categories", "archived_at"],
+    ])) &&
+    (await index("note_categories", "idx_note_categories_active_order")) &&
+    (await foreignKeyTarget(
+      "note_categories",
+      "created_by",
+      "users",
+      "SET NULL",
+    )) &&
+    (await exists(
+      "SELECT NOT EXISTS(SELECT 1 FROM note_categories WHERE sort_order=0) yes",
+    )) &&
+    (await permissionLimitedToRoles("notes.manage_categories", [
+      "CEO",
+      "SUPER_ADMIN",
     ])),
 };
 

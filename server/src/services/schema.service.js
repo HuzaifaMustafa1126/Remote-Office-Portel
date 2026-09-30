@@ -143,6 +143,7 @@ const requiredMigrations = [
   "060_day_end_report_followups.sql",
   "061_flexible_estimates_multiple_ongoing_timers.sql",
   "062_note_category_management.sql",
+  "063_ongoing_work_employee_soft_delete.sql",
 ];
 
 export async function validateSchema() {

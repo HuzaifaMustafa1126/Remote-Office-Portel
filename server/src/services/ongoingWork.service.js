@@ -761,8 +761,11 @@ export async function remove(id, user) {
       oldValues: { title: row.title, description: row.description, status: row.status },
     });
     await connection.execute(
-      "DELETE FROM ongoing_work WHERE id=? AND employee_id=?",
-      [id, employeeId],
+      `UPDATE ongoing_work
+       SET deleted_at=CURRENT_TIMESTAMP,deleted_by_user_id=?,
+           deletion_reason='EMPLOYEE_DELETE'
+       WHERE id=? AND employee_id=? AND deleted_at IS NULL`,
+      [user.id, id, employeeId],
     );
     return { deleted: true, id: Number(id), work: row };
   });
