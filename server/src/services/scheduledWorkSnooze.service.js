@@ -122,6 +122,43 @@ export async function list(workId, actor) {
   );
   return rows.map(present);
 }
+export async function snoozeOccurrence(workId, occurrenceId, data, actor) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await ownedWork(workId, actor, connection, true);
+    const [[occurrence]] = await connection.execute(
+      "SELECT id,status FROM scheduled_work_occurrences WHERE id=? AND scheduled_work_id=? AND assigned_to=? FOR UPDATE",
+      [occurrenceId, workId, actor.employee_id],
+    );
+    if (!occurrence) throw new ApiError(404, "Scheduled work occurrence was not found.");
+    if (occurrence.status !== "UPCOMING")
+      throw new ApiError(409, `This occurrence is already ${occurrence.status.toLowerCase()}.`);
+    const until = calculateSnooze(data);
+    await connection.execute(
+      "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE occurrence_id=? AND status='PENDING'",
+      [occurrenceId],
+    );
+    const [result] = await connection.execute(
+      `INSERT INTO scheduled_work_snoozes(scheduled_work_id,occurrence_id,reminder_id,employee_id,snooze_value,snooze_unit,snoozed_until)
+       VALUES(?,?,?,?,?,?,?)`,
+      [workId, occurrenceId, data.reminderId || null, actor.employee_id, data.unit === "TOMORROW" ? null : data.value, data.unit, toSqlDateTime(until)],
+    );
+    await connection.execute(
+      `INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values)
+       VALUES(?,?,?,'SCHEDULED_WORK_OCCURRENCE',?,?,?)`,
+      [actor.id,actor.employee_id,"SCHEDULED_WORK_SNOOZED",occurrenceId,"Recurring occurrence reminder postponed.",JSON.stringify({scheduledWorkId:Number(workId),occurrenceId:Number(occurrenceId),snoozeId:result.insertId,snoozeValue:data.value||null,snoozeUnit:data.unit,snoozedUntil:toSqlDateTime(until)})],
+    );
+    await connection.commit();
+    const [[row]] = await pool.execute(`${select} WHERE id=?`, [result.insertId]);
+    return present(row);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
 
 async function processOne(id) {
   const connection = await pool.getConnection();
@@ -129,7 +166,12 @@ async function processOne(id) {
   try {
     await connection.beginTransaction();
     const [[row]] = await connection.execute(
-      `SELECT s.id,s.status,w.id workId,w.title,w.scheduled_at scheduledAt,w.status workStatus,u.id userId FROM scheduled_work_snoozes s JOIN scheduled_work w ON w.id=s.scheduled_work_id JOIN users u ON u.employee_id=w.assigned_to AND u.status='ACTIVE' WHERE s.id=? FOR UPDATE`,
+      `SELECT s.id,s.status,w.id workId,w.title,COALESCE(o.scheduled_at,w.scheduled_at) scheduledAt,
+       COALESCE(o.status,w.status) workStatus,u.id userId,s.occurrence_id occurrenceId
+       FROM scheduled_work_snoozes s JOIN scheduled_work w ON w.id=s.scheduled_work_id
+       LEFT JOIN scheduled_work_occurrences o ON o.id=s.occurrence_id
+       JOIN users u ON u.employee_id=COALESCE(o.assigned_to,w.assigned_to) AND u.status='ACTIVE'
+       WHERE s.id=? FOR UPDATE`,
       [id],
     );
     if (!row || row.status !== "PENDING") {
@@ -165,9 +207,9 @@ async function processOne(id) {
           category: "SCHEDULED_WORK",
           title: "Scheduled Work Reminder",
           message: `${row.title}: you asked to be reminded again now.`,
-          referenceType: "SCHEDULED_WORK",
-          referenceId: row.workId,
-          actionUrl: `/scheduled-work?work=${row.workId}`,
+          referenceType: row.occurrenceId ? "SCHEDULED_WORK_OCCURRENCE" : "SCHEDULED_WORK",
+          referenceId: row.occurrenceId || row.workId,
+          actionUrl: `/scheduled-work?work=${row.workId}${row.occurrenceId ? `&occurrence=${row.occurrenceId}` : ""}`,
           priority: "IMPORTANT",
           eventKey: `scheduled-work-snooze:${row.id}`,
           delivery,

@@ -6,11 +6,12 @@ import {
   Plus,
   Search,
   TriangleAlert,
+  Repeat2,
 } from "lucide-react";
 import ScheduledWorkForm from "../components/scheduledWork/ScheduledWorkForm";
 import ReminderManager from "../components/scheduledWork/ReminderManager";
 import * as api from "../services/scheduledWork.service";
-const tabs = ["Today", "Upcoming", "Overdue", "Completed"];
+const tabs = ["Today", "Upcoming", "Overdue", "Recurring", "Completed"];
 const fmt = (v) =>
   new Intl.DateTimeFormat("en-PK", {
     timeZone: "Asia/Karachi",
@@ -26,6 +27,15 @@ const relative = (v) => {
     days = Math.floor(h / 24);
   return `${past ? "Overdue by" : "Due in"} ${days ? `${days}d ` : ""}${h % 24}h ${m}m`;
 };
+const recurrenceText = (x) => {
+  if (x.recurrenceType === "DAILY") return "Every day";
+  if (x.recurrenceType === "WEEKLY") {
+    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return `Every week · ${(x.recurrenceConfig?.weekdays || []).map((d) => names[d]).join(", ")}`;
+  }
+  if (x.recurrenceType === "MONTHLY") return `Monthly · day ${x.recurrenceConfig?.monthDay}`;
+  return `Every ${x.recurrenceInterval} ${x.recurrenceUnit?.toLowerCase()}`;
+};
 export default function ScheduledWorkPage() {
   const [tab, setTab] = useState("Today"),
     [items, setItems] = useState([]),
@@ -35,11 +45,16 @@ export default function ScheduledWorkPage() {
     [search, setSearch] = useState(""),
     [priority, setPriority] = useState(""),
     [form, setForm] = useState(null),
+    [history, setHistory] = useState(null),
     [reminderWork, setReminderWork] = useState(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
+      if (tab === "Recurring") {
+        const recurring = await api.listRecurringWork();
+        setItems(recurring);
+      } else {
       const status =
         tab === "Completed"
           ? "COMPLETED"
@@ -55,15 +70,15 @@ export default function ScheduledWorkPage() {
         limit: 100,
       });
       setItems(data.items);
+      }
       const results = await Promise.all(
         ["DUE_TODAY", "UPCOMING", "OVERDUE", "COMPLETED"].map((s) =>
           api.listScheduledWork({ status: s, limit: 1 }),
         ),
       );
+      const recurring = await api.listRecurringWork();
       setCounts(
-        Object.fromEntries(
-          tabs.map((x, i) => [x, results[i].pagination.total]),
-        ),
+        { Today: results[0].pagination.total, Upcoming: results[1].pagination.total, Overdue: results[2].pagination.total, Recurring: recurring.length, Completed: results[3].pagination.total },
       );
     } catch (e) {
       setError(e.response?.data?.message || "Unable to load scheduled work.");
@@ -100,9 +115,9 @@ export default function ScheduledWorkPage() {
           Schedule Work
         </button>
       </header>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {tabs.map((x, i) => {
-          const I = [CalendarClock, Clock3, TriangleAlert, CheckCircle2][i];
+          const I = [CalendarClock, Clock3, TriangleAlert, Repeat2, CheckCircle2][i];
           return (
             <button
               key={x}
@@ -154,12 +169,13 @@ export default function ScheduledWorkPage() {
         <div className="grid gap-3 lg:grid-cols-2">
           {items.map((x) => (
             <article
-              key={x.id}
+              key={`${x.id}-${x.occurrenceId || "parent"}`}
               className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-bold">{x.title}</h2>
+                  {x.isRecurring && <p className="mt-1 text-xs font-bold text-primary-text">↻ {recurrenceText(x)}</p>}
                   {x.description && (
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                       {x.description}
@@ -167,10 +183,19 @@ export default function ScheduledWorkPage() {
                   )}
                 </div>
                 <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[10px] font-bold">
-                  {x.displayStatus.replaceAll("_", " ")}
+                  {(x.displayStatus || x.recurrenceStatus).replaceAll("_", " ")}
                 </span>
               </div>
-              <p className="mt-4 text-sm font-semibold">{fmt(x.scheduledAt)}</p>
+              <p className="mt-4 text-sm font-semibold">{x.scheduledAt ? fmt(x.scheduledAt) : x.nextOccurrenceAt ? `Next: ${fmt(x.nextOccurrenceAt)}` : "No future occurrence"}</p>
+              {tab === "Recurring" && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button onClick={() => api.listOccurrences(x.id, { limit: 100 }).then((data) => setHistory({ parent: x, items: data.items })).catch(() => setError("Unable to load occurrence history."))} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold">View</button>
+                  {x.recurrenceStatus === "ACTIVE" ? <button onClick={() => act(() => api.pauseRecurrence(x.id))} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold">Pause</button> : x.recurrenceStatus === "PAUSED" ? <button onClick={() => act(() => api.resumeRecurrence(x.id))} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground">Resume</button> : null}
+                  {x.recurrenceStatus !== "ENDED" && <button onClick={() => setForm({ mode: "recurrenceEdit", item: x })} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold">Edit</button>}
+                  {x.recurrenceStatus !== "ENDED" && <button onClick={() => window.confirm(`End Recurring Work?\n\n${x.title}\n\nFuture occurrences will stop being created. Existing history will remain available.`) && act(() => api.endRecurrence(x.id))} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-danger">End series</button>}
+                </div>
+              )}
+              {tab !== "Recurring" && <>
               <button
                 onClick={() => setReminderWork(x)}
                 className="mt-2 text-left text-xs font-semibold text-primary-text"
@@ -200,41 +225,41 @@ export default function ScheduledWorkPage() {
                 {x.status === "UPCOMING" && (
                   <>
                     <button
-                      onClick={() => act(() => api.startScheduledWork(x.id))}
+                      onClick={() => act(() => x.isOccurrence ? api.startOccurrence(x.id, x.occurrenceId) : api.startScheduledWork(x.id))}
                       className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
                     >
                       Do Now
                     </button>
                     <button
-                      onClick={() => act(() => api.snoozeScheduledWork(x.id, { value: 20, unit: "MINUTES" }))}
+                      onClick={() => act(() => x.isOccurrence ? api.snoozeOccurrence(x.id, x.occurrenceId, { value: 20, unit: "MINUTES" }) : api.snoozeScheduledWork(x.id, { value: 20, unit: "MINUTES" }))}
                       className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
                     >
                       Remind 20m
                     </button>
                     <button
-                      onClick={() => act(() => api.completeScheduledWork(x.id))}
+                      onClick={() => act(() => x.isOccurrence ? api.completeOccurrence(x.id, x.occurrenceId) : api.completeScheduledWork(x.id))}
                       className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground"
                     >
                       Complete
                     </button>
-                    <button
+                    {!x.isOccurrence && <button
                       onClick={() => setForm({ mode: "reschedule", item: x })}
                       className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
                     >
                       Reschedule
-                    </button>
-                    <button
+                    </button>}
+                    {!x.isOccurrence && <button
                       onClick={() => setForm({ mode: "edit", item: x })}
                       className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold"
                     >
                       Edit
-                    </button>
-                    <button
+                    </button>}
+                    {!x.isOccurrence && <button
                       onClick={() => act(() => api.cancelScheduledWork(x.id))}
                       className="rounded-lg px-3 py-1.5 text-xs font-semibold text-danger"
                     >
                       Cancel
-                    </button>
+                    </button>}
                   </>
                 )}
               </div>
@@ -243,6 +268,7 @@ export default function ScheduledWorkPage() {
                   Completed: {fmt(x.completedAt)}
                 </p>
               )}
+              </>}
             </article>
           ))}
         </div>
@@ -267,11 +293,14 @@ export default function ScheduledWorkPage() {
         open={Boolean(form)}
         initial={form?.item}
         rescheduleOnly={form?.mode === "reschedule"}
+        recurrenceOnly={form?.mode === "recurrenceEdit"}
         onClose={() => setForm(null)}
         onSave={async (data) => {
           if (form.mode === "create") await api.createScheduledWork(data);
           else if (form.mode === "reschedule")
             await api.rescheduleScheduledWork(form.item.id, data);
+          else if (form.mode === "recurrenceEdit")
+            await api.updateRecurrence(form.item.id, data.repeat);
           else
             await api.updateScheduledWork(form.item.id, {
               title: data.title,
@@ -287,6 +316,15 @@ export default function ScheduledWorkPage() {
           onClose={() => setReminderWork(null)}
           onChanged={load}
         />
+      )}
+      {history && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-overlay/50 p-4">
+          <section className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{history.parent.title}</h2><p className="mt-1 text-xs font-bold text-primary-text">↻ {recurrenceText(history.parent)}</p></div><button onClick={() => setHistory(null)} className="px-2 text-muted-foreground">✕</button></div>
+            <h3 className="mt-6 text-sm font-black">Occurrence history</h3>
+            <div className="mt-3 space-y-2">{history.items.map((item) => <div key={item.occurrenceId} className="flex items-center justify-between rounded-xl bg-surface-secondary p-3"><div><p className="text-sm font-semibold">{fmt(item.scheduledAt)}</p>{item.completedAt && <p className="text-xs text-muted-foreground">Completed {fmt(item.completedAt)}</p>}</div><span className="text-[10px] font-black">{item.displayStatus.replaceAll("_", " ")}</span></div>)}</div>
+          </section>
+        </div>
       )}
     </>
   );

@@ -301,6 +301,22 @@ button:disabled {
 .recent-task-row:nth-child(5) {
   animation-delay: 160ms;
 }
+.recent-tasks-table-wrapper,
+.recent-tasks-mobile {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent)
+    transparent;
+}
+.recent-tasks-table-wrapper::-webkit-scrollbar,
+.recent-tasks-mobile::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.recent-tasks-table-wrapper::-webkit-scrollbar-thumb,
+.recent-tasks-mobile::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+}
 .task-management-canvas {
   position: relative;
   width: 100%;

@@ -58,7 +58,7 @@ export default function TaskSummaryCard({
       </span>
       <span
         aria-hidden="true"
-        className="ml-2 flex h-16 w-24 items-end justify-end gap-1.5 self-end"
+        className="ml-2 flex h-16 w-24 items-end justify-end gap-1.5 self-end empty:hidden"
       >
         {spark.slice(-8).map((value, index) => (
           <i

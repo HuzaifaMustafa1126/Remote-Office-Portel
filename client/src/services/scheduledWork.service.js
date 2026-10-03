@@ -5,6 +5,26 @@ export const todayScheduledWork = (params = {}) =>
   api.get("/scheduled-work/today", { params }).then((r) => r.data.data);
 export const getScheduledWork = (id) =>
   api.get(`/scheduled-work/${id}`).then((r) => r.data.data);
+export const listRecurringWork = () =>
+  api.get("/scheduled-work/recurring").then((r) => r.data.data);
+export const listOccurrences = (id, params = {}) =>
+  api.get(`/scheduled-work/${id}/occurrences`, { params }).then((r) => r.data.data);
+export const getOccurrence = (id, occurrenceId) =>
+  api.get(`/scheduled-work/${id}/occurrences/${occurrenceId}`).then((r) => r.data.data);
+export const pauseRecurrence = (id) =>
+  api.post(`/scheduled-work/${id}/recurrence/pause`).then((r) => r.data.data);
+export const resumeRecurrence = (id) =>
+  api.post(`/scheduled-work/${id}/recurrence/resume`).then((r) => r.data.data);
+export const endRecurrence = (id) =>
+  api.post(`/scheduled-work/${id}/recurrence/end`).then((r) => r.data.data);
+export const updateRecurrence = (id, repeat) =>
+  api.patch(`/scheduled-work/${id}/recurrence`, { repeat }).then((r) => r.data.data);
+export const startOccurrence = (id, occurrenceId) =>
+  api.post(`/scheduled-work/${id}/occurrences/${occurrenceId}/start`).then((r) => r.data.data);
+export const completeOccurrence = (id, occurrenceId) =>
+  api.post(`/scheduled-work/${id}/occurrences/${occurrenceId}/complete`).then((r) => r.data.data);
+export const snoozeOccurrence = (id, occurrenceId, data) =>
+  api.post(`/scheduled-work/${id}/occurrences/${occurrenceId}/snooze`, data).then((r) => r.data.data);
 export const createScheduledWork = (data) =>
   api.post("/scheduled-work", data).then((r) => r.data.data);
 export const updateScheduledWork = (id, data) =>

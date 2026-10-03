@@ -9,6 +9,30 @@ const reminder = z
     unit: z.enum(["MINUTES", "HOURS", "DAYS"]),
   })
   .strict();
+export const repeatSchema = z
+  .object({
+    type: z.enum(["DAILY", "WEEKLY", "MONTHLY", "CUSTOM_INTERVAL"]),
+    interval: z.coerce.number().int().min(1).max(365).default(1),
+    unit: z.enum(["HOURS", "DAYS", "WEEKS", "MONTHS"]).optional(),
+    weekdays: z.array(z.coerce.number().int().min(0).max(6)).max(7).optional(),
+    monthDay: z.coerce.number().int().min(1).max(31).optional(),
+    endType: z.enum(["NEVER", "ON_DATE", "AFTER_OCCURRENCES"]).default("NEVER"),
+    endAt: z.string().date().optional(),
+    maxOccurrences: z.coerce.number().int().min(1).max(10000).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.type === "CUSTOM_INTERVAL" && !value.unit)
+      context.addIssue({ code: "custom", path: ["unit"], message: "Choose a repeat unit" });
+    if (value.type === "WEEKLY" && !value.weekdays?.length)
+      context.addIssue({ code: "custom", path: ["weekdays"], message: "Choose at least one weekday" });
+    if (value.type === "MONTHLY" && !value.monthDay)
+      context.addIssue({ code: "custom", path: ["monthDay"], message: "Choose a day of the month" });
+    if (value.endType === "ON_DATE" && !value.endAt)
+      context.addIssue({ code: "custom", path: ["endAt"], message: "Choose an end date" });
+    if (value.endType === "AFTER_OCCURRENCES" && !value.maxOccurrences)
+      context.addIssue({ code: "custom", path: ["maxOccurrences"], message: "Enter the number of occurrences" });
+  });
 const scheduleFields = {
   scheduleType,
   scheduledAt: z.string().max(50).optional(),
@@ -39,6 +63,7 @@ export const createSchema = z
     ...scheduleFields,
     priority: priority.default("NORMAL"),
     reminders: z.array(reminder).max(10).default([]),
+    repeat: repeatSchema.optional().nullable(),
   })
   .strict()
   .superRefine(validateSchedule);
@@ -95,3 +120,16 @@ export const listSchema = z
     (v) => !v.from || !v.to || v.from <= v.to,
     "From date must be before to date",
   );
+export const occurrenceListSchema = z
+  .object({
+    status: z.enum(["UPCOMING", "COMPLETED", "CANCELLED"]).optional(),
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict();
+export const occurrenceIdSchema = z
+  .object({ id: z.coerce.number().int().positive(), occurrenceId: z.coerce.number().int().positive() })
+  .strict();
+export const recurrenceUpdateSchema = z.object({ repeat: repeatSchema }).strict();

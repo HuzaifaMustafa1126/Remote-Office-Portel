@@ -11,15 +11,23 @@ import {
   createInitialReminders,
   recalculateReminders,
 } from "./scheduledWorkReminder.service.js";
+import {
+  generateForParent,
+  occurrenceRowsForList,
+} from "./scheduledWorkRecurrence.service.js";
 
 const select = `SELECT id,title,description,created_by createdBy,assigned_to assignedTo,
  schedule_type scheduleType,scheduled_at scheduledAt,relative_value relativeValue,
  relative_unit relativeUnit,priority,status,started_at startedAt,completed_at completedAt,
  cancelled_at cancelledAt,created_at createdAt,updated_at updatedAt,
  (SELECT GROUP_CONCAT(CONCAT(r.reminder_type,':',COALESCE(r.reminder_value,''),':',COALESCE(r.reminder_unit,''),':',r.status) ORDER BY r.remind_at SEPARATOR '|')
-  FROM scheduled_work_reminders r WHERE r.scheduled_work_id=scheduled_work.id AND r.status='PENDING') reminderSummary,
- (SELECT s.id FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozeId,
- (SELECT s.snoozed_until FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozedUntil
+  FROM scheduled_work_reminders r WHERE r.scheduled_work_id=scheduled_work.id AND r.occurrence_id IS NULL AND r.status='PENDING') reminderSummary,
+ (SELECT s.id FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.occurrence_id IS NULL AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozeId,
+ (SELECT s.snoozed_until FROM scheduled_work_snoozes s WHERE s.scheduled_work_id=scheduled_work.id AND s.occurrence_id IS NULL AND s.status='PENDING' ORDER BY s.snoozed_until DESC LIMIT 1) activeSnoozedUntil,
+ is_recurring isRecurring,recurrence_type recurrenceType,recurrence_interval recurrenceInterval,
+ recurrence_unit recurrenceUnit,recurrence_config recurrenceConfig,recurrence_start_at recurrenceStartAt,
+ recurrence_end_type recurrenceEndType,recurrence_end_at recurrenceEndAt,
+ recurrence_max_occurrences recurrenceMaxOccurrences,recurrence_status recurrenceStatus
  FROM scheduled_work`;
 const isoFields = [
   "scheduledAt",
@@ -46,6 +54,9 @@ const present = (row, now = new Date()) => {
   isoFields.forEach((key) => {
     result[key] = sqlToIso(result[key]);
   });
+  result.isRecurring = Boolean(result.isRecurring);
+  if (typeof result.recurrenceConfig === "string")
+    result.recurrenceConfig = JSON.parse(result.recurrenceConfig || "{}");
   return result;
 };
 const requireEmployee = (actor) => {
@@ -107,9 +118,18 @@ export async function create(data, actor) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    const repeat = data.repeat || null;
+    const recurrenceConfig = repeat
+      ? JSON.stringify({ weekdays: repeat.weekdays || [], monthDay: repeat.monthDay || null })
+      : null;
+    const recurrenceEndAt = repeat?.endType === "ON_DATE"
+      ? `${repeat.endAt} 23:59:59`
+      : null;
     const [result] = await connection.execute(
-      `INSERT INTO scheduled_work(title,description,created_by,assigned_to,schedule_type,scheduled_at,relative_value,relative_unit,priority)
-       VALUES(?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO scheduled_work(title,description,created_by,assigned_to,schedule_type,scheduled_at,relative_value,relative_unit,priority,
+       is_recurring,recurrence_type,recurrence_interval,recurrence_unit,recurrence_config,recurrence_reminders,recurrence_start_at,
+       recurrence_end_type,recurrence_end_at,recurrence_max_occurrences,recurrence_status)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         data.title,
         data.description || null,
@@ -120,19 +140,45 @@ export async function create(data, actor) {
         timing.relativeValue,
         timing.relativeUnit,
         data.priority,
+        Boolean(repeat),
+        repeat?.type || null,
+        repeat?.interval || null,
+        repeat?.type === "DAILY" ? "DAYS" : repeat?.type === "WEEKLY" ? "WEEKS" : repeat?.type === "MONTHLY" ? "MONTHS" : repeat?.unit || null,
+        recurrenceConfig,
+        repeat ? JSON.stringify(data.reminders) : null,
+        repeat ? timing.scheduledAt : null,
+        repeat?.endType || null,
+        recurrenceEndAt,
+        repeat?.maxOccurrences || null,
+        repeat ? "ACTIVE" : null,
       ],
     );
-    await createInitialReminders(
-      connection,
-      result.insertId,
-      timing.scheduledAt,
-      data.reminders,
-    );
-    await audit(connection, actor, "SCHEDULED_WORK_CREATED", result.insertId, {
+    if (repeat) {
+      await generateForParent(connection, {
+        id: result.insertId,
+        assignedTo: actor.employee_id,
+        isRecurring: true,
+        recurrenceType: repeat.type,
+        recurrenceInterval: repeat.interval,
+        recurrenceUnit: repeat.type === "DAILY" ? "DAYS" : repeat.type === "WEEKLY" ? "WEEKS" : repeat.type === "MONTHLY" ? "MONTHS" : repeat.unit,
+        recurrenceConfig,
+        recurrenceReminders: JSON.stringify(data.reminders),
+        recurrenceStartAt: timing.scheduledAt,
+        recurrenceEndType: repeat.endType,
+        recurrenceEndAt,
+        recurrenceMaxOccurrences: repeat.maxOccurrences,
+        recurrenceStatus: "ACTIVE",
+      });
+    } else {
+      await createInitialReminders(connection,result.insertId,timing.scheduledAt,data.reminders);
+    }
+    await audit(connection, actor, repeat ? "SCHEDULED_WORK_RECURRENCE_CREATED" : "SCHEDULED_WORK_CREATED", result.insertId, {
       scheduledWorkId: result.insertId,
       title: data.title,
       scheduledAt: timing.scheduledAt,
       scheduleType: data.scheduleType,
+      recurring: Boolean(repeat),
+      ...(repeat && { recurrenceType: repeat.type, interval: repeat.interval, unit: repeat.unit || null }),
     });
     await connection.commit();
     return present(await owned(result.insertId, actor));
@@ -144,7 +190,7 @@ export async function create(data, actor) {
   }
 }
 function queryFilters(filters, actor, mode) {
-  const where = ["assigned_to=?"],
+  const where = ["assigned_to=?", "is_recurring=FALSE"],
     params = [actor.employee_id];
   if (mode === "today") {
     where.push(
@@ -198,13 +244,19 @@ export async function list(filters, actor, mode = null) {
     `SELECT COUNT(*) total FROM scheduled_work WHERE ${where}`,
     params,
   );
+  const occurrences = await occurrenceRowsForList(actor, filters, mode);
+  const combined = [...rows.map((x) => present(x)), ...occurrences].sort((a,b) => {
+    const left = filters.status === "COMPLETED" ? a.completedAt : a.scheduledAt;
+    const right = filters.status === "COMPLETED" ? b.completedAt : b.scheduledAt;
+    return filters.status === "COMPLETED" ? new Date(right)-new Date(left) : new Date(left)-new Date(right);
+  });
   return {
-    items: rows.map((x) => present(x)),
+    items: combined.slice(0, limit),
     pagination: {
       page,
       limit,
-      total: Number(count.total),
-      pages: Math.ceil(Number(count.total) / limit),
+      total: Number(count.total) + occurrences.length,
+      pages: Math.ceil((Number(count.total) + occurrences.length) / limit),
     },
   };
 }

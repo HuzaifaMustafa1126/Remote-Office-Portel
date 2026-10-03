@@ -33,7 +33,7 @@ export default function ScheduledWorkReminderPopup({
     () =>
       notifications.filter(
         (n) =>
-          n.referenceType === "SCHEDULED_WORK" &&
+          ["SCHEDULED_WORK", "SCHEDULED_WORK_OCCURRENCE"].includes(n.referenceType) &&
           n.referenceId &&
           n.type.startsWith("SCHEDULED_WORK_") &&
           !localStorage.getItem(`${ACK}${n.id}`),
@@ -60,9 +60,15 @@ export default function ScheduledWorkReminderPopup({
     Promise.all(
       claimed.map(async (n) => {
         try {
+          const recurring = n.referenceType === "SCHEDULED_WORK_OCCURRENCE";
+          const parentId = recurring
+            ? new URL(n.actionUrl || "", window.location.origin).searchParams.get("work")
+            : n.referenceId;
           return {
             notification: n,
-            work: await api.getScheduledWork(n.referenceId),
+            work: recurring
+              ? await api.getOccurrence(parentId, n.referenceId)
+              : await api.getScheduledWork(parentId),
           };
         } catch {
           return null;
@@ -116,7 +122,9 @@ export default function ScheduledWorkReminderPopup({
   };
   const snooze = (data) =>
     perform(
-      () => api.snoozeScheduledWork(current.work.id, data),
+      () => current.work.isOccurrence
+        ? api.snoozeOccurrence(current.work.id, current.work.occurrenceId, data)
+        : api.snoozeScheduledWork(current.work.id, data),
       "Reminder scheduled.",
     );
   const overdue = new Date(current.work.scheduledAt) < new Date(),
@@ -192,7 +200,9 @@ export default function ScheduledWorkReminderPopup({
               disabled={busy}
               onClick={() =>
                 perform(
-                  () => api.startScheduledWork(current.work.id),
+                  () => current.work.isOccurrence
+                    ? api.startOccurrence(current.work.id, current.work.occurrenceId)
+                    : api.startScheduledWork(current.work.id),
                   "Work started.",
                 ).then(() =>
                   navigate(`/scheduled-work?work=${current.work.id}`),
@@ -214,7 +224,9 @@ export default function ScheduledWorkReminderPopup({
                 disabled={busy}
                 onClick={() =>
                   perform(
-                    () => api.completeScheduledWork(current.work.id),
+                    () => current.work.isOccurrence
+                      ? api.completeOccurrence(current.work.id, current.work.occurrenceId)
+                      : api.completeScheduledWork(current.work.id),
                     "Scheduled work marked complete.",
                   )
                 }

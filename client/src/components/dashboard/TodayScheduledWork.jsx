@@ -5,6 +5,9 @@ import {
   completeScheduledWork,
   startScheduledWork,
   snoozeScheduledWork,
+  completeOccurrence,
+  startOccurrence,
+  snoozeOccurrence,
 } from "../../services/scheduledWork.service";
 export default function TodayScheduledWork() {
   const [items, setItems] = useState([]),
@@ -32,7 +35,7 @@ export default function TodayScheduledWork() {
         <div className="mt-3 space-y-2">
           {items.map((x) => (
             <div
-              key={x.id}
+              key={`${x.id}-${x.occurrenceId || "parent"}`}
               className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-secondary p-3"
             >
               <div className="min-w-0 flex-1">
@@ -59,24 +62,27 @@ export default function TodayScheduledWork() {
                 )}
               </div>
               <button
-                onClick={() => startScheduledWork(x.id).then(load)}
+                onClick={() => (x.isOccurrence ? startOccurrence(x.id, x.occurrenceId) : startScheduledWork(x.id)).then(load)}
                 className="text-xs font-bold text-primary-text"
               >
                 Do Now
               </button>
               <button
                 onClick={() =>
-                  snoozeScheduledWork(x.id, {
+                  (x.isOccurrence ? snoozeOccurrence(x.id, x.occurrenceId, {
                     value: 20,
                     unit: "MINUTES",
-                  }).then(load)
+                  }) : snoozeScheduledWork(x.id, {
+                    value: 20,
+                    unit: "MINUTES",
+                  })).then(load)
                 }
                 className="text-xs font-bold text-primary-text"
               >
                 Snooze 20m
               </button>
               <button
-                onClick={() => completeScheduledWork(x.id).then(load)}
+                onClick={() => (x.isOccurrence ? completeOccurrence(x.id, x.occurrenceId) : completeScheduledWork(x.id)).then(load)}
                 className="text-xs font-bold text-primary-text"
               >
                 Complete

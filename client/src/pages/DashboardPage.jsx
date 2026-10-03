@@ -589,7 +589,7 @@ export default function DashboardPage() {
             attendanceStatus={own.data?.status}
             previousOngoingWork={own.data?.previousOngoingWork}
           />
-          <TodayScheduledWork />
+          {/* <TodayScheduledWork />
           <div>
             <button
               type="button"
@@ -601,7 +601,7 @@ export default function DashboardPage() {
             >
               Today’s Day-End Report
             </button>
-          </div>
+          </div> */}
           <DayEndReportModal
             open={dayEndOpen}
             editExisting={dayEndEdit}

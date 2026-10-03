@@ -31,6 +31,7 @@ export default function TaskAnalyticsPanel({
   management,
   onNavigate,
   refreshKey = 0,
+  recentTasks,
 }) {
   const scope=useRef(null);
   const [state, setState] = useState({
@@ -76,7 +77,6 @@ export default function TaskAnalyticsPanel({
     activity = Array.isArray(data.activity) ? data.activity : [],
     employees = Array.isArray(data.employees) ? data.employees : [],
     projects = Array.isArray(data.projects) ? data.projects : [],
-    trends = data.trends || {},
     period = data.period || { start: "Current period", end: "" },
     summary = [
       [
@@ -84,16 +84,8 @@ export default function TaskAnalyticsPanel({
         `${s.completed} / ${s.total}`,
         CheckCircle2,
         "green",
-        trends.completed,
-        { status: "COMPLETED" },
-      ],
-      [
-        "In Progress Tasks",
-        `${s.inProgress} / ${s.total}`,
-        Clock3,
-        "blue",
         null,
-        { status: "IN_PROGRESS" },
+        { status: "COMPLETED" },
       ],
       [
         "Tasks Pending Approval",
@@ -108,47 +100,39 @@ export default function TaskAnalyticsPanel({
         `${s.overdue} / ${s.total}`,
         AlertTriangle,
         "red",
-        trends.overdue,
+        null,
         { overdue: true },
+      ],
+      [
+        "In Progress Tasks",
+        `${s.inProgress} / ${s.total}`,
+        Clock3,
+        "blue",
+        null,
+        { status: "IN_PROGRESS" },
       ],
     ];
   return (
     <div ref={scope} className="relative space-y-5 before:pointer-events-none before:absolute before:-inset-8 before:-z-10 before:bg-[radial-gradient(circle_at_18%_12%,color-mix(in_srgb,var(--info)_7%,transparent),transparent_35%),radial-gradient(circle_at_80%_45%,color-mix(in_srgb,var(--primary)_5%,transparent),transparent_32%)]">
-      <div className="grid gap-[18px] sm:grid-cols-2 min-[1380px]:grid-cols-4">
-        {summary.map((x) => (
-          <TaskSummaryCard
-            key={x[0]}
-            title={x[0]}
-            count={x[1]}
-            icon={x[2]}
-            tone={x[3]}
-            trend={x[4]}
-            inverse={x[0].startsWith("Overdue")}
-            spark={activity.map(p=>x[0].startsWith("Completed")?p.completed:x[0].startsWith("Overdue")?p.overdue:x[0].startsWith("In Progress")?s.inProgress:p.created)}
-            onClick={() => onNavigate(x[5])}
-          />
-        ))}
+      <div className="grid items-stretch gap-5 min-[1180px]:grid-cols-2">
+        <div className="grid gap-[18px] sm:grid-cols-2 min-[1380px]:grid-cols-4">
+          {summary.map((x) => (
+            <TaskSummaryCard
+              key={x[0]}
+              title={x[0]}
+              count={x[1]}
+              icon={x[2]}
+              tone={x[3]}
+              trend={x[4]}
+              inverse={x[0].startsWith("Overdue")}
+              spark={[]}
+              onClick={() => onNavigate(x[5])}
+            />
+          ))}
+        </div>
+        <InsightStrip summary={s} employees={employees} projects={projects} />
       </div>
-      <InsightStrip summary={s} employees={employees} projects={projects} />
-      <div className="analytics-grid grid items-stretch gap-5 min-[1180px]:grid-cols-[minmax(0,2.2fr)_minmax(360px,1fr)]">
-        <DashboardSection
-          className="task-analytics-card"
-          title="Task Activity"
-          subtitle={`${period.start}${period.end ? ` – ${period.end}` : ""}`}
-          action={<Period state={state} setState={setState} valid={valid} />}
-        >
-          <Activity points={activity} summary={s} />
-        </DashboardSection>
-        <DashboardSection
-          className="task-analytics-card"
-          title="Task Completion Rate"
-          action={
-            <span className="text-xs text-muted-foreground">All tasks</span>
-          }
-        >
-          <Completion summary={s} />
-        </DashboardSection>
-      </div>
+      {recentTasks}
       <div className="analytics-grid grid items-stretch gap-5 min-[1180px]:grid-cols-[minmax(0,2.2fr)_minmax(360px,1fr)]">
         {management ? (
           <DashboardSection
@@ -183,6 +167,23 @@ export default function TaskAnalyticsPanel({
           }
         >
           <Projects rows={projects} onClick={onNavigate} />
+        </DashboardSection>
+      </div>
+      <div className="analytics-grid grid items-stretch gap-5 min-[1180px]:grid-cols-[minmax(0,2.2fr)_minmax(360px,1fr)]">
+        <DashboardSection
+          className="task-analytics-card"
+          title="Task Activity"
+          subtitle={`${period.start}${period.end ? ` – ${period.end}` : ""}`}
+          action={<Period state={state} setState={setState} valid={valid} />}
+        >
+          <Activity points={activity} summary={s} />
+        </DashboardSection>
+        <DashboardSection
+          className="task-analytics-card"
+          title="Task Completion Rate"
+          action={<span className="text-xs text-muted-foreground">All tasks</span>}
+        >
+          <Completion summary={s} />
         </DashboardSection>
       </div>
     </div>
@@ -420,9 +421,9 @@ function InsightStrip({ summary, employees, projects }) {
     ["Projects", activeProjects, "Currently active"],
   ];
   return (
-    <div className="task-insight-strip flex gap-2 overflow-x-auto rounded-2xl border border-white/70 bg-surface/75 p-2 shadow-[0_12px_32px_-28px_rgba(59,130,246,.7)] backdrop-blur">
+    <div className="task-insight-strip grid h-full grid-cols-2 overflow-hidden rounded-[18px] border border-border bg-surface shadow-[0_16px_42px_-30px_rgba(15,23,42,.45)]">
       {values.map(([label, value, detail], index) => (
-        <div key={label} className="insight-chip flex min-w-[150px] flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left">
+        <div key={label} className={`insight-chip flex min-h-[74px] items-center gap-3 px-5 py-3 text-left ${index < 2 ? "border-b border-border" : ""} ${index % 2 === 0 ? "border-r border-border" : ""}`}>
           <i className={`h-2.5 w-2.5 rounded-full ${index === 1 && value ? "bg-danger" : index === 0 && value ? "bg-warning" : "bg-primary"}`} />
           <span><small className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</small><b className="text-sm">{value} <span className="font-medium text-muted-foreground">{detail}</span></b></span>
         </div>

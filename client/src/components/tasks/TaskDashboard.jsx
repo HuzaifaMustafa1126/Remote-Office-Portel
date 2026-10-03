@@ -32,16 +32,16 @@ export default function TaskDashboard({
   refreshKey = 0,
 }) {
   const recent = [...tasks]
-    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-    .slice(0, 7);
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
   return (
     <div className="space-y-5">
       <TaskAnalyticsPanel
         management={management}
         onNavigate={onSummary}
         refreshKey={refreshKey}
-      />
+        recentTasks={
       <DashboardSection
+        className="recent-tasks-card flex min-h-0 flex-col"
         title="Recent Tasks"
         action={
           <button
@@ -54,9 +54,9 @@ export default function TaskDashboard({
       >
         {recent.length ? (
           <>
-            <div className="hidden overflow-x-auto md:block">
+            <div className="recent-tasks-table-wrapper hidden max-h-[430px] overflow-auto md:block">
               <table className="w-full min-w-[900px] table-fixed text-left text-[13px]">
-                <thead className="bg-surface-secondary text-xs text-muted-foreground">
+                <thead className="sticky top-0 z-10 bg-surface-secondary text-xs text-muted-foreground shadow-[0_1px_0_var(--border)]">
                   <tr>
                     <th className="w-[31%]">Task</th>
                     <th>Project</th>
@@ -76,8 +76,8 @@ export default function TaskDashboard({
                       className="recent-task-row h-[66px] cursor-pointer transition hover:bg-surface-secondary/60"
                     >
                       <td className="pr-4">
-                        <b className="block truncate">{t.title}</b>
-                        <small className="block truncate text-muted-foreground">
+                        <b className="block truncate" title={t.title}>{t.title}</b>
+                        <small className="block truncate text-muted-foreground" title={t.description || "No description"}>
                           {t.description || "No description"}
                         </small>
                       </td>
@@ -121,7 +121,7 @@ export default function TaskDashboard({
                 </tbody>
               </table>
             </div>
-            <div className="divide-y divide-border md:hidden">
+            <div className="recent-tasks-mobile max-h-[430px] divide-y divide-border overflow-y-auto md:hidden">
               {recent.map((t) => (
                 <button
                   key={t.id}
@@ -130,7 +130,7 @@ export default function TaskDashboard({
                 >
                   <div className="flex justify-between gap-3">
                     <span className="min-w-0">
-                      <b className="block truncate text-sm">{t.title}</b>
+                      <b className="block truncate text-sm" title={t.title}>{t.title}</b>
                       <small
                         className={
                           t.overdue ? "text-danger" : "text-muted-foreground"
@@ -152,6 +152,8 @@ export default function TaskDashboard({
           </div>
         )}
       </DashboardSection>
+        }
+      />
     </div>
   );
 }

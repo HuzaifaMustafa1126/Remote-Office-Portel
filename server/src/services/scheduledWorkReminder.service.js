@@ -48,14 +48,16 @@ export async function insertReminder(
   scheduledAt,
   reminder,
   now = new Date(),
+  occurrenceId = null,
 ) {
   const atTime = Boolean(reminder.atTime);
   const remindAt = calculateReminder(scheduledAt, reminder, now);
   const [result] = await connection.execute(
-    `INSERT INTO scheduled_work_reminders(scheduled_work_id,reminder_type,reminder_value,reminder_unit,remind_at)
-     VALUES(?,?,?,?,?)`,
+    `INSERT INTO scheduled_work_reminders(scheduled_work_id,occurrence_id,reminder_type,reminder_value,reminder_unit,remind_at)
+     VALUES(?,?,?,?,?,?)`,
     [
       workId,
+      occurrenceId,
       atTime ? "AT_TIME" : "BEFORE",
       atTime ? null : reminder.value,
       atTime ? null : reminder.unit,
@@ -210,9 +212,11 @@ async function processOne(id) {
     await connection.beginTransaction();
     const [[row]] = await connection.execute(
       `SELECT r.id,r.reminder_type reminderType,r.reminder_value value,r.reminder_unit unit,r.status,
-       w.id workId,w.title,w.scheduled_at scheduledAt,w.status workStatus,u.id userId
+       w.id workId,w.title,COALESCE(o.scheduled_at,w.scheduled_at) scheduledAt,
+       COALESCE(o.status,w.status) workStatus,u.id userId,r.occurrence_id occurrenceId
        FROM scheduled_work_reminders r JOIN scheduled_work w ON w.id=r.scheduled_work_id
-       JOIN users u ON u.employee_id=w.assigned_to AND u.status='ACTIVE'
+       LEFT JOIN scheduled_work_occurrences o ON o.id=r.occurrence_id
+       JOIN users u ON u.employee_id=COALESCE(o.assigned_to,w.assigned_to) AND u.status='ACTIVE'
        WHERE r.id=? FOR UPDATE`,
       [id],
     );
@@ -263,12 +267,14 @@ async function processOne(id) {
           message:
             row.reminderType === "AT_TIME"
               ? missed
-                ? `${row.title} was scheduled earlier and is now overdue.`
-                : `${row.title} is scheduled for now.`
-              : `${row.title} is scheduled in ${human(row)}.`,
-          referenceType: "SCHEDULED_WORK",
-          referenceId: row.workId,
-          actionUrl: `/scheduled-work?work=${row.workId}`,
+                ? `${row.title} was scheduled earlier and is now overdue.${row.occurrenceId ? " This recurring occurrence remains open." : ""}`
+                : `${row.title} is scheduled for now.${row.occurrenceId ? " This recurring work is due now." : ""}`
+              : `${row.title} is scheduled in ${human(row)}.${row.occurrenceId ? " Recurring work." : ""}`,
+          referenceType: row.occurrenceId
+            ? "SCHEDULED_WORK_OCCURRENCE"
+            : "SCHEDULED_WORK",
+          referenceId: row.occurrenceId || row.workId,
+          actionUrl: `/scheduled-work?work=${row.workId}${row.occurrenceId ? `&occurrence=${row.occurrenceId}` : ""}`,
           priority: row.reminderType === "AT_TIME" ? "IMPORTANT" : "NORMAL",
           eventKey: `scheduled-work-reminder:${row.id}`,
           delivery,
