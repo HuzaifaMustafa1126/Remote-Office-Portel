@@ -13,6 +13,7 @@ import {
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { notifyByPolicy, notifyUser } from "./notification.service.js";
+import { createTaskNoteWithinTransaction, notifyNoteSafely } from "./note.service.js";
 import {
   endTaskSession,
   getTaskTimeTracking,
@@ -301,10 +302,6 @@ export async function get(id, user) {
     "SELECT ta.*,CONCAT(e.first_name,' ',e.last_name) actor FROM task_activities ta LEFT JOIN users u ON u.id=ta.actor_user_id LEFT JOIN employees e ON e.id=u.employee_id WHERE ta.task_id=? ORDER BY ta.created_at DESC,ta.id DESC",
     [id],
   );
-  const [comments] = await pool.execute(
-    "SELECT tc.id,tc.parent_comment_id parentCommentId,tc.author_user_id authorUserId,IF(tc.deleted_at IS NULL,tc.content,'Comment deleted') content,tc.created_at createdAt,tc.updated_at updatedAt,tc.deleted_at deletedAt,CONCAT(e.first_name,' ',e.last_name) author,e.job_title authorTitle FROM task_comments tc JOIN users u ON u.id=tc.author_user_id LEFT JOIN employees e ON e.id=u.employee_id WHERE tc.task_id=? ORDER BY tc.created_at,tc.id",
-    [id],
-  );
   const [images] = await pool.execute(
     "SELECT ti.id,ti.image_context context,ti.original_filename originalFilename,ti.mime_type mimeType,ti.size_bytes sizeBytes,ti.created_at createdAt,CONCAT(e.first_name,' ',e.last_name) uploadedBy FROM task_images ti JOIN users u ON u.id=ti.uploaded_by LEFT JOIN employees e ON e.id=u.employee_id WHERE ti.task_id=? ORDER BY ti.created_at,ti.id",
     [id],
@@ -329,7 +326,6 @@ export async function get(id, user) {
       completedAt: task.completed_at,
     }),
     activities,
-    comments,
     images,
     attachments,
     changeRequest: changeRequest || null,
@@ -411,6 +407,8 @@ export async function transition(id, data, user) {
     );
     if (!task) throw new ApiError(404, "Task not found");
     const manage = await getEffectivePermission(user.id, "task.manage", c);
+    if (task.status === "IN_PROGRESS" && ["COMPLETED", "SUBMITTED_FOR_REVIEW"].includes(data.status))
+      throw new ApiError(409, "Publish a work note to complete or submit this task.", "TASK_NOTE_REQUIRED");
     if (
       !manage &&
       Number(task.assignee_employee_id) !== Number(user.employee_id)
@@ -676,6 +674,44 @@ export async function transition(id, data, user) {
         );
       });
     return { id: Number(id), status: data.status };
+  });
+}
+
+export async function finalizeWithNote(id, data, user) {
+  return tx(async (c) => {
+    const [[task]] = await c.execute("SELECT * FROM tasks WHERE id=? FOR UPDATE", [id]);
+    if (!task) throw new ApiError(404, "Task not found");
+    if (Number(task.assignee_employee_id) !== Number(user.employee_id))
+      throw new ApiError(403, "You cannot finalize another employee's task.");
+    if (!(await getEffectivePermission(user.id,"notes.create",c)) || !(await getEffectivePermission(user.id,"notes.view_own",c)))
+      throw new ApiError(403,"You do not have permission to publish the required work note.");
+    if (task.status !== "IN_PROGRESS")
+      throw new ApiError(409, "This task is no longer in progress. Refresh and try again.", "STALE_TASK_STATE");
+    const target = data.action === "SUBMIT_FOR_REVIEW" ? "SUBMITTED_FOR_REVIEW" : "COMPLETED";
+    if (target === "SUBMITTED_FOR_REVIEW" && !task.review_required)
+      throw new ApiError(409, "This task does not require review.");
+    if (target === "COMPLETED" && task.review_required)
+      throw new ApiError(409, "This task must be submitted for review.");
+    assertTransition(task.status, target, { management: false, reviewRequired: Boolean(task.review_required) });
+    if (task.completion_image_required) {
+      const [[images]] = await c.execute("SELECT COUNT(*) total FROM task_images WHERE task_id=? AND image_context='SUBMISSION'", [id]);
+      if (!Number(images.total)) throw new ApiError(400, "At least one completion image is required for this task.");
+    }
+    const note = await createTaskNoteWithinTransaction(c, task, data.note, user);
+    await endTaskSession(c, {taskId:id,employeeId:task.assignee_employee_id,reason:target === "COMPLETED" ? "COMPLETED" : "SUBMITTED"});
+    await c.execute(
+      `UPDATE tasks SET status=?,submitted_at=CASE WHEN ?='SUBMITTED_FOR_REVIEW' THEN CURRENT_TIMESTAMP ELSE submitted_at END,completed_at=CASE WHEN ?='COMPLETED' THEN CURRENT_TIMESTAMP ELSE completed_at END,updated_by=? WHERE id=?`,
+      [target,target,target,user.id,id],
+    );
+    const activityId = await activity(c,id,`TASK_${target}`,user,task.status,target,{noteId:note.id});
+    await audit(c,id,"TASK_STATUS_CHANGED",user,`${task.title} changed from ${task.status} to ${target}.`,{status:target,noteId:note.id});
+    afterCommit(c, () => taskNotification(target === "COMPLETED" ? "TASK_COMPLETED" : "TASK_SUBMITTED", user, task, {
+      title: target === "COMPLETED" ? "Task Completed" : "Task Submitted for Review",
+      message: `${user.employee_name || "An employee"} ${target === "COMPLETED" ? "completed" : "submitted"} “${task.title}”.`,
+      eventKey:`${target === "COMPLETED" ? "TASK_COMPLETED" : "TASK_SUBMITTED"}:${id}:${activityId}`,
+    }));
+    afterCommit(c, () => notifyNoteSafely(note,user,"published"));
+    return {id:Number(id),status:target,noteId:note.id};
   });
 }
 export async function addComment(id, data, user) {

@@ -62,13 +62,14 @@ const requiredTables = [
   "scheduled_work_reminders",
   "scheduled_work_snoozes",
   "scheduled_work_occurrences",
+  "scheduled_work_assignment_history",
 ];
 const requiredColumns = {
   users: ["password_hash", "password_changed_at", "must_change_password"],
   audit_logs: ["old_values", "new_values", "reason"],
   employee_salary_profiles: ["change_reason"],
   attendance_breaks: ["paused_task_id", "auto_paused_ongoing_work_id"],
-  ongoing_work: ["completion_note", "total_duration_seconds", "deleted_at", "deleted_by_user_id", "deletion_reason"],
+  ongoing_work: ["completion_note", "total_duration_seconds", "deleted_at", "deleted_by_user_id", "deletion_reason", "source_type", "source_scheduled_work_id", "source_occurrence_id"],
   ongoing_work_sessions: [
     "ongoing_work_id",
     "employee_id",
@@ -86,6 +87,9 @@ const requiredColumns = {
   ],
   note_categories: ["color", "sort_order", "created_by", "updated_at", "archived_at"],
   notification_preferences: ["availability_notifications"],
+  scheduled_work: ["linked_task_id", "recurrence_status"],
+  scheduled_work_reminders: ["occurrence_id", "attempts_count", "next_attempt_at", "claim_token", "claimed_at", "last_error", "failed_at"],
+  scheduled_work_snoozes: ["occurrence_id", "attempts_count", "next_attempt_at", "claim_token", "claimed_at", "last_error", "failed_at"],
   auth_sessions: [
     "browser",
     "operating_system",
@@ -152,6 +156,12 @@ const requiredMigrations = [
   "065_scheduled_work_reminders.sql",
   "066_scheduled_work_snoozes.sql",
   "067_recurring_scheduled_work.sql",
+  "068_scheduled_work_planning_indexes.sql",
+  "069_scheduled_work_execution_links.sql",
+  "070_scheduled_work_team_scheduler.sql",
+  "071_task_completion_notes.sql",
+  "072_scheduled_work_reliability.sql",
+  "073_scheduled_work_worker_claims.sql",
 ];
 
 export async function validateSchema() {

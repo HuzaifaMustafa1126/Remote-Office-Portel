@@ -13,11 +13,7 @@ import {
   X,
 } from "lucide-react";
 import {
-  addTaskComment,
   deleteTaskAttachment,
-  deleteTaskComment,
-  editTaskComment,
-  getMentionableUsers,
   getTask,
   getTaskAttachmentBlob,
   getTaskImageBlob,
@@ -51,9 +47,6 @@ const eventLabels = {
   TASK_SUBMITTED_FOR_REVIEW: "Submitted for review",
   TASK_CHANGES_REQUIRED: "Changes required",
   TASK_COMPLETED: "Task completed",
-  COMMENT_ADDED: "Comment added",
-  COMMENT_EDITED: "Comment edited",
-  COMMENT_DELETED: "Comment deleted",
   ATTACHMENT_ADDED: "Attachment uploaded",
   ATTACHMENT_DELETED: "Attachment deleted",
   IMAGE_ADDED: "Image added",
@@ -72,13 +65,8 @@ export default function TaskDrawerShell({
   const [data, setData] = useState(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
-    [comment, setComment] = useState(""),
-    [commenting, setCommenting] = useState(false),
     [notice, setNotice] = useState(""),
     [lightbox, setLightbox] = useState(null),
-    [replyTo, setReplyTo] = useState(null),
-    [mentionIds, setMentionIds] = useState([]),
-    [mentionable, setMentionable] = useState([]),
     [uploading, setUploading] = useState(0),
     [workNotes, setWorkNotes] = useState([]);
   const load = useCallback(async () => {
@@ -88,11 +76,9 @@ export default function TaskDrawerShell({
     try {
       const detail = await getTask(task.id);
       setData(detail);
-      if (detail.status === "COMPLETED")
-        listNotes({ relatedTaskId: detail.id, page: 1, limit: 10 })
-          .then((result) => setWorkNotes(result.rows || []))
-          .catch(() => setWorkNotes([]));
-      else setWorkNotes([]);
+      listNotes({ relatedTaskId: detail.id, page: 1, limit: 10 })
+        .then((result) => setWorkNotes(result.rows || []))
+        .catch(() => setWorkNotes([]));
       markTaskRead(task.id).catch(() => {});
     } catch (e) {
       setError(e.response?.data?.message || "Unable to load task details.");
@@ -104,61 +90,6 @@ export default function TaskDrawerShell({
     load();
   }, [load, refreshKey]);
   if (!task) return null;
-  const add = async () => {
-    if (!comment.trim()) return;
-    setCommenting(true);
-    setNotice("");
-    try {
-      await addTaskComment(
-        task.id,
-        comment.trim(),
-        replyTo?.id || null,
-        mentionIds,
-      );
-      setComment("");
-      setReplyTo(null);
-      setMentionIds([]);
-      setMentionable([]);
-      setNotice("Comment added.");
-      await load();
-    } catch (e) {
-      setNotice(e.response?.data?.message || "Unable to add comment.");
-    } finally {
-      setCommenting(false);
-    }
-  };
-  const commentChange = async (value) => {
-    setComment(value);
-    const match = value.match(/(?:^|\s)@([^@\n]{1,40})$/);
-    if (!match) {
-      setMentionable([]);
-      return;
-    }
-    try {
-      setMentionable(await getMentionableUsers(task.id, match[1].trim()));
-    } catch {
-      setMentionable([]);
-    }
-  };
-  const chooseMention = (person) => {
-    setComment((x) =>
-      x.replace(
-        /(?:^|\s)@([^@\n]{0,40})$/,
-        (m) => `${m.startsWith(" ") ? " " : ""}@${person.name} `,
-      ),
-    );
-    setMentionIds((x) => [...new Set([...x, person.id])]);
-    setMentionable([]);
-  };
-  const refreshComment = async (fn) => {
-    try {
-      await fn();
-      setNotice("Discussion updated.");
-      await load();
-    } catch (e) {
-      setNotice(e.response?.data?.message || "Unable to update comment.");
-    }
-  };
   const upload = async (e) => {
     const files = [...e.target.files];
     e.target.value = "";
@@ -287,7 +218,7 @@ export default function TaskDrawerShell({
                 userId={user?.id}
                 management={management}
               />
-              {data.status === "COMPLETED" && (
+              {(workNotes.length > 0 || data.status === "COMPLETED") && (
                 <Block title="Work Notes">
                   {workNotes.length ? (
                     <div className="divide-y divide-border">
@@ -305,28 +236,6 @@ export default function TaskDrawerShell({
                   </Link>
                 </Block>
               )}
-              <Comments
-                items={data.comments}
-                value={comment}
-                setValue={commentChange}
-                add={add}
-                busy={commenting}
-                notice={notice}
-                replyTo={replyTo}
-                setReplyTo={setReplyTo}
-                mentionable={mentionable}
-                chooseMention={chooseMention}
-                userId={user?.id}
-                management={management}
-                edit={(item, content) =>
-                  refreshComment(() =>
-                    editTaskComment(task.id, item.id, content),
-                  )
-                }
-                remove={(item) =>
-                  refreshComment(() => deleteTaskComment(task.id, item.id))
-                }
-              />
               <Activity items={data.activities} />
             </div>
           ) : null}
@@ -651,212 +560,6 @@ function Attachments({
 }
 const size = (n) =>
   n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
-function Comments({
-  items,
-  value,
-  setValue,
-  add,
-  busy,
-  notice,
-  replyTo,
-  setReplyTo,
-  mentionable,
-  chooseMention,
-  userId,
-  management,
-  edit,
-  remove,
-}) {
-  const roots = items.filter((x) => !x.parentCommentId),
-    children = (id) =>
-      items.filter((x) => Number(x.parentCommentId) === Number(id));
-  return (
-    <Block title="Comments">
-      <div className="max-h-64 space-y-3 overflow-y-auto">
-        {roots.length ? (
-          roots.map((x) => (
-            <Comment
-              key={x.id}
-              item={x}
-              replies={children(x.id)}
-              userId={userId}
-              management={management}
-              reply={setReplyTo}
-              edit={edit}
-              remove={remove}
-            />
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No comments yet. Start the discussion about this task.
-          </p>
-        )}
-      </div>
-      <div className="mt-4">
-        {replyTo && (
-          <div className="mb-2 flex justify-between rounded-lg bg-primary-soft px-3 py-2 text-xs">
-            <span>
-              Replying to <b>{replyTo.author}</b>
-            </span>
-            <button onClick={() => setReplyTo(null)}>Cancel</button>
-          </div>
-        )}
-        <textarea
-          rows="2"
-          maxLength="1000"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="input"
-          placeholder="Add a short task note…"
-        />
-        {mentionable.length > 0 && (
-          <div className="mt-1 rounded-xl border border-border bg-surface p-1 shadow-lg">
-            {mentionable.map((x) => (
-              <button
-                key={x.id}
-                onClick={() => chooseMention(x)}
-                className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-surface-secondary"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-foreground text-[10px] font-bold text-background">
-                  {initials(x.name)}
-                </span>
-                <span>
-                  <b className="block text-xs">{x.name}</b>
-                  <small className="text-muted-foreground">
-                    {x.jobTitle || "Task participant"}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {value.length}/1000
-          </span>
-          <button
-            disabled={busy || !value.trim()}
-            onClick={add}
-            className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
-          >
-            {busy ? "Adding…" : replyTo ? "Add Reply" : "Add Comment"}
-          </button>
-        </div>
-        {notice && (
-          <p className="mt-2 text-xs text-muted-foreground">{notice}</p>
-        )}
-      </div>
-    </Block>
-  );
-}
-function Comment({ item, replies, userId, management, reply, edit, remove }) {
-  const [editing, setEditing] = useState(false),
-    [text, setText] = useState(item.content),
-    own = Number(item.authorUserId) === Number(userId),
-    deleted = Boolean(item.deletedAt);
-  return (
-    <div>
-      <div className="rounded-xl bg-surface-secondary p-3">
-        <div className="flex justify-between gap-2 text-xs">
-          <span className="flex items-center gap-2">
-            <i className="grid h-7 w-7 place-items-center rounded-full bg-foreground not-italic font-bold text-background">
-              {initials(item.author || "U")}
-            </i>
-            <span>
-              <b>{item.author || "User"}</b>
-              {item.authorTitle && (
-                <small className="block text-muted-foreground">
-                  {item.authorTitle}
-                </small>
-              )}
-            </span>
-          </span>
-          <span className="text-muted-foreground">
-            {date(item.createdAt)}
-            {item.updatedAt && " · Edited"}
-          </span>
-        </div>
-        {editing ? (
-          <div className="mt-2">
-            <textarea
-              className="input"
-              maxLength="1000"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="mt-1 flex justify-end gap-2">
-              <button onClick={() => setEditing(false)} className="text-xs">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  edit(item, text);
-                  setEditing(false);
-                }}
-                className="text-xs font-bold"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p
-            className={`mt-1 whitespace-pre-wrap break-words text-sm ${deleted ? "italic text-muted-foreground" : ""}`}
-          >
-            {item.content}
-          </p>
-        )}
-        {!deleted && (
-          <div className="mt-2 flex gap-3 text-[11px] font-bold text-muted-foreground">
-            <button
-              aria-label={`Reply to ${item.author}`}
-              onClick={() => reply(item)}
-            >
-              Reply
-            </button>
-            {(own || management) && (
-              <>
-                <button
-                  aria-label="Edit comment"
-                  onClick={() => setEditing(true)}
-                >
-                  Edit
-                </button>
-                <button
-                  aria-label="Delete comment"
-                  onClick={() => remove(item)}
-                  className="text-danger"
-                >
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      {replies.map((x) => (
-        <div key={x.id} className="ml-7 mt-2 border-l border-border pl-3">
-          <Comment
-            item={x}
-            replies={[]}
-            userId={userId}
-            management={management}
-            reply={() => {}}
-            edit={edit}
-            remove={remove}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-const initials = (name) =>
-  String(name)
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((x) => x[0])
-    .join("")
-    .toUpperCase();
 function Activity({ items }) {
   return (
     <Block title="Activity">

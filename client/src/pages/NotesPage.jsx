@@ -2,15 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
   Archive,
-  Check,
   Copy,
   ChevronDown,
   Download,
   Eye,
   FileText,
-  Folder,
   Image,
-  Info,
   Lock,
   MoreVertical,
   Pencil,
@@ -22,11 +19,7 @@ import {
   ShieldCheck,
   Star,
   Trash2,
-  Upload,
   Users,
-  Settings2,
-  ArrowUp,
-  ArrowDown,
   X,
 } from "lucide-react";
 import {
@@ -39,6 +32,7 @@ import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import useAuth from "../hooks/useAuth";
 import useNotifications from "../hooks/useNotifications";
+import NoteEditorModal from "../components/notes/NoteEditorModal";
 import * as api from "../services/note.service";
 import { getTask } from "../services/task.service";
 import { errorMessage, initials } from "../utils/helpers";
@@ -49,7 +43,6 @@ const empty = {
     content: "",
     visibility: "TEAM",
     isImportant: false,
-    categoryId: "",
   },
   stamp = (v) =>
     new Intl.DateTimeFormat("en-PK", {
@@ -72,9 +65,6 @@ export default function NotesPage() {
     [visibility, setVisibility] = useState(() => remembered("visibility")),
     [importance, setImportance] = useState(() => remembered("importance")),
     [source, setSource] = useState(() => remembered("source")),
-    [categoryId, setCategoryId] = useState(() => remembered("categoryId")),
-    [categoryData, setCategoryData] = useState({ categories: [], uncategorizedCount: 0, canManage: false }),
-    [categoryManagerOpen, setCategoryManagerOpen] = useState(false),
     [tab, setTab] = useState(
       () => sessionStorage.getItem("notes.tab") || "ALL",
     ),
@@ -131,7 +121,6 @@ export default function NotesPage() {
         visibility: visibility || undefined,
         importance: importance || undefined,
         source: source || undefined,
-        categoryId: categoryId || undefined,
         tab,
         authorEmployeeId: author || undefined,
         dateRange,
@@ -151,7 +140,6 @@ export default function NotesPage() {
     visibility,
     importance,
     source,
-    categoryId,
     tab,
     author,
     dateRange,
@@ -169,10 +157,6 @@ export default function NotesPage() {
       .then(setAuthors)
       .catch(() => {});
   }, []);
-  const loadCategories = useCallback(() => {
-    api.listNoteCategories().then(setCategoryData).catch(() => {});
-  }, []);
-  useEffect(() => { loadCategories(); }, [loadCategories]);
   useEffect(() => {
     Object.entries({
       tab,
@@ -180,7 +164,6 @@ export default function NotesPage() {
       visibility,
       importance,
       source,
-      categoryId,
       author,
       dateRange,
       startDate,
@@ -193,7 +176,6 @@ export default function NotesPage() {
     visibility,
     importance,
     source,
-    categoryId,
     author,
     dateRange,
     startDate,
@@ -244,7 +226,6 @@ export default function NotesPage() {
         visibility: visibility || undefined,
         importance: importance || undefined,
         source: source || undefined,
-        categoryId: categoryId || undefined,
         authorEmployeeId: author || undefined,
         dateRange,
         startDate: startDate || undefined,
@@ -340,11 +321,6 @@ export default function NotesPage() {
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          {categoryData.canManage && (
-            <Button variant="secondary" onClick={() => setCategoryManagerOpen(true)}>
-              <Settings2 size={16} className="mr-2 inline" /> Manage Categories
-            </Button>
-          )}
           <Button
             onClick={() => setEditing({ ...empty })}
             className="inline-flex items-center gap-2 !bg-success hover:!brightness-95"
@@ -387,35 +363,6 @@ export default function NotesPage() {
           Archived
         </button>
       </nav>
-      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Note categories">
-        <button
-          type="button"
-          onClick={() => { setCategoryId(""); setPage(1); }}
-          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${!categoryId ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
-        >
-          All categories
-        </button>
-        {categoryData.categories.map((category) => (
-          <button
-            type="button"
-            key={category.id}
-            onClick={() => { setCategoryId(String(category.id)); setPage(1); }}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${String(categoryId) === String(category.id) ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color || "#64748b" }} />
-            {category.name} <span className="text-muted-foreground">{category.noteCount}</span>
-          </button>
-        ))}
-        {categoryData.uncategorizedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => { setCategoryId("UNCATEGORIZED"); setPage(1); }}
-            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${categoryId === "UNCATEGORIZED" ? "border-success bg-success-soft text-success" : "border-border bg-surface"}`}
-          >
-            Uncategorized <span className="text-muted-foreground">{categoryData.uncategorizedCount}</span>
-          </button>
-        )}
-      </nav>
       <section className="grid grid-cols-1 items-center gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-[minmax(220px,1.5fr)_repeat(6,minmax(125px,1fr))_auto]">
         <label className="relative min-w-0">
           <Search
@@ -433,18 +380,6 @@ export default function NotesPage() {
             placeholder="Search notes..."
           />
         </label>
-        <CompactFilter
-          label="Category"
-          icon={Folder}
-          value={categoryId}
-          setValue={setCategoryId}
-          setPage={setPage}
-          options={[
-            ["", "All categories"],
-            ...categoryData.categories.map((category) => [String(category.id), category.name]),
-            ...(categoryData.uncategorizedCount ? [["UNCATEGORIZED", "Uncategorized"]] : []),
-          ]}
-        />
         <CompactFilter
           label="Visibility"
           icon={Eye}
@@ -650,9 +585,6 @@ export default function NotesPage() {
                         ↗ Related Task: {n.relatedTaskTitle}
                       </span>
                     )}
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      <Folder size={13} /> {n.categoryName || "Uncategorized"}
-                    </span>
                   </span>
                 </span>
               </button>
@@ -795,7 +727,7 @@ export default function NotesPage() {
       ) : (
         <Empty
           title={
-            query || visibility || importance || source || categoryId || dateRange !== "ALL"
+            query || visibility || importance || source || dateRange !== "ALL"
               ? "No matching notes found."
               : tab === "PINNED"
                 ? "No pinned notes yet."
@@ -810,7 +742,7 @@ export default function NotesPage() {
                         : "No notes yet"
           }
           detail={
-            query || visibility || importance || source || categoryId || dateRange !== "ALL"
+            query || visibility || importance || source || dateRange !== "ALL"
               ? "Try changing your search or filters."
               : "Create your first note to keep track of important work information."
           }
@@ -853,24 +785,16 @@ export default function NotesPage() {
         </footer>
       )}
       {editing && (
-        <Editor
+        <NoteEditorModal
           note={editing}
           author={user.name}
-          categories={categoryData.categories}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setEditing(null);
             load();
-            loadCategories();
             setSelected(saved);
             navigate(`/notes/${saved.id}`);
           }}
-        />
-      )}
-      {categoryManagerOpen && (
-        <CategoryManager
-          onClose={() => setCategoryManagerOpen(false)}
-          onChanged={() => { loadCategories(); load(); }}
         />
       )}
       {selected && (
@@ -1041,590 +965,6 @@ function Empty({ title, detail, action, onAction }) {
     </section>
   );
 }
-function CategoryManager({ onClose, onChanged }) {
-  const [items, setItems] = useState([]),
-    [name, setName] = useState(""),
-    [color, setColor] = useState("#64748b"),
-    [editing, setEditing] = useState(null),
-    [archiving, setArchiving] = useState(null),
-    [deleting, setDeleting] = useState(null),
-    [deleteConfirmation, setDeleteConfirmation] = useState(""),
-    [target, setTarget] = useState("UNCATEGORIZED"),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const refresh = useCallback(async () => {
-    const result = await api.listNoteCategories(true);
-    setItems(result.categories);
-  }, []);
-  useEffect(() => { refresh().catch((e) => setError(errorMessage(e))); }, [refresh]);
-  const perform = async (action) => {
-    setBusy(true); setError("");
-    try { await action(); await refresh(); onChanged(); }
-    catch (e) { setError(errorMessage(e)); }
-    finally { setBusy(false); }
-  };
-  const active = items.filter((item) => item.isActive);
-  const move = (id, offset) => {
-    const index = active.findIndex((item) => Number(item.id) === Number(id));
-    const next = index + offset;
-    if (index < 0 || next < 0 || next >= active.length) return;
-    const ordered = [...active];
-    [ordered[index], ordered[next]] = [ordered[next], ordered[index]];
-    perform(() => api.reorderNoteCategories(ordered.map((item) => item.id)));
-  };
-  return (
-    <Modal open title="Manage Note Categories" onClose={() => !busy && onClose()}>
-      <p className="text-sm text-muted-foreground">Categories are shared with the company. Archiving one never deletes its notes.</p>
-      {error && <p className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{error}</p>}
-      <form
-        className="mt-4 flex flex-wrap gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          perform(async () => {
-            await api.createNoteCategory({ name: name.trim(), color });
-            setName("");
-          });
-        }}
-      >
-        <input required maxLength="80" className="input mt-0 min-w-[190px] flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name" />
-        <input type="color" aria-label="Category color" className="h-11 w-12 rounded-lg border border-border bg-surface p-1" value={color} onChange={(e) => setColor(e.target.value)} />
-        <Button disabled={busy || !name.trim()} type="submit"><Plus size={15} className="mr-1 inline" /> Add</Button>
-      </form>
-      <div className="mt-4 max-h-[46vh] space-y-2 overflow-y-auto pr-1">
-        {items.map((item) => (
-          <div key={item.id} className={`rounded-xl border border-border p-3 ${item.isActive ? "" : "opacity-65"}`}>
-            {editing?.id === item.id ? (
-              <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); perform(async () => { await api.updateNoteCategory(item.id, { name: editing.name.trim(), color: editing.color }); setEditing(null); }); }}>
-                <input required maxLength="80" className="input mt-0 min-w-[180px] flex-1" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-                <input type="color" aria-label="Category color" className="h-11 w-12 rounded-lg border border-border p-1" value={editing.color || "#64748b"} onChange={(e) => setEditing({ ...editing, color: e.target.value })} />
-                <Button disabled={busy} type="submit">Save</Button>
-                <Button variant="secondary" type="button" onClick={() => setEditing(null)}>Cancel</Button>
-              </form>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color || "#64748b" }} />
-                <strong className="min-w-0 flex-1 truncate text-sm">{item.name}</strong>
-                <span className="text-xs text-muted-foreground">{item.noteCount} notes</span>
-                {item.isActive ? <>
-                  <button type="button" disabled={busy} aria-label={`Move ${item.name} up`} onClick={() => move(item.id, -1)} className="rounded-lg border border-border p-2"><ArrowUp size={14} /></button>
-                  <button type="button" disabled={busy} aria-label={`Move ${item.name} down`} onClick={() => move(item.id, 1)} className="rounded-lg border border-border p-2"><ArrowDown size={14} /></button>
-                  <button type="button" disabled={busy} onClick={() => setEditing({ id: item.id, name: item.name, color: item.color || "#64748b" })} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">Edit</button>
-                  <button type="button" disabled={busy} onClick={() => { setArchiving(item); setTarget("UNCATEGORIZED"); }} className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger">Archive</button>
-                </> : <>
-                  <button type="button" disabled={busy} onClick={() => perform(() => api.updateNoteCategory(item.id, { isActive: true }))} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">Reactivate</button>
-                  <button type="button" disabled={busy} onClick={() => { setDeleting(item); setDeleteConfirmation(""); setArchiving(null); }} className="inline-flex items-center gap-1 rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger"><Trash2 size={13} /> Delete</button>
-                </>}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {archiving && (
-        <div className="mt-4 rounded-xl border border-warning/30 bg-warning-soft p-4">
-          <p className="text-sm font-bold">Archive “{archiving.name}”?</p>
-          <p className="mt-1 text-xs text-muted-foreground">Choose where its {archiving.noteCount} note(s) should go.</p>
-          <select className="input mt-3" value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="UNCATEGORIZED">Move to Uncategorized</option>
-            {active.filter((item) => item.id !== archiving.id).map((item) => <option key={item.id} value={item.id}>Reassign to {item.name}</option>)}
-          </select>
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="secondary" disabled={busy} onClick={() => setArchiving(null)}>Cancel</Button>
-            <Button disabled={busy} onClick={() => perform(async () => { await api.archiveNoteCategory(archiving.id, target === "UNCATEGORIZED" ? { mode: "UNCATEGORIZED", targetCategoryId: null } : { mode: "REASSIGN", targetCategoryId: Number(target) }); setArchiving(null); })}>Archive Category</Button>
-          </div>
-        </div>
-      )}
-      {deleting && (
-        <div className="mt-4 rounded-xl border border-danger/30 bg-danger-soft p-4">
-          <p className="text-sm font-bold text-danger">Permanently delete “{deleting.name}”?</p>
-          <p className="mt-1 text-xs text-muted-foreground">This removes only the archived category. Notes are never deleted. Type the category name to confirm.</p>
-          <input
-            className="input mt-3"
-            value={deleteConfirmation}
-            onChange={(event) => setDeleteConfirmation(event.target.value)}
-            placeholder={deleting.name}
-            autoComplete="off"
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="secondary" disabled={busy} onClick={() => setDeleting(null)}>Cancel</Button>
-            <Button
-              disabled={busy || deleteConfirmation !== deleting.name}
-              onClick={() => perform(async () => {
-                await api.deleteNoteCategory(deleting.id, deleteConfirmation);
-                setDeleting(null);
-                setDeleteConfirmation("");
-              })}
-            >
-              Delete Permanently
-            </Button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-function Editor({ note, author, categories, onClose, onSaved }) {
-  const initial = useRef({ ...empty, ...note }),
-    fileInput = useRef(null);
-  const [form, setForm] = useState(initial.current),
-    [files, setFiles] = useState([]),
-    [removed, setRemoved] = useState([]),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [dragging, setDragging] = useState(false),
-    [createdId, setCreatedId] = useState(null);
-  const dirty =
-    files.length > 0 ||
-    removed.length > 0 ||
-    JSON.stringify(form) !== JSON.stringify(initial.current);
-  const requestClose = useCallback(() => {
-    if (!dirty || window.confirm("Discard your unsaved Note changes?"))
-      onClose();
-  }, [dirty, onClose]);
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const key = (e) => {
-      if (e.key === "Escape" && !busy) requestClose();
-    };
-    window.addEventListener("keydown", key);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", key);
-    };
-  }, [busy, requestClose]);
-  const addFiles = (list) => {
-    const next = [...list].filter(
-      (f) =>
-        ["image/jpeg", "image/png", "image/webp"].includes(f.type) &&
-        f.size <= 5242880,
-    );
-    setFiles((current) => [...current, ...next].slice(0, 8));
-  };
-  const pick = (e) => {
-    addFiles(e.target.files);
-    e.target.value = "";
-  };
-  const save = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const payload = {
-          title: form.title.trim(),
-          summary: form.summary.trim(),
-          content: form.content.trim(),
-          visibility: form.visibility,
-          isImportant: form.isImportant,
-          relatedTaskId: form.relatedTaskId || null,
-          categoryId: Number(form.categoryId),
-          ...(note.id ? { notifyViewers: Boolean(form.notifyViewers) } : {}),
-        },
-        initialSaved = note.id
-          ? await api.updateNote(note.id, payload)
-          : createdId
-            ? await api.updateNote(createdId, {
-                ...payload,
-                notifyViewers: false,
-              })
-            : await api.createNote(payload);
-      if (!note.id && !createdId) setCreatedId(initialSaved.id);
-      for (const id of removed) await api.removeImage(initialSaved.id, id);
-      for (const file of [...files]) {
-        await api.uploadImage(initialSaved.id, file);
-        setFiles((current) => current.filter((item) => item !== file));
-      }
-      const saved = note.id
-        ? initialSaved
-        : await api.publishNoteNotifications(initialSaved.id);
-      onSaved(saved);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const visibilityOptions = [
-    {
-      value: "TEAM",
-      title: "All Team Members",
-      detail: "Visible to all team members",
-      Icon: Users,
-    },
-    {
-      value: "PRIVATE",
-      title: "Private",
-      detail: "Only you can see this note",
-      Icon: Lock,
-    },
-    {
-      value: "CEO_ONLY",
-      title: "Only CEO",
-      detail: "Visible to you and CEO only",
-      Icon: ShieldCheck,
-    },
-  ];
-  return (
-    <div
-      className="note-editor-backdrop fixed inset-0 z-50 grid place-items-center bg-[rgba(15,23,42,0.45)] p-3 backdrop-blur-[2px] sm:p-5"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) requestClose();
-      }}
-    >
-      <form
-        onSubmit={save}
-        className="note-editor-modal flex max-h-[92vh] w-full max-w-[930px] flex-col overflow-hidden rounded-[20px] border border-border bg-surface shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
-        aria-modal="true"
-        role="dialog"
-        aria-labelledby="note-editor-title"
-      >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-success-soft text-success">
-              <FileText size={20} />
-            </span>
-            <div>
-              <h2
-                id="note-editor-title"
-                className="text-lg font-bold text-foreground sm:text-xl"
-              >
-                {note.id ? "Edit Note" : "Add New Note"}
-              </h2>
-              <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-                Write and save important information about your work.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={busy}
-            aria-label="Close note editor"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-surface-secondary hover:text-foreground"
-          >
-            <X size={20} />
-          </button>
-        </header>
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
-          <CounterField label="Note Title" count={form.title.length} max={200}>
-            <input
-              required
-              autoFocus
-              minLength="2"
-              maxLength="200"
-              className="input mt-1.5 h-11"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Enter a clear and descriptive title..."
-            />
-          </CounterField>
-          <CounterField label="Summary" count={form.summary.length} max={300}>
-            <textarea
-              required
-              maxLength="300"
-              rows="2"
-              className="input mt-1.5 min-h-[70px] resize-none"
-              value={form.summary}
-              onChange={(e) => setForm({ ...form, summary: e.target.value })}
-              placeholder="Write a short summary..."
-            />
-          </CounterField>
-          <label className="block text-xs font-semibold text-foreground">
-            Category <span className="text-danger">*</span>
-            <SearchableCategoryPicker
-              categories={categories}
-              value={form.categoryId}
-              onChange={(value) => setForm({ ...form, categoryId: value })}
-            />
-            {!categories.length && (
-              <span className="mt-1 block text-[11px] text-danger">No active category is available. Ask the CEO to create one.</span>
-            )}
-          </label>
-          <label className="block text-xs font-semibold text-foreground">
-            Note Content <span className="text-danger">*</span>
-            <textarea
-              required
-              maxLength="50000"
-              rows="5"
-              className="input mt-1.5 min-h-[140px] resize-y"
-              value={form.content}
-              onChange={(e) => setForm({ ...form, content: e.target.value })}
-              placeholder="Write the full details of your note..."
-            />
-          </label>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-            <fieldset>
-              <legend className="text-xs font-semibold">
-                Visibility <span className="text-danger">*</span>
-              </legend>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {visibilityOptions.map(({ value, title, detail, Icon }) => {
-                  const selected = form.visibility === value;
-                  return (
-                    <label
-                      key={value}
-                      className={`relative flex min-h-[78px] cursor-pointer items-center gap-2.5 rounded-xl border p-3 transition ${selected ? "border-success bg-success-soft" : "border-border bg-surface hover:bg-surface-secondary"}`}
-                    >
-                      <input
-                        className="sr-only"
-                        type="radio"
-                        name="visibility"
-                        checked={selected}
-                        onChange={() => setForm({ ...form, visibility: value })}
-                      />
-                      <span
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${selected ? "bg-surface text-success" : "bg-surface-secondary text-muted-foreground"}`}
-                      >
-                        <Icon size={16} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-xs font-bold">{title}</span>
-                        <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
-                          {detail}
-                        </span>
-                      </span>
-                      <span
-                        className={`absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full border ${selected ? "border-success bg-success text-white" : "border-border"}`}
-                      >
-                        {selected && <Check size={10} />}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-            <section>
-              <h3 className="text-xs font-semibold">Important Note</h3>
-              <label className="mt-3 flex cursor-pointer items-center gap-3">
-                <input
-                  className="peer sr-only"
-                  type="checkbox"
-                  checked={form.isImportant}
-                  onChange={(e) =>
-                    setForm({ ...form, isImportant: e.target.checked })
-                  }
-                />
-                <span className="relative h-6 w-11 shrink-0 rounded-full bg-muted transition peer-checked:bg-success after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5" />
-                <span className="text-sm font-semibold">
-                  <Star
-                    size={15}
-                    className={`mr-1 inline ${form.isImportant ? "fill-warning text-warning" : "text-muted-foreground"}`}
-                  />
-                  Mark as Important
-                </span>
-              </label>
-              <p className="ml-14 mt-1 text-[11px] leading-4 text-muted-foreground">
-                Important notes will be easier to find later.
-              </p>
-            </section>
-          </div>
-          <section>
-            <h3 className="text-xs font-semibold">Images</h3>
-            <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-              <button
-                type="button"
-                onClick={() => fileInput.current?.click()}
-                onDragEnter={(e) => {
-                  e.preventDefault();
-                  setDragging(true);
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragging(false);
-                  addFiles(e.dataTransfer.files);
-                }}
-                className={`grid min-h-[132px] place-items-center rounded-xl border border-dashed p-4 text-center transition ${dragging ? "border-success bg-success-soft" : "border-border bg-surface hover:border-success hover:bg-success-soft/40"}`}
-              >
-                <span>
-                  <Upload size={24} className="mx-auto text-success" />
-                  <span className="mt-2 block text-sm font-bold">
-                    Click to upload images
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    or drag and drop
-                  </span>
-                  <span className="mt-2 block text-[10px] text-muted-foreground">
-                    JPG, JPEG, PNG, WEBP · Max 5MB per image
-                  </span>
-                </span>
-              </button>
-              <input
-                ref={fileInput}
-                hidden
-                multiple
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                onChange={pick}
-              />
-              <aside className="rounded-xl border border-info-border bg-info-soft p-4">
-                <h4 className="flex items-center gap-2 text-xs font-bold text-info-foreground">
-                  <Info size={15} />
-                  Supported Formats
-                </h4>
-                <ul className="mt-2 space-y-1.5 text-[11px] text-info-foreground">
-                  {[
-                    "JPG / JPEG",
-                    "PNG",
-                    "WEBP",
-                    "Maximum 5MB per image",
-                    "Multiple images allowed",
-                  ].map((item) => (
-                    <li key={item} className="flex gap-2">
-                      <Check size={13} />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </aside>
-            </div>
-            {((note.images || []).some((x) => !removed.includes(x.id)) ||
-              files.length > 0) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(note.images || [])
-                  .filter((x) => !removed.includes(x.id))
-                  .map((x) => (
-                    <ImagePreview
-                      key={x.id}
-                      name={x.originalFilename}
-                      onRemove={() => setRemoved((r) => [...r, x.id])}
-                    >
-                      <NoteImage
-                        noteId={note.id}
-                        imageId={x.id}
-                        alt={x.originalFilename}
-                      />
-                    </ImagePreview>
-                  ))}
-                {files.map((f, i) => (
-                  <ImagePreview
-                    key={`${f.name}-${i}`}
-                    name={f.name}
-                    onRemove={() =>
-                      setFiles((x) => x.filter((_, j) => j !== i))
-                    }
-                  >
-                    <LocalImage file={f} />
-                  </ImagePreview>
-                ))}
-              </div>
-            )}
-          </section>
-          {note.id && (
-            <label className="flex items-center gap-3 rounded-xl border border-border p-4 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={Boolean(form.notifyViewers)}
-                onChange={(e) =>
-                  setForm({ ...form, notifyViewers: e.target.checked })
-                }
-              />
-              Notify viewers about this update
-            </label>
-          )}
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger"
-            >
-              {error}
-            </p>
-          )}
-        </div>
-        <footer className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary-text">
-              {initials(author)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground">Created by</p>
-              <p className="truncate text-sm font-bold">{author}</p>
-              <p className="text-[10px] text-muted-foreground">
-                Your name will be saved automatically
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={requestClose}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              className="inline-flex items-center gap-2 !bg-success hover:!brightness-95"
-            >
-              <Send size={15} />
-              {busy ? "Saving..." : note.id ? "Save Changes" : "Publish Note"}
-            </Button>
-          </div>
-        </footer>
-      </form>
-    </div>
-  );
-}
-function CounterField({ label, count, max, children }) {
-  return (
-    <label className="block text-xs font-semibold text-foreground">
-      {label} <span className="text-danger">*</span>
-      {children}
-      <span className="mt-1 block text-right text-[10px] font-normal text-muted-foreground">
-        {count}/{max}
-      </span>
-    </label>
-  );
-}
-function SearchableCategoryPicker({ categories, value, onChange }) {
-  const selectedName = categories.find((item) => String(item.id) === String(value))?.name || "";
-  const [text, setText] = useState(selectedName);
-  useEffect(() => { setText(selectedName); }, [selectedName]);
-  return (
-    <>
-      <input
-        required
-        list="active-note-categories"
-        className="input mt-1.5 h-11"
-        value={text}
-        placeholder="Search and select a category..."
-        onChange={(event) => {
-          const next = event.target.value;
-          const match = categories.find((item) => item.name.toLowerCase() === next.trim().toLowerCase());
-          setText(next);
-          onChange(match ? String(match.id) : "");
-          event.target.setCustomValidity(match || !next ? "" : "Select a category from the list");
-        }}
-        onBlur={(event) => event.target.setCustomValidity(value ? "" : "Select a category from the list")}
-      />
-      <datalist id="active-note-categories">
-        {categories.map((category) => <option key={category.id} value={category.name} />)}
-      </datalist>
-    </>
-  );
-}
-function ImagePreview({ name, onRemove, children }) {
-  return (
-    <span className="relative w-28 overflow-hidden rounded-xl border border-border bg-surface-secondary p-1.5 text-xs">
-      <span className="block aspect-video overflow-hidden rounded-lg [&>img]:h-full [&>img]:w-full [&>img]:object-cover">
-        {children}
-      </span>
-      <span className="mt-1 block truncate px-1" title={name}>
-        {name}
-      </span>
-      <button
-        type="button"
-        aria-label={`Remove ${name}`}
-        onClick={onRemove}
-        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"
-      >
-        <X size={12} />
-      </button>
-    </span>
-  );
-}
 function Detail({
   note,
   own,
@@ -1653,9 +993,6 @@ function Detail({
         <header className="flex justify-between border-b p-5">
           <div>
             <div className="flex gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[10px] text-success">
-                <Folder size={11} /> {note.categoryName || "Uncategorized"}
-              </span>
               <span className="rounded-full bg-surface-secondary px-2 py-1 text-[10px]">
                 {labels[note.visibility]}
               </span>
@@ -2174,21 +1511,6 @@ function MentionText({ content, mentions }) {
   );
 }
 
-function LocalImage({ file }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    const next = URL.createObjectURL(file);
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
-  }, [file]);
-  return url ? (
-    <img
-      src={url}
-      alt={file.name}
-      className="aspect-video w-full rounded object-cover"
-    />
-  ) : null;
-}
 function NoteImage({ noteId, imageId, ...props }) {
   const [url, setUrl] = useState("");
   useEffect(() => {

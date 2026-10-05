@@ -18,6 +18,7 @@ export const completionSchema = z
       .trim()
       .min(1, "Please add a completion note")
       .max(1000),
+    completeLinkedSchedule: z.boolean().default(false),
   })
   .strict();
 export const completedListSchema = z

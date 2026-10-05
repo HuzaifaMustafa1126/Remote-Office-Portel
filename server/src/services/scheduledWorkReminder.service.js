@@ -3,8 +3,12 @@ import ApiError from "../utils/ApiError.js";
 import { createNotification, resolveDelivery } from "./notification.service.js";
 import { emitNotification } from "../sockets/notification.socket.js";
 import { sqlToIso, toSqlDateTime } from "../utils/scheduledWorkTime.js";
+import { randomUUID } from "node:crypto";
 
 const units = { MINUTES: 60000, HOURS: 3600000, DAYS: 86400000 };
+const MAX_ATTEMPTS = 5;
+const retryDelayMinutes = (attempt) => Math.min(60, 2 ** Math.max(0, attempt - 1));
+const safeError = (error) => String(error?.message || "Temporary notification error").slice(0, 500);
 const reminderSelect = `SELECT id,scheduled_work_id scheduledWorkId,reminder_type reminderType,
  reminder_value value,reminder_unit unit,remind_at remindAt,status,triggered_at triggeredAt,
  notification_id notificationId,created_at createdAt,updated_at updatedAt FROM scheduled_work_reminders`;
@@ -205,28 +209,29 @@ export async function remove(workId, reminderId, actor) {
 }
 const human = (row) =>
   `${row.value} ${String(row.unit).toLowerCase().replace(/s$/, "")}${Number(row.value) === 1 ? "" : "s"}`;
-async function processOne(id) {
+async function processOne(id, claimToken) {
   const connection = await pool.getConnection();
   let notification = null;
   try {
     await connection.beginTransaction();
     const [[row]] = await connection.execute(
       `SELECT r.id,r.reminder_type reminderType,r.reminder_value value,r.reminder_unit unit,r.status,
+       r.attempts_count attemptsCount,r.next_attempt_at nextAttemptAt,
        w.id workId,w.title,COALESCE(o.scheduled_at,w.scheduled_at) scheduledAt,
        COALESCE(o.status,w.status) workStatus,u.id userId,r.occurrence_id occurrenceId
        FROM scheduled_work_reminders r JOIN scheduled_work w ON w.id=r.scheduled_work_id
        LEFT JOIN scheduled_work_occurrences o ON o.id=r.occurrence_id
        JOIN users u ON u.employee_id=COALESCE(o.assigned_to,w.assigned_to) AND u.status='ACTIVE'
-       WHERE r.id=? FOR UPDATE`,
-      [id],
+       WHERE r.id=? AND r.claim_token=? FOR UPDATE`,
+      [id, claimToken],
     );
-    if (!row || row.status !== "PENDING") {
+    if (!row || row.status !== "PROCESSING") {
       await connection.rollback();
       return false;
     }
     if (row.workStatus !== "UPCOMING") {
       await connection.execute(
-        "UPDATE scheduled_work_reminders SET status='CANCELLED' WHERE id=?",
+        "UPDATE scheduled_work_reminders SET status='CANCELLED',claim_token=NULL,claimed_at=NULL WHERE id=?",
         [id],
       );
       await connection.commit();
@@ -290,8 +295,8 @@ async function processOne(id) {
       }
     }
     await connection.execute(
-      "UPDATE scheduled_work_reminders SET status='TRIGGERED',triggered_at=CURRENT_TIMESTAMP,notification_id=? WHERE id=? AND status='PENDING'",
-      [notification?.id || null, row.id],
+      "UPDATE scheduled_work_reminders SET status='TRIGGERED',triggered_at=CURRENT_TIMESTAMP,notification_id=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND status='PROCESSING' AND claim_token=?",
+      [notification?.id || null, row.id, claimToken],
     );
     await connection.commit();
     if (notification?.userId) emitNotification(notification);
@@ -303,21 +308,60 @@ async function processOne(id) {
     connection.release();
   }
 }
-export async function processDueReminders({ batchSize = 100 } = {}) {
-  const [rows] = await pool.execute(
-    "SELECT id FROM scheduled_work_reminders WHERE status='PENDING' AND remind_at<=CURRENT_TIMESTAMP ORDER BY remind_at ASC,id ASC LIMIT ?",
-    [batchSize],
+async function recordFailure(id, claimToken, error) {
+  const message = safeError(error);
+  await pool.execute(
+    `UPDATE scheduled_work_reminders
+     SET attempts_count=attempts_count+1,last_error=?,
+       status=IF(attempts_count+1>=?,'FAILED','PENDING'),
+       failed_at=IF(attempts_count+1>=?,CURRENT_TIMESTAMP,NULL),
+       next_attempt_at=IF(attempts_count+1>=?,NULL,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL ? MINUTE)),
+       claim_token=NULL,claimed_at=NULL
+     WHERE id=? AND status='PROCESSING' AND claim_token=?`,
+    [message, MAX_ATTEMPTS, MAX_ATTEMPTS, MAX_ATTEMPTS, retryDelayMinutes(1), id, claimToken],
   );
+  const [[state]] = await pool.execute("SELECT attempts_count attemptsCount,status FROM scheduled_work_reminders WHERE id=?", [id]);
+  if (state?.status === "PENDING") {
+    await pool.execute("UPDATE scheduled_work_reminders SET next_attempt_at=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL ? MINUTE) WHERE id=? AND status='PENDING'", [retryDelayMinutes(state.attemptsCount), id]);
+  }
+  return state;
+}
+async function claimDue(batchSize) {
+  const connection = await pool.getConnection();
+  const token = randomUUID();
+  try {
+    await connection.beginTransaction();
+    await connection.execute("UPDATE scheduled_work_reminders SET status='PENDING',claim_token=NULL,claimed_at=NULL WHERE status='PROCESSING' AND claimed_at<DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 10 MINUTE)");
+    const [rows] = await connection.execute(
+      "SELECT id FROM scheduled_work_reminders WHERE status='PENDING' AND remind_at<=CURRENT_TIMESTAMP AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP) ORDER BY remind_at,id LIMIT ? FOR UPDATE SKIP LOCKED",
+      [batchSize],
+    );
+    if (rows.length) {
+      const marks = rows.map(() => "?").join(",");
+      await connection.execute(`UPDATE scheduled_work_reminders SET status='PROCESSING',claim_token=?,claimed_at=CURRENT_TIMESTAMP WHERE id IN(${marks}) AND status='PENDING'`, [token, ...rows.map((row) => row.id)]);
+    }
+    await connection.commit();
+    return { token, rows };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+export async function processDueReminders({ batchSize = 100 } = {}) {
+  const { token, rows } = await claimDue(batchSize);
   let processed = 0,
     failed = 0;
   for (const { id } of rows) {
     try {
-      if (await processOne(id)) processed++;
+      if (await processOne(id, token)) processed++;
     } catch (error) {
       failed++;
+      const state = await recordFailure(id, token, error).catch(() => null);
       console.error("Scheduled work reminder failed", {
         reminderId: id,
-        message: error.message,
+        attempt: state?.attemptsCount,
+        terminal: state?.status === "FAILED",
+        message: safeError(error),
       });
     }
   }

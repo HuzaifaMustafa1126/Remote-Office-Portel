@@ -43,7 +43,7 @@ const fields = {
   visibility: z.enum(["TEAM", "PRIVATE", "CEO_ONLY"]),
   isImportant: z.boolean().default(false),
   relatedTaskId: z.number().int().positive().optional().nullable(),
-  categoryId: z.number().int().positive(),
+  categoryId: z.number().int().positive().optional().nullable(),
 };
 export const createSchema = z.object(fields).strict();
 export const updateSchema = z

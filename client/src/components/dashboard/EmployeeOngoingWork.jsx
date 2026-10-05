@@ -5,6 +5,7 @@ import Modal from "../common/Modal";
 import * as api from "../../services/ongoingWork.service";
 import { errorMessage } from "../../utils/helpers";
 import { publishPortalStateChanged, subscribePortalStateChanged } from "../../utils/portalSync";
+import { Link } from "react-router-dom";
 
 const emptyForm = { title: "", description: "" };
 const dateTime = new Intl.DateTimeFormat("en-PK", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -165,7 +166,7 @@ export default function EmployeeOngoingWork({ attendanceStatus, previousOngoingW
     setBusyId(completionTarget.id);
     setError("");
     try {
-      await api.complete(completionTarget.id, note);
+      await api.complete(completionTarget.id, note, event.nativeEvent.submitter?.value === "both");
       setCompletionTarget(null);
       setCompletionNote("");
       await Promise.all([load(), loadCompleted(1)]);
@@ -221,6 +222,7 @@ export default function EmployeeOngoingWork({ attendanceStatus, previousOngoingW
                 </span>
               </div>
               {row.description && <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{row.description}</p>}
+              {row.sourceType === "SCHEDULED_WORK" && <div className="mt-2 rounded-lg bg-surface px-3 py-2 text-[11px]"><p className="font-bold text-primary-text">From Scheduled Work</p><p className="mt-0.5 text-muted-foreground">{row.sourceScheduledAt ? dateTime.format(new Date(row.sourceScheduledAt)) : row.sourceScheduledWorkTitle}</p><Link to={`/scheduled-work?work=${row.sourceScheduledWorkId}${row.sourceOccurrenceId ? `&occurrence=${row.sourceOccurrenceId}` : ""}`} className="mt-1 inline-block font-semibold text-primary-text">View Schedule</Link></div>}
               <div className="mt-auto pt-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time Spent</p>
                 <p className="mt-0.5 font-mono text-xl font-bold tabular-nums">
@@ -320,10 +322,12 @@ export default function EmployeeOngoingWork({ attendanceStatus, previousOngoingW
             <textarea autoFocus required maxLength="1000" rows="5" className="input mt-0 resize-y" placeholder="Describe what you completed..." value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} />
           </label>
           <p className="text-xs text-muted-foreground">This action will stop the timer if needed and move the item to Completed Work.</p>
+          {completionTarget?.sourceType === "SCHEDULED_WORK" && <p className="rounded-xl bg-primary-soft p-3 text-xs text-primary-text">This work came from Scheduled Work. Choose whether to complete the linked schedule too.</p>}
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="secondary" disabled={Boolean(busyId)} onClick={() => setCompletionTarget(null)}>Cancel</Button>
-            <Button type="submit" disabled={Boolean(busyId)} className="flex items-center gap-1.5"><CheckCircle2 size={15} />{busyId ? "Completing…" : "Complete Work"}</Button>
+            {completionTarget?.sourceType === "SCHEDULED_WORK" && <Button type="submit" value="ongoing" variant="secondary" disabled={Boolean(busyId)}>Only Complete Ongoing Work</Button>}
+            <Button type="submit" value={completionTarget?.sourceType === "SCHEDULED_WORK" ? "both" : "ongoing"} disabled={Boolean(busyId)} className="flex items-center gap-1.5"><CheckCircle2 size={15} />{busyId ? "Completing…" : completionTarget?.sourceType === "SCHEDULED_WORK" ? "Complete Both" : "Complete Work"}</Button>
           </div>
         </form>
       </Modal>

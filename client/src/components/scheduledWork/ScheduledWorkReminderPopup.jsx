@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as api from "../../services/scheduledWork.service";
+import { publishPortalStateChanged } from "../../utils/portalSync";
 
 const ACK = "rop_scheduled_popup_ack_";
 const CLAIM = "rop_scheduled_popup_claim_";
@@ -127,6 +128,20 @@ export default function ScheduledWorkReminderPopup({
         : api.snoozeScheduledWork(current.work.id, data),
       "Reminder scheduled.",
     );
+  const completeCurrent = () => {
+    let data = {};
+    if (current.work.ongoingWorkId) {
+      if (window.confirm("Active Ongoing Work Found\n\nComplete both the Ongoing Work and this schedule?")) data = { executionHandling: "COMPLETE_BOTH" };
+      else if (window.confirm("Complete the schedule only and leave Ongoing Work unchanged?")) data = { executionHandling: "SCHEDULE_ONLY" };
+      else return Promise.resolve();
+    }
+    return perform(
+      () => current.work.isOccurrence
+        ? api.completeOccurrence(current.work.id, current.work.occurrenceId, data)
+        : api.completeScheduledWork(current.work.id, data),
+      "Scheduled work marked complete.",
+    );
+  };
   const overdue = new Date(current.work.scheduledAt) < new Date(),
     due = current.notification.type === "SCHEDULED_WORK_DUE" || overdue;
   return (
@@ -201,16 +216,14 @@ export default function ScheduledWorkReminderPopup({
               onClick={() =>
                 perform(
                   () => current.work.isOccurrence
-                    ? api.startOccurrence(current.work.id, current.work.occurrenceId)
-                    : api.startScheduledWork(current.work.id),
+                    ? api.startOccurrenceWork(current.work.id, current.work.occurrenceId)
+                    : api.startWork(current.work.id),
                   "Work started.",
-                ).then(() =>
-                  navigate(`/scheduled-work?work=${current.work.id}`),
-                )
+                ).then(() => { publishPortalStateChanged("ONGOING_WORK_CHANGED", { includeCurrent: true }); navigate(current.work.linkedTaskId ? `/tasks?task=${current.work.linkedTaskId}` : "/dashboard"); })
               }
               className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
             >
-              Do Now
+              {current.work.ongoingWorkId ? "Open Work" : current.work.linkedTaskId ? "Open Linked Task" : "Start Work"}
             </button>
             <button
               disabled={busy}
@@ -223,12 +236,7 @@ export default function ScheduledWorkReminderPopup({
               <button
                 disabled={busy}
                 onClick={() =>
-                  perform(
-                    () => current.work.isOccurrence
-                      ? api.completeOccurrence(current.work.id, current.work.occurrenceId)
-                      : api.completeScheduledWork(current.work.id),
-                    "Scheduled work marked complete.",
-                  )
+                  completeCurrent()
                 }
                 className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-bold text-success disabled:opacity-50"
               >

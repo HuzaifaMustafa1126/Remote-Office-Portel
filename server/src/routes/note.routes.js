@@ -67,7 +67,6 @@ const r = Router(),
 r.param("id", positiveId);
 r.param("imageId", positiveId);
 r.param("replyId", positiveId);
-r.param("categoryId", positiveId);
 r.get(
   "/",
   p("notes.view_own"),
@@ -75,42 +74,6 @@ r.get(
   asyncHandler(c.list),
 );
 r.get("/authors", p("notes.view_own"), asyncHandler(c.authors));
-r.get("/categories", p("notes.view_own"), asyncHandler(c.categories));
-r.get(
-  "/categories/manage",
-  p("notes.manage_categories"),
-  asyncHandler(c.managedCategories),
-);
-r.post(
-  "/categories",
-  p("notes.manage_categories"),
-  validate(v.categoryCreateSchema),
-  asyncHandler(c.createCategory),
-);
-r.patch(
-  "/categories/reorder",
-  p("notes.manage_categories"),
-  validate(v.categoryReorderSchema),
-  asyncHandler(c.reorderCategories),
-);
-r.patch(
-  "/categories/:categoryId",
-  p("notes.manage_categories"),
-  validate(v.categoryUpdateSchema),
-  asyncHandler(c.updateCategory),
-);
-r.delete(
-  "/categories/:categoryId/permanent",
-  p("notes.manage_categories"),
-  validate(v.categoryDeleteSchema),
-  asyncHandler(c.deleteCategory),
-);
-r.delete(
-  "/categories/:categoryId",
-  p("notes.manage_categories"),
-  validate(v.categoryRemoveSchema),
-  asyncHandler(c.archiveCategory),
-);
 r.get(
   "/export/docx",
   p("notes.view_own"),

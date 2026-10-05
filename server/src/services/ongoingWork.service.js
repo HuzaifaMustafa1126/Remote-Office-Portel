@@ -22,6 +22,10 @@ const select = `SELECT ow.id,ow.employee_id employeeId,ow.title,ow.description,
   COALESCE(t.accumulatedSeconds,ow.total_duration_seconds,0)+COALESCE(GREATEST(0,TIMESTAMPDIFF(SECOND,t.activeSessionStartedAt,CURRENT_TIMESTAMP)),0) totalTimeSpent,
   COALESCE(t.sessionCount,0) sessionCount,t.firstStartedAt,t.lastActivityAt,
   ow.completion_note completionNote,
+  ow.source_type sourceType,ow.source_scheduled_work_id sourceScheduledWorkId,
+  ow.source_occurrence_id sourceOccurrenceId,
+  (SELECT sw.title FROM scheduled_work sw WHERE sw.id=ow.source_scheduled_work_id) sourceScheduledWorkTitle,
+  (SELECT COALESCE(swo.scheduled_at,sw.scheduled_at) FROM scheduled_work sw LEFT JOIN scheduled_work_occurrences swo ON swo.id=ow.source_occurrence_id WHERE sw.id=ow.source_scheduled_work_id) sourceScheduledAt,
   CURRENT_TIMESTAMP serverTime,UNIX_TIMESTAMP(CURRENT_TIMESTAMP) serverEpochSeconds
   FROM ongoing_work ow JOIN employees e ON e.id=ow.employee_id
   LEFT JOIN (
@@ -716,6 +720,27 @@ export async function completeOngoingWork(connection, id, data, user) {
         employeeId,
       ],
     );
+    if (data.completeLinkedSchedule && row.sourceType === "SCHEDULED_WORK" && row.sourceScheduledWorkId) {
+      if (row.sourceOccurrenceId) {
+        await connection.execute(
+          "UPDATE scheduled_work_occurrences SET status='COMPLETED',completed_at=? WHERE id=? AND scheduled_work_id=? AND assigned_to=? AND status='UPCOMING'",
+          [clock.completionTime, row.sourceOccurrenceId, row.sourceScheduledWorkId, employeeId],
+        );
+        await connection.execute("UPDATE scheduled_work_reminders SET status='CANCELLED' WHERE occurrence_id=? AND status='PENDING'", [row.sourceOccurrenceId]);
+        await connection.execute("UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE occurrence_id=? AND status='PENDING'", [row.sourceOccurrenceId]);
+      } else {
+        await connection.execute(
+          "UPDATE scheduled_work SET status='COMPLETED',completed_at=? WHERE id=? AND assigned_to=? AND is_recurring=FALSE AND status='UPCOMING'",
+          [clock.completionTime, row.sourceScheduledWorkId, employeeId],
+        );
+        await connection.execute("UPDATE scheduled_work_reminders SET status='CANCELLED' WHERE scheduled_work_id=? AND occurrence_id IS NULL AND status='PENDING'", [row.sourceScheduledWorkId]);
+        await connection.execute("UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE scheduled_work_id=? AND occurrence_id IS NULL AND status='PENDING'", [row.sourceScheduledWorkId]);
+      }
+      await connection.execute(
+        "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values) VALUES(?,?,?,'SCHEDULED_WORK',?,?,?)",
+        [user.id, employeeId, "SCHEDULED_WORK_EXECUTION_COMPLETED", row.sourceScheduledWorkId, "Linked ongoing work and scheduled execution completed.", JSON.stringify({ scheduledWorkId: Number(row.sourceScheduledWorkId), occurrenceId: row.sourceOccurrenceId ? Number(row.sourceOccurrenceId) : null, ongoingWorkId: Number(id), executionType: "ONGOING_WORK" })],
+      );
+    }
     const completedWork = await getOwn(id, user, connection);
     await auditOngoingWork(connection, {
       user, employeeId, action: ONGOING_WORK_EVENTS.COMPLETED, workId: id,

@@ -1,0 +1,1 @@
+ALTER TABLE work_notes MODIFY category_id BIGINT UNSIGNED NULL;

@@ -552,7 +552,7 @@ async function notifyNote(note, user, kind) {
   });
 }
 
-async function notifyNoteSafely(note, user, kind) {
+export async function notifyNoteSafely(note, user, kind) {
   try {
     await notifyNote(note, user, kind);
   } catch (error) {
@@ -582,7 +582,7 @@ export async function create(data, user) {
   let noteId;
   try {
     await connection.beginTransaction();
-    await requireActiveCategory(data.categoryId, connection);
+    if (data.categoryId) await requireActiveCategory(data.categoryId, connection);
     let task = null;
     if (data.relatedTaskId) {
       const [[row]] = await connection.execute(
@@ -618,7 +618,7 @@ export async function create(data, user) {
         data.isImportant,
         task?.id || null,
         task?.title || null,
-        data.categoryId,
+        data.categoryId || null,
       ],
     );
     noteId = result.insertId;
@@ -639,6 +639,18 @@ export async function create(data, user) {
     connection.release();
   }
   return get(noteId, user);
+}
+
+export async function createTaskNoteWithinTransaction(connection, task, data, user) {
+  const [result] = await connection.execute(
+    "INSERT INTO work_notes(title,summary,content,author_user_id,visibility,is_important,related_task_id,related_task_title,category_id,status,published_at) VALUES(?,?,?,?,?,?,?,?,NULL,'PUBLISHED',CURRENT_TIMESTAMP)",
+    [data.title,data.summary,data.content,user.id,data.visibility,data.isImportant,task.id,task.title],
+  );
+  await connection.execute(
+    "INSERT INTO audit_logs(user_id,employee_id,action,entity_type,entity_id,description,new_values) VALUES(?,?,'NOTE_PUBLISHED','WORK_NOTE',?,?,?)",
+    [user.id,user.employee_id,result.insertId,`Note “${data.title}” was published for task #${task.id}.`,JSON.stringify({relatedTaskId:Number(task.id),relatedTaskTitle:task.title})],
+  );
+  return {id:Number(result.insertId),title:data.title,summary:data.summary,content:data.content,visibility:data.visibility,isImportant:Boolean(data.isImportant),authorUserId:user.id,authorName:user.employee_name||user.name||"Employee",relatedTaskId:Number(task.id),relatedTaskTitle:task.title};
 }
 
 export async function publishNotifications(id, user) {
@@ -678,16 +690,14 @@ export async function update(id, data, user) {
     previous = await requireNoteOwner(id, user, connection, true);
     if (previous.isArchived)
       throw new ApiError(400, "Restore this note before editing it");
-    await requireActiveCategory(data.categoryId, connection);
     await connection.execute(
-      "UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=?,category_id=? WHERE id=?",
+      "UPDATE work_notes SET title=?,summary=?,content=?,visibility=?,is_important=? WHERE id=?",
       [
         data.title,
         data.summary,
         data.content,
         data.visibility,
         data.isImportant,
-        data.categoryId,
         id,
       ],
     );
@@ -905,7 +915,6 @@ export async function exportDocx(filters, user) {
     );
     const details = [
       `Created by: ${note.authorName}`,
-      `Category: ${note.categoryName || "Uncategorized"}`,
       `Created: ${displayDate(note.createdAt)}`,
       `Updated: ${displayDate(note.updatedAt)}`,
       `Visibility: ${{ TEAM: "All Team Members", PRIVATE: "Private", CEO_ONLY: "Only CEO" }[note.visibility]}`,

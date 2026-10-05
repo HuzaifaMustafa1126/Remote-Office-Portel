@@ -19,6 +19,9 @@ export async function transition(req, res) {
     data: await s.transition(req.params.id, req.body, req.user),
   });
 }
+export async function finalizeWithNote(req, res) {
+  res.json({ success: true, data: await s.finalizeWithNote(req.params.id, req.body, req.user) });
+}
 export async function comment(req, res) {
   res.status(201).json({
     success: true,

@@ -3,20 +3,6 @@ export const listNotes = (params) =>
   api.get("/notes", { params }).then((r) => r.data.data);
 export const listNoteAuthors = () =>
   api.get("/notes/authors").then((r) => r.data.data);
-export const listNoteCategories = (manage = false) =>
-  api.get(`/notes/categories${manage ? "/manage" : ""}`).then((r) => r.data.data);
-export const createNoteCategory = (data) =>
-  api.post("/notes/categories", data).then((r) => r.data.data);
-export const updateNoteCategory = (id, data) =>
-  api.patch(`/notes/categories/${id}`, data).then((r) => r.data.data);
-export const reorderNoteCategories = (categoryIds) =>
-  api.patch("/notes/categories/reorder", { categoryIds }).then((r) => r.data.data);
-export const archiveNoteCategory = (id, data) =>
-  api.delete(`/notes/categories/${id}`, { data }).then((r) => r.data.data);
-export const deleteNoteCategory = (id, confirmName) =>
-  api
-    .delete(`/notes/categories/${id}/permanent`, { data: { confirmName } })
-    .then((r) => r.data.data);
 export const toggleNotePin = (id) =>
   api.patch("/notes/" + id + "/pin").then((r) => r.data.data);
 export const getNote = (id, archived = false) =>

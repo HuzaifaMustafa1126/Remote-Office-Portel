@@ -235,6 +235,20 @@ export default function TaskManagementPage() {
       setEditing(task);
       return;
     }
+    if (type === "complete" && management && task.status === "SUBMITTED_FOR_REVIEW") {
+      if (!confirm(`Approve and complete “${task.title}”?`)) return;
+      setBusyTask(task.id);
+      try {
+        await transitionTask(task.id, { status: "COMPLETED" });
+        await done("Task approved and completed.");
+      } catch (e) {
+        setNotice(e.response?.data?.message || "Unable to approve the task.");
+        await load(true);
+      } finally {
+        setBusyTask(null);
+      }
+      return;
+    }
     if (["submit", "complete", "changes"].includes(type)) {
       setWorkflow({ action: type, task });
       return;

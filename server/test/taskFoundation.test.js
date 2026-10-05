@@ -11,6 +11,7 @@ import {
   analyticsSchema,
   collaborationCommentSchema,
   editCommentSchema,
+  finalizeWithNoteSchema,
 } from "../src/validators/task.validator.js";
 test("task creation validation rejects invalid priority and invalid assignment shapes", () => {
   assert.equal(
@@ -179,3 +180,4 @@ test("management filters, deadline changes, and bulk actions are strictly valida
 });
 test("analytics ranges require valid custom dates",()=>{assert.equal(analyticsSchema.safeParse({range:"30_DAYS"}).success,true);assert.equal(analyticsSchema.safeParse({range:"CUSTOM",startDate:"2026-09-10",endDate:"2026-09-01"}).success,false);assert.equal(analyticsSchema.safeParse({range:"CUSTOM",startDate:"2026-09-01",endDate:"2026-09-10"}).success,true)});
 test("task collaboration comments validate replies and bounded mentions",()=>{assert.equal(collaborationCommentSchema.safeParse({content:"Please review",parentCommentId:4,mentionUserIds:[2,3]}).success,true);assert.equal(collaborationCommentSchema.safeParse({content:"",mentionUserIds:[]}).success,false);assert.equal(collaborationCommentSchema.safeParse({content:"ok",mentionUserIds:Array.from({length:21},(_,i)=>i+1)}).success,false);assert.equal(editCommentSchema.safeParse({content:"Updated note"}).success,true);});
+test("task finalization requires a complete work note and explicit action",()=>{const note={title:"Homepage redesign",summary:"Completed responsive implementation",content:"Implemented and verified the requested homepage changes.",visibility:"TEAM",isImportant:false};assert.equal(finalizeWithNoteSchema.safeParse({action:"COMPLETE",note}).success,true);assert.equal(finalizeWithNoteSchema.safeParse({action:"SUBMIT_FOR_REVIEW",note}).success,true);assert.equal(finalizeWithNoteSchema.safeParse({action:"COMPLETE",note:{...note,summary:""}}).success,false);assert.equal(finalizeWithNoteSchema.safeParse({action:"APPROVE",note}).success,false);});

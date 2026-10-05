@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { listTasks } from "../../services/task.service";
 const blank = {
   title: "",
   description: "",
@@ -18,6 +19,7 @@ const blank = {
   repeatEndType: "NEVER",
   repeatEndAt: "",
   repeatMaxOccurrences: 10,
+  linkedTaskId: "",
 };
 const pakistanInputNow = () => {
   const p = Object.fromEntries(
@@ -57,6 +59,8 @@ export default function ScheduledWorkForm({
   initial = null,
   rescheduleOnly = false,
   recurrenceOnly = false,
+  assignees = [],
+  assignmentRequired = false,
 }) {
   const [form, setForm] = useState(() =>
     initial
@@ -77,6 +81,11 @@ export default function ScheduledWorkForm({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [tasks, setTasks] = useState([]);
+  useEffect(() => {
+    if (!open || rescheduleOnly || recurrenceOnly) return;
+    listTasks({}).then((rows) => setTasks(rows.filter((task) => !["DRAFT", "SCHEDULED", "ARCHIVED"].includes(task.status)))).catch(() => setTasks([]));
+  }, [open, rescheduleOnly, recurrenceOnly]);
   const preview = useMemo(() => {
     if (form.scheduleType === "EXACT")
       return form.scheduledAt ? new Date(`${form.scheduledAt}:00+05:00`) : null;
@@ -114,6 +123,8 @@ export default function ScheduledWorkForm({
           title: form.title,
           description: form.description || null,
           priority: form.priority,
+          linkedTaskId: form.linkedTaskId ? Number(form.linkedTaskId) : null,
+          ...(assignmentRequired && { assignedTo: Number(form.assignedTo) }),
         });
       if (!rescheduleOnly && !initial)
         payload.reminders = form.reminders.map(([value, unit]) => ({
@@ -178,6 +189,7 @@ export default function ScheduledWorkForm({
         )}
         {!rescheduleOnly && !recurrenceOnly && (
           <>
+            {assignmentRequired && <><label className="mt-5 block text-sm font-semibold">Assign To *</label><select required value={form.assignedTo || ""} onChange={(e) => set("assignedTo", e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2.5"><option value="">Choose an active employee</option>{assignees.map((employee)=><option key={employee.id} value={employee.id}>{employee.name} · {employee.todayCount} today / {employee.tomorrowCount} tomorrow</option>)}</select>{form.assignedTo && <p className="mt-2 rounded-lg bg-surface-secondary p-2 text-xs text-muted-foreground">Workload preview: {assignees.find((employee)=>String(employee.id)===String(form.assignedTo))?.todayCount || 0} scheduled today. Overlapping schedules are allowed; review the time before saving.</p>}</>}
             <label className="mt-5 block text-sm font-semibold">
               Work Title *
             </label>
@@ -208,6 +220,11 @@ export default function ScheduledWorkForm({
               {["LOW", "NORMAL", "HIGH", "URGENT"].map((x) => (
                 <option key={x}>{x}</option>
               ))}
+            </select>
+            <label className="mt-4 block text-sm font-semibold">Linked Task <span className="font-normal text-muted-foreground">(optional)</span></label>
+            <select value={form.linkedTaskId || ""} onChange={(e) => set("linkedTaskId", e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2.5">
+              <option value="">No linked task</option>
+              {tasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.status.replaceAll("_", " ")}</option>)}
             </select>
           </>
         )}

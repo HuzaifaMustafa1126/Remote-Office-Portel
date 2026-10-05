@@ -37,7 +37,6 @@ r.get(
   validate(v.listSchema, "query"),
   asyncHandler(c.list),
 );
-r.get("/:id/mentionable-users",p("task.view_own"),validate(v.mentionSearchSchema,"query"),asyncHandler(c.mentionableUsers));
 r.post("/:id/read",p("task.view_own"),asyncHandler(c.markRead));
 r.post("/:id/attachments",p("task.view_own"),rawAttachment,asyncHandler(c.uploadAttachment));
 r.get("/:id/attachments/:attachmentId/content",p("task.view_own"),asyncHandler(c.attachmentContent));
@@ -67,14 +66,7 @@ r.patch(
   validate(v.transitionSchema),
   asyncHandler(c.transition),
 );
-r.post(
-  "/:id/comments",
-  p("task.view_own"),
-  validate(v.collaborationCommentSchema),
-  asyncHandler(c.comment),
-);
-r.patch("/:id/comments/:commentId",p("task.view_own"),validate(v.editCommentSchema),asyncHandler(c.editComment));
-r.delete("/:id/comments/:commentId",p("task.view_own"),asyncHandler(c.deleteComment));
+r.post("/:id/finalize-with-note",p("task.view_own"),validate(v.finalizeWithNoteSchema),asyncHandler(c.finalizeWithNote));
 r.post(
   "/:id/images",
   p("task.view_own"),

@@ -3,8 +3,12 @@ import ApiError from "../utils/ApiError.js";
 import { createNotification, resolveDelivery } from "./notification.service.js";
 import { emitNotification } from "../sockets/notification.socket.js";
 import { sqlToIso, toSqlDateTime } from "../utils/scheduledWorkTime.js";
+import { randomUUID } from "node:crypto";
 
 const multipliers = { MINUTES: 60000, HOURS: 3600000, DAYS: 86400000 };
+const MAX_ATTEMPTS = 5;
+const retryDelayMinutes = (attempt) => Math.min(60, 2 ** Math.max(0, attempt - 1));
+const safeError = (error) => String(error?.message || "Temporary notification error").slice(0, 500);
 const select = `SELECT id,scheduled_work_id scheduledWorkId,reminder_id reminderId,employee_id employeeId,
  snooze_value value,snooze_unit unit,snoozed_at snoozedAt,snoozed_until snoozedUntil,status,
  triggered_at triggeredAt,notification_id notificationId,created_at createdAt FROM scheduled_work_snoozes`;
@@ -70,6 +74,13 @@ export async function snooze(workId, data, actor) {
         `This scheduled work was ${work.status.toLowerCase()}.`,
       );
     const until = calculateSnooze(data);
+    if (data.reminderId) {
+      const [[reminder]] = await connection.execute(
+        "SELECT id FROM scheduled_work_reminders WHERE id=? AND scheduled_work_id=? AND occurrence_id IS NULL",
+        [data.reminderId, workId],
+      );
+      if (!reminder) throw new ApiError(404, "The selected reminder does not belong to this scheduled work.");
+    }
     await connection.execute(
       "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE scheduled_work_id=? AND status='PENDING'",
       [workId],
@@ -135,6 +146,13 @@ export async function snoozeOccurrence(workId, occurrenceId, data, actor) {
     if (occurrence.status !== "UPCOMING")
       throw new ApiError(409, `This occurrence is already ${occurrence.status.toLowerCase()}.`);
     const until = calculateSnooze(data);
+    if (data.reminderId) {
+      const [[reminder]] = await connection.execute(
+        "SELECT id FROM scheduled_work_reminders WHERE id=? AND scheduled_work_id=? AND occurrence_id=?",
+        [data.reminderId, workId, occurrenceId],
+      );
+      if (!reminder) throw new ApiError(404, "The selected reminder does not belong to this occurrence.");
+    }
     await connection.execute(
       "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE occurrence_id=? AND status='PENDING'",
       [occurrenceId],
@@ -160,27 +178,28 @@ export async function snoozeOccurrence(workId, occurrenceId, data, actor) {
   }
 }
 
-async function processOne(id) {
+async function processOne(id, claimToken) {
   const connection = await pool.getConnection();
   let notification = null;
   try {
     await connection.beginTransaction();
     const [[row]] = await connection.execute(
       `SELECT s.id,s.status,w.id workId,w.title,COALESCE(o.scheduled_at,w.scheduled_at) scheduledAt,
-       COALESCE(o.status,w.status) workStatus,u.id userId,s.occurrence_id occurrenceId
+       COALESCE(o.status,w.status) workStatus,u.id userId,s.occurrence_id occurrenceId,
+       s.next_attempt_at nextAttemptAt
        FROM scheduled_work_snoozes s JOIN scheduled_work w ON w.id=s.scheduled_work_id
        LEFT JOIN scheduled_work_occurrences o ON o.id=s.occurrence_id
        JOIN users u ON u.employee_id=COALESCE(o.assigned_to,w.assigned_to) AND u.status='ACTIVE'
-       WHERE s.id=? FOR UPDATE`,
-      [id],
+       WHERE s.id=? AND s.claim_token=? FOR UPDATE`,
+      [id, claimToken],
     );
-    if (!row || row.status !== "PENDING") {
+    if (!row || row.status !== "PROCESSING") {
       await connection.rollback();
       return false;
     }
     if (row.workStatus !== "UPCOMING") {
       await connection.execute(
-        "UPDATE scheduled_work_snoozes SET status='CANCELLED' WHERE id=?",
+        "UPDATE scheduled_work_snoozes SET status='CANCELLED',claim_token=NULL,claimed_at=NULL WHERE id=?",
         [id],
       );
       await connection.commit();
@@ -225,8 +244,8 @@ async function processOne(id) {
       }
     }
     await connection.execute(
-      "UPDATE scheduled_work_snoozes SET status='TRIGGERED',triggered_at=CURRENT_TIMESTAMP,notification_id=? WHERE id=? AND status='PENDING'",
-      [notification?.id || null, row.id],
+      "UPDATE scheduled_work_snoozes SET status='TRIGGERED',triggered_at=CURRENT_TIMESTAMP,notification_id=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND status='PROCESSING' AND claim_token=?",
+      [notification?.id || null, row.id, claimToken],
     );
     await connection.commit();
     if (notification?.userId) emitNotification(notification);
@@ -237,6 +256,44 @@ async function processOne(id) {
   } finally {
     connection.release();
   }
+}
+async function recordFailure(id, claimToken, error) {
+  const message = safeError(error);
+  await pool.execute(
+    `UPDATE scheduled_work_snoozes
+     SET attempts_count=attempts_count+1,last_error=?,
+       status=IF(attempts_count+1>=?,'FAILED','PENDING'),
+       failed_at=IF(attempts_count+1>=?,CURRENT_TIMESTAMP,NULL),
+       next_attempt_at=NULL,claim_token=NULL,claimed_at=NULL
+     WHERE id=? AND status='PROCESSING' AND claim_token=?`,
+    [message, MAX_ATTEMPTS, MAX_ATTEMPTS, id, claimToken],
+  );
+  const [[state]] = await pool.execute("SELECT attempts_count attemptsCount,status FROM scheduled_work_snoozes WHERE id=?", [id]);
+  if (state?.status === "PENDING") {
+    await pool.execute("UPDATE scheduled_work_snoozes SET next_attempt_at=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL ? MINUTE) WHERE id=? AND status='PENDING'", [retryDelayMinutes(state.attemptsCount), id]);
+  }
+  return state;
+}
+async function claimDue(batchSize) {
+  const connection = await pool.getConnection();
+  const token = randomUUID();
+  try {
+    await connection.beginTransaction();
+    await connection.execute("UPDATE scheduled_work_snoozes SET status='PENDING',claim_token=NULL,claimed_at=NULL WHERE status='PROCESSING' AND claimed_at<DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 10 MINUTE)");
+    const [rows] = await connection.execute(
+      "SELECT id FROM scheduled_work_snoozes WHERE status='PENDING' AND snoozed_until<=CURRENT_TIMESTAMP AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP) ORDER BY snoozed_until,id LIMIT ? FOR UPDATE SKIP LOCKED",
+      [batchSize],
+    );
+    if (rows.length) {
+      const marks = rows.map(() => "?").join(",");
+      await connection.execute(`UPDATE scheduled_work_snoozes SET status='PROCESSING',claim_token=?,claimed_at=CURRENT_TIMESTAMP WHERE id IN(${marks}) AND status='PENDING'`, [token, ...rows.map((row) => row.id)]);
+    }
+    await connection.commit();
+    return { token, rows };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
 }
 export async function processSnoozeQueue({
   batchSize = 100,
@@ -250,19 +307,19 @@ export async function processSnoozeQueue({
     hasMore: false,
   };
   do {
-    const [rows] = await pool.execute(
-      "SELECT id FROM scheduled_work_snoozes WHERE status='PENDING' AND snoozed_until<=CURRENT_TIMESTAMP ORDER BY snoozed_until,id LIMIT ?",
-      [batchSize],
-    );
+    const { token, rows } = await claimDue(batchSize);
     total.found += rows.length;
     for (const { id } of rows) {
       try {
-        if (await processOne(id)) total.processed++;
+        if (await processOne(id, token)) total.processed++;
       } catch (error) {
         total.failed++;
+        const state = await recordFailure(id, token, error).catch(() => null);
         console.error("Scheduled work snooze failed", {
           snoozeId: id,
-          message: error.message,
+          attempt: state?.attemptsCount,
+          terminal: state?.status === "FAILED",
+          message: safeError(error),
         });
       }
     }

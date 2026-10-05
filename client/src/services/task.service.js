@@ -38,6 +38,8 @@ export const getClaimStatus = () =>
   api.get("/tasks/claim-status").then((r) => r.data.data);
 export const transitionTask = (id, data) =>
   api.patch(`/tasks/${id}/status`, data).then((r) => r.data.data);
+export const finalizeTaskWithNote = (id, data) =>
+  api.post(`/tasks/${id}/finalize-with-note`, data).then((r) => r.data.data);
 export const uploadSubmissionImage = (id, file) =>
   api
     .post(`/tasks/${id}/submission-images`, file, {
@@ -47,25 +49,6 @@ export const uploadSubmissionImage = (id, file) =>
       },
       timeout: 30000,
     })
-    .then((r) => r.data.data);
-export const addTaskComment = (
-  id,
-  content,
-  parentCommentId = null,
-  mentionUserIds = [],
-) =>
-  api
-    .post(`/tasks/${id}/comments`, { content, parentCommentId, mentionUserIds })
-    .then((r) => r.data.data);
-export const editTaskComment = (taskId, commentId, content) =>
-  api
-    .patch(`/tasks/${taskId}/comments/${commentId}`, { content })
-    .then((r) => r.data.data);
-export const deleteTaskComment = (taskId, commentId) =>
-  api.delete(`/tasks/${taskId}/comments/${commentId}`).then((r) => r.data.data);
-export const getMentionableUsers = (id, search = "") =>
-  api
-    .get(`/tasks/${id}/mentionable-users`, { params: { search } })
     .then((r) => r.data.data);
 export const markTaskRead = (id) =>
   api.post(`/tasks/${id}/read`).then((r) => r.data.data);

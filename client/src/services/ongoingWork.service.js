@@ -12,5 +12,5 @@ export const update=(id,data)=>api.put(`/ongoing-work/${id}`,data).then(r=>r.dat
 export const setStatus=(id,status)=>api.patch(`/ongoing-work/${id}/status`,{status}).then(r=>r.data.data);
 export const start=id=>api.post(`/ongoing-work/${id}/start`).then(r=>r.data.data);
 export const pause=id=>api.post(`/ongoing-work/${id}/pause`).then(r=>r.data.data);
-export const complete=(id,completionNote)=>api.post(`/ongoing-work/${id}/complete`,{completionNote}).then(r=>r.data.data);
+export const complete=(id,completionNote,completeLinkedSchedule=false)=>api.post(`/ongoing-work/${id}/complete`,{completionNote,completeLinkedSchedule}).then(r=>r.data.data);
 export const remove=id=>api.delete(`/ongoing-work/${id}`).then(r=>r.data.data);

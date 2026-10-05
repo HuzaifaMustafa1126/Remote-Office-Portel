@@ -64,6 +64,8 @@ export const createSchema = z
     priority: priority.default("NORMAL"),
     reminders: z.array(reminder).max(10).default([]),
     repeat: repeatSchema.optional().nullable(),
+    linkedTaskId: z.coerce.number().int().positive().optional().nullable(),
+    assignedTo: z.coerce.number().int().positive().optional(),
   })
   .strict()
   .superRefine(validateSchedule);
@@ -72,11 +74,12 @@ export const updateSchema = z
     title: z.string().trim().min(2).max(255).optional(),
     description: z.string().trim().max(10000).optional().nullable(),
     priority: priority.optional(),
+    linkedTaskId: z.coerce.number().int().positive().optional().nullable(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, "No changes supplied");
 export const rescheduleSchema = z
-  .object(scheduleFields)
+  .object({ ...scheduleFields, confirmActiveExecution: z.boolean().optional() })
   .strict()
   .superRefine(validateSchedule);
 export const idSchema = z
@@ -109,6 +112,7 @@ export const listSchema = z
       .enum(["UPCOMING", "DUE_TODAY", "OVERDUE", "COMPLETED", "CANCELLED"])
       .optional(),
     priority: priority.optional(),
+    type: z.enum(["ALL", "ONE_TIME", "RECURRING"]).default("ALL"),
     search: z.string().trim().max(200).optional(),
     from: z.string().date().optional(),
     to: z.string().date().optional(),
@@ -116,10 +120,12 @@ export const listSchema = z
     limit: z.coerce.number().int().min(1).max(100).default(20),
   })
   .strict()
-  .refine(
-    (v) => !v.from || !v.to || v.from <= v.to,
-    "From date must be before to date",
-  );
+  .superRefine((v, context) => {
+    if (!v.from || !v.to) return;
+    const days = (new Date(`${v.to}T00:00:00Z`) - new Date(`${v.from}T00:00:00Z`)) / 86400000;
+    if (days < 0) context.addIssue({ code: "custom", path: ["to"], message: "From date must be before to date" });
+    if (days > 366) context.addIssue({ code: "custom", path: ["to"], message: "Date range cannot exceed 366 days" });
+  });
 export const occurrenceListSchema = z
   .object({
     status: z.enum(["UPCOMING", "COMPLETED", "CANCELLED"]).optional(),
@@ -128,8 +134,54 @@ export const occurrenceListSchema = z
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
   })
-  .strict();
+  .strict()
+  .superRefine((v, context) => {
+    if (!v.from || !v.to) return;
+    const days = (new Date(`${v.to}T00:00:00Z`) - new Date(`${v.from}T00:00:00Z`)) / 86400000;
+    if (days < 0 || days > 366) context.addIssue({ code: "custom", path: ["to"], message: "Date range must be between 0 and 366 days" });
+  });
 export const occurrenceIdSchema = z
   .object({ id: z.coerce.number().int().positive(), occurrenceId: z.coerce.number().int().positive() })
   .strict();
 export const recurrenceUpdateSchema = z.object({ repeat: repeatSchema }).strict();
+export const calendarSchema = z
+  .object({
+    from: z.string().date(),
+    to: z.string().date(),
+    priority: priority.optional(),
+    type: z.enum(["ALL", "ONE_TIME", "RECURRING"]).default("ALL"),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const days = (new Date(`${value.to}T00:00:00Z`) - new Date(`${value.from}T00:00:00Z`)) / 86400000;
+    if (days < 0) context.addIssue({ code: "custom", path: ["to"], message: "To date must not precede from date" });
+    if (days > 366) context.addIssue({ code: "custom", path: ["to"], message: "Calendar range cannot exceed 366 days" });
+  });
+export const executionCompletionSchema = z.object({ executionHandling: z.enum(["SCHEDULE_ONLY", "COMPLETE_BOTH"]).optional() }).strict();
+export const executionCancelSchema = z.object({ executionHandling: z.literal("SCHEDULE_ONLY").optional() }).strict();
+export const reassignSchema = z.object({
+  assignedTo: z.coerce.number().int().positive(),
+  scope: z.enum(["ONE_TIME", "THIS_OCCURRENCE", "FUTURE_OCCURRENCES"]),
+  occurrenceId: z.coerce.number().int().positive().optional(),
+}).strict().superRefine((value, context) => {
+  if (["THIS_OCCURRENCE", "FUTURE_OCCURRENCES"].includes(value.scope) && !value.occurrenceId)
+    context.addIssue({ code: "custom", path: ["occurrenceId"], message: "Choose the effective occurrence" });
+});
+export const teamListSchema = z.object({
+  employeeId: z.coerce.number().int().positive().optional(),
+  status: z.enum(["UPCOMING", "DUE_TODAY", "OVERDUE", "COMPLETED", "CANCELLED"]).optional(),
+  priority: priority.optional(), type: z.enum(["ALL", "ONE_TIME", "RECURRING"]).default("ALL"),
+  search: z.string().trim().max(200).optional(), from: z.string().date().optional(), to: z.string().date().optional(),
+  page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(20),
+}).strict().superRefine((value, context) => {
+  if (!value.from || !value.to) return;
+  const days=(new Date(`${value.to}T00:00:00Z`)-new Date(`${value.from}T00:00:00Z`))/86400000;
+  if(days<0||days>366)context.addIssue({code:"custom",path:["to"],message:"Date range must be between 0 and 366 days"});
+});
+export const teamCalendarSchema = z.object({
+  from: z.string().date(), to: z.string().date(), employeeId: z.coerce.number().int().positive().optional(),
+  priority: priority.optional(), type: z.enum(["ALL", "ONE_TIME", "RECURRING"]).default("ALL"),
+}).strict().superRefine((value, context) => {
+  const days=(new Date(`${value.to}T00:00:00Z`)-new Date(`${value.from}T00:00:00Z`))/86400000;
+  if(days<0||days>366)context.addIssue({code:"custom",path:["to"],message:"Calendar range must be between 0 and 366 days"});
+});

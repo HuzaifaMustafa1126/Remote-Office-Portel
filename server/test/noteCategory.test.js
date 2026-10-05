@@ -18,8 +18,8 @@ const note = {
   isImportant: false,
 };
 
-test("new notes require one managed category", () => {
-  assert.equal(createSchema.safeParse(note).success, false);
+test("new notes no longer require a category while legacy category ids remain accepted", () => {
+  assert.equal(createSchema.safeParse(note).success, true);
   assert.equal(createSchema.safeParse({ ...note, categoryId: 3 }).success, true);
   assert.equal(createSchema.safeParse({ ...note, categoryId: 0 }).success, false);
 });
@@ -30,7 +30,7 @@ test("category filter accepts an id or Uncategorized only", () => {
   assert.equal(listSchema.safeParse({ categoryId: "all-private-notes" }).success, false);
 });
 
-test("category administration payloads reject unsafe values", () => {
+test("historical category administration payload validation remains safe", () => {
   assert.equal(categoryCreateSchema.safeParse({ name: "HR", color: "#13a46b" }).success, true);
   assert.equal(categoryCreateSchema.safeParse({ name: "HR", color: "red" }).success, false);
   assert.equal(categoryReorderSchema.safeParse({ categoryIds: [1, 2, 3] }).success, true);
@@ -40,7 +40,7 @@ test("category administration payloads reject unsafe values", () => {
   assert.equal(categoryDeleteSchema.safeParse({ confirmName: "" }).success, false);
 });
 
-test("category counts reuse note visibility and management is CEO-gated", async () => {
+test("historical category data and administration logic remain preserved", async () => {
   const service = await readFile(new URL("../src/services/note.service.js", import.meta.url), "utf8");
   const migration = await readFile(new URL("../database/migrations/062_note_category_management.sql", import.meta.url), "utf8");
   assert.match(service, /LEFT JOIN work_notes n[\s\S]*AND \$\{predicate\}/);

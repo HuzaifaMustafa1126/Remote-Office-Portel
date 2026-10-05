@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { publishPortalStateChanged } from "../../utils/portalSync";
 import {
-  todayScheduledWork,
+  getOverview,
   completeScheduledWork,
-  startScheduledWork,
+  startWork,
   snoozeScheduledWork,
   completeOccurrence,
-  startOccurrence,
+  startOccurrenceWork,
   snoozeOccurrence,
 } from "../../services/scheduledWork.service";
 export default function TodayScheduledWork() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]),
+    [counts, setCounts] = useState({ dueNow: 0, today: 0, overdue: 0 }),
     [loading, setLoading] = useState(true);
   const load = () =>
-    todayScheduledWork({ limit: 5 })
-      .then((x) => setItems(x.items))
+    getOverview()
+      .then((x) => {
+        setCounts(x.counts);
+        const combined = [...x.dueNow, ...x.today.filter((item) => !x.dueNow.some((due) => due.id === item.id && due.occurrenceId === item.occurrenceId)), ...x.overduePreview];
+        setItems(combined.slice(0, 5));
+      })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   useEffect(load, []);
+  const completeItem = (item) => {
+    let data = {};
+    if (item.ongoingWorkId) {
+      if (window.confirm("Complete both the active Ongoing Work and this schedule?")) data = { executionHandling: "COMPLETE_BOTH" };
+      else if (window.confirm("Complete the schedule only? Ongoing Work will remain open.")) data = { executionHandling: "SCHEDULE_ONLY" };
+      else return;
+    }
+    (item.isOccurrence ? completeOccurrence(item.id, item.occurrenceId, data) : completeScheduledWork(item.id, data)).then(load);
+  };
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between">
@@ -29,6 +46,7 @@ export default function TodayScheduledWork() {
           View all
         </Link>
       </div>
+      {!loading && <div className="mt-3 grid grid-cols-3 gap-2">{[["Due Now",counts.dueNow],["Today",counts.today],["Overdue",counts.overdue]].map(([label,value])=><div key={label} className="rounded-xl bg-surface-secondary p-2"><p className="text-lg font-black">{value}</p><p className="text-[10px] text-muted-foreground">{label}</p></div>)}</div>}
       {loading ? (
         <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
       ) : items.length ? (
@@ -47,6 +65,7 @@ export default function TodayScheduledWork() {
                     minute: "2-digit",
                   })}
                 </p>
+                <p className={`text-[10px] font-bold ${x.displayStatus === "OVERDUE" ? "text-danger" : "text-muted-foreground"}`}>{x.displayStatus.replaceAll("_", " ")}</p>
                 {x.activeSnooze && (
                   <p className="text-[11px] font-semibold text-primary-text">
                     Reminding again at{" "}
@@ -62,10 +81,10 @@ export default function TodayScheduledWork() {
                 )}
               </div>
               <button
-                onClick={() => (x.isOccurrence ? startOccurrence(x.id, x.occurrenceId) : startScheduledWork(x.id)).then(load)}
+                onClick={() => (x.isOccurrence ? startOccurrenceWork(x.id, x.occurrenceId) : startWork(x.id)).then((result) => { publishPortalStateChanged("ONGOING_WORK_CHANGED", { includeCurrent: true }); return result.executionType === "TASK" ? navigate(`/tasks?task=${result.task.id}`) : navigate("/dashboard"); }).then(load)}
                 className="text-xs font-bold text-primary-text"
               >
-                Do Now
+                {x.ongoingWorkId ? "Open Work" : x.linkedTaskId ? "Open Task" : "Start Work"}
               </button>
               <button
                 onClick={() =>
@@ -82,7 +101,7 @@ export default function TodayScheduledWork() {
                 Snooze 20m
               </button>
               <button
-                onClick={() => (x.isOccurrence ? completeOccurrence(x.id, x.occurrenceId) : completeScheduledWork(x.id)).then(load)}
+                onClick={() => completeItem(x)}
                 className="text-xs font-bold text-primary-text"
               >
                 Complete

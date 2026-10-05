@@ -3,8 +3,9 @@ import { ImagePlus, X } from "lucide-react";
 import {
   transitionTask,
   uploadChangeImage,
-  uploadSubmissionImage,
 } from "../../services/task.service";
+import NoteEditorModal from "../notes/NoteEditorModal";
+import useAuth from "../../hooks/useAuth";
 const msg = (e) => e.response?.data?.message || "Unable to update this task.";
 export default function TaskWorkflowDialog({
   action,
@@ -13,8 +14,8 @@ export default function TaskWorkflowDialog({
   onDone,
   onConflict,
 }) {
+  const { user } = useAuth();
   const [reason, setReason] = useState(""),
-    [note, setNote] = useState(""),
     [revision, setRevision] = useState(""),
     [files, setFiles] = useState([]),
     [error, setError] = useState(""),
@@ -44,22 +45,10 @@ export default function TaskWorkflowDialog({
       setError("Revision deadline must be in the future.");
       return;
     }
-    if (
-      !changes &&
-      task.completion_image_required &&
-      !files.length &&
-      !Number(task.submissionImageCount)
-    ) {
-      setError("At least one completion image is required for this task.");
-      return;
-    }
     setBusy(true);
     setError("");
     try {
-      for (const file of files)
-        await (changes
-          ? uploadChangeImage(task.id, file)
-          : uploadSubmissionImage(task.id, file));
+      for (const file of files) await uploadChangeImage(task.id, file);
       await transitionTask(
         task.id,
         changes
@@ -68,10 +57,7 @@ export default function TaskWorkflowDialog({
               reason: reason.trim(),
               revisionDueAt: revision ? new Date(revision).toISOString() : null,
             }
-          : {
-              status: review ? "SUBMITTED_FOR_REVIEW" : "COMPLETED",
-              note: note.trim() || undefined,
-            },
+          : {},
       );
       onDone(
         changes
@@ -90,6 +76,7 @@ export default function TaskWorkflowDialog({
       setBusy(false);
     }
   };
+  if (!changes) return <NoteEditorModal note={{}} author={user?.name || user?.employee_name || "Employee"} task={task} mode={review ? "task_submission" : "task_completion"} onClose={onClose} onConflict={onConflict} onSaved={()=>onDone(review ? "Task submitted for review." : "Task completed.")}/>;
   return (
     <>
       <button
@@ -146,41 +133,7 @@ export default function TaskWorkflowDialog({
             </label>
             <ImagePicker files={files} setFiles={setFiles} add={add} />
           </div>
-        ) : (
-          <div className="mt-5">
-            <p className="text-sm text-muted-foreground">
-              {review
-                ? "Submit this task for CEO/Admin review?"
-                : "Complete this task?"}
-            </p>
-            <label className="mt-4 block text-sm font-bold">
-              {review ? "Submission Note" : "Approval / Completion Note"}{" "}
-              (optional)
-              <textarea
-                rows="3"
-                maxLength="1000"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="input"
-                placeholder={
-                  review
-                    ? "Tell the reviewer what was completed"
-                    : "Add a note for the employee"
-                }
-              />
-            </label>
-            <ImagePicker files={files} setFiles={setFiles} add={add} />
-            {task.completion_image_required ? (
-              <p className="mt-2 text-xs font-bold text-warning">
-                At least one completion image is required.
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Completion images are optional. Maximum 5.
-              </p>
-            )}
-          </div>
-        )}
+        ) : null}
         {error && (
           <p className="mt-4 rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}

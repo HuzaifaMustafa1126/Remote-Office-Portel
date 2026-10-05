@@ -266,3 +266,13 @@ export const bulkSchema = z
         message: "Employee is required",
       });
   });
+export const finalizeWithNoteSchema = z.object({
+  action: z.enum(["COMPLETE", "SUBMIT_FOR_REVIEW"]),
+  note: z.object({
+    title: z.string().trim().min(2).max(200),
+    summary: z.string().trim().min(1).max(300),
+    content: z.string().trim().min(1).max(50000),
+    visibility: z.enum(["TEAM", "PRIVATE", "CEO_ONLY"]),
+    isImportant: z.boolean().default(false),
+  }).strict(),
+}).strict();

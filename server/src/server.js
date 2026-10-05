@@ -57,6 +57,7 @@ async function start() {
     server.headersTimeout = env.REQUEST_TIMEOUT_MS + 5000;
     server.keepAliveTimeout = 5000;
     initializeNotifications(server);
+    let stopping = false;
     const publishTimer=setInterval(()=>publishDueScheduled().catch(error=>console.error("Scheduled task publication failed:",error.message)),30000);
     publishTimer.unref();
     const deadlineTimer=setInterval(()=>sendTaskDeadlineNotifications().catch(error=>console.error("Task deadline notification check failed:",error.message)),60000);
@@ -76,8 +77,9 @@ async function start() {
     dayEndTimer.unref();
     processDayEndReportFollowups().catch((error) => console.error("Initial Day-End Report follow-up check failed:", error.message));
     let reminderRunning = false;
+    let reminderPromise = Promise.resolve();
     const runReminders = async () => {
-      if (reminderRunning) return;
+      if (stopping || reminderRunning) return;
       reminderRunning = true;
       try {
         await Promise.all([
@@ -91,15 +93,27 @@ async function start() {
         reminderRunning = false;
       }
     };
-    const reminderTimer = setInterval(
-      runReminders,
-      60000,
-    );
+    const reminderTimer = setInterval(() => {
+      reminderPromise = runReminders();
+    }, 60000);
     reminderTimer.unref();
-    runReminders();
+    reminderPromise = runReminders();
     server.listen(PORT, "0.0.0.0", () =>
       console.log(`API listening on port ${PORT}`),
     );
+    const timers = [publishTimer, deadlineTimer, presenceTimer, dayEndTimer, reminderTimer];
+    const shutdown = async (signal) => {
+      if (stopping) return;
+      stopping = true;
+      console.log(`${signal} received; stopping background processors.`);
+      timers.forEach(clearInterval);
+      await new Promise((resolve) => server.close(resolve));
+      await reminderPromise.catch(() => {});
+      console.log("Remote Office Portal API stopped cleanly.");
+      process.exit(0);
+    };
+    process.once("SIGTERM", () => void shutdown("SIGTERM"));
+    process.once("SIGINT", () => void shutdown("SIGINT"));
   } catch (e) {
     console.error("Server startup failed:", e.message);
     process.exit(1);
