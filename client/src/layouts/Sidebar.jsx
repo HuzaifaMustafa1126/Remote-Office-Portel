@@ -13,7 +13,6 @@ import {
   CalendarPlus,
   ClipboardCheck,
   CalendarDays,
-  CalendarClock,
   Clock4,
   WalletCards,
   ChartNoAxesCombined,
@@ -41,7 +40,6 @@ const groups = [
     label: "WORK",
     items: [
       ["Task Management", "/tasks", ClipboardList, P.TASK_VIEW_OWN],
-      ["Scheduled Work", "/scheduled-work", CalendarClock, null],
       [
         "My Day-End Reports",
         "/my-day-end-reports",
