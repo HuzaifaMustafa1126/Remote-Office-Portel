@@ -2,8 +2,14 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { emitNotification } from "../sockets/notification.socket.js";
 
+// MySQL TIMESTAMP values are read in the configured session timezone. Serialize
+// notification dates as UTC ISO strings so every browser parses the same instant.
+const utcTimestamp = (column) =>
+  `CASE WHEN ${column} IS NULL THEN NULL ELSE CONCAT(DATE_FORMAT(CONVERT_TZ(${column},@@session.time_zone,'+00:00'),'%Y-%m-%dT%H:%i:%s'),'.000Z') END`;
+
 const select = `SELECT id,user_id AS userId,type,category,title,message,reference_type AS referenceType,
-  reference_id AS referenceId,action_url AS actionUrl,priority,is_read AS isRead,in_app_allowed AS inAppAllowed,desktop_allowed AS desktopAllowed,sound_allowed AS soundAllowed,created_at AS createdAt,read_at AS readAt
+  reference_id AS referenceId,action_url AS actionUrl,priority,is_read AS isRead,in_app_allowed AS inAppAllowed,desktop_allowed AS desktopAllowed,sound_allowed AS soundAllowed,
+  ${utcTimestamp("created_at")} AS createdAt,${utcTimestamp("read_at")} AS readAt
   FROM notifications`;
 
 export function categoryFor(type = "") {

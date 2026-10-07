@@ -3,11 +3,13 @@ import { Bell, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import useNotifications from "../../hooks/useNotifications";
 import NotificationItem from "./NotificationItem";
+import useNotificationNow from "../../hooks/useNotificationNow";
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const box = useRef();
   const nav = useNavigate();
   const { items, unread, markRead, markAll, connected } = useNotifications();
+  const now = useNotificationNow(open);
   useEffect(() => {
     const close = (e) => !box.current?.contains(e.target) && setOpen(false);
     addEventListener("mousedown", close);
@@ -61,6 +63,7 @@ export default function NotificationBell() {
                   key={x.id}
                   item={x}
                   onClick={choose}
+                  now={now}
                 />
               ))
             ) : (

@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { formatNotificationTime } from "../../utils/notificationTime";
 const icon = (type, category) =>
   category === "SCHEDULED_WORK"
     ? CalendarCheck
@@ -28,7 +29,7 @@ const icon = (type, category) =>
                   : type.startsWith("TASK")
                     ? ClipboardCheck
                     : Bell;
-export default function NotificationItem({ item, onClick, compact = false }) {
+export default function NotificationItem({ item, onClick, compact = false, now }) {
   const Icon = icon(item.type, item.category);
   return (
     <button
@@ -51,15 +52,7 @@ export default function NotificationItem({ item, onClick, compact = false }) {
         <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           <span>{item.category}</span>
           <span>•</span>
-          <span>
-            {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-              Math.min(
-                0,
-                Math.round((new Date(item.createdAt) - Date.now()) / 60000),
-              ),
-              "minute",
-            )}
-          </span>
+          <span>{formatNotificationTime(item.createdAt, now)}</span>
         </span>
       </span>
     </button>

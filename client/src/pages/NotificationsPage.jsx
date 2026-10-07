@@ -4,6 +4,7 @@ import Button from "../components/common/Button";
 import NotificationItem from "../components/notifications/NotificationItem";
 import useNotifications from "../hooks/useNotifications";
 import * as service from "../services/notification.service";
+import useNotificationNow from "../hooks/useNotificationNow";
 const filters = [
   ["All", {}],
   ["Unread", { unread: "true" }],
@@ -26,6 +27,7 @@ export default function NotificationsPage() {
     [from, setFrom] = useState(""),
     [to, setTo] = useState("");
   const { markRead, markAll } = useNotifications();
+  const now = useNotificationNow();
   const nav = useNavigate();
   const load = async (replace = false) => {
     setLoading(true);
@@ -61,7 +63,15 @@ export default function NotificationsPage() {
     load(page === 1);
   }, [selected, page, debouncedSearch, from, to]);
   const choose = async (item) => {
-    if (!item.isRead) await markRead(item.id);
+    if (!item.isRead) {
+      await markRead(item.id);
+      setData((old) => ({
+        ...old,
+        rows: old.rows.map((row) =>
+          row.id === item.id ? { ...row, isRead: 1 } : row,
+        ),
+      }));
+    }
     if (item.actionUrl) nav(item.actionUrl);
   };
   const readAll = async () => {
@@ -121,7 +131,7 @@ export default function NotificationsPage() {
       </div>
       <div className="space-y-3">
         {data.rows.map((x) => (
-          <NotificationItem key={x.id} item={x} onClick={choose} />
+          <NotificationItem key={x.id} item={x} onClick={choose} now={now} />
         ))}
         {!loading && !data.rows.length && (
           <div className="rounded-2xl border border-border bg-surface p-12 text-center text-muted-foreground">
