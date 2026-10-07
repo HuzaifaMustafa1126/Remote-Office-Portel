@@ -86,4 +86,6 @@ export const PERMISSIONS = {
   NOTES_REQUIRE_TASK_DOCUMENTATION: "notes.require_task_documentation",
   SECURITY_LOGIN_VIEW: "security.login_activity.view",
   SECURITY_REVOKE: "security.sessions.revoke",
+  COMPANY_POLICY_VIEW: "company_policy.view",
+  COMPANY_POLICY_MANAGE: "company_policy.manage",
 };

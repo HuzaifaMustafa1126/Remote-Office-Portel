@@ -38,6 +38,7 @@ import MyDayEndReportsPage from "../pages/MyDayEndReportsPage";
 import ScheduledWorkPage from "../pages/ScheduledWorkPage";
 import DayEndReportSettingsPage from "../pages/DayEndReportSettingsPage";
 import DayEndReportAnalyticsPage from "../pages/DayEndReportAnalyticsPage";
+import CompanyPoliciesPage from "../pages/CompanyPoliciesPage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -150,6 +151,14 @@ export default function AppRoutes() {
           }
         />
         <Route path="scheduled-work" element={<ScheduledWorkPage />} />
+        <Route
+          path="company-policies"
+          element={
+            <Gate permission={P.COMPANY_POLICY_VIEW}>
+              <CompanyPoliciesPage />
+            </Gate>
+          }
+        />
         <Route
           path="notes/:noteId"
           element={
