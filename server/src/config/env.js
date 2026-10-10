@@ -22,6 +22,12 @@ const schema = z.object({
   DB_QUEUE_LIMIT: z.coerce.number().int().min(1).max(10000).default(100),
   STARTUP_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
+  TWOFA_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, "must be a base64-encoded 32-byte key")
+    .optional(),
+  TWOFA_ENCRYPTION_KEY_VERSION: z.coerce.number().int().positive().max(65535).default(1),
+  TWOFA_PLATFORM_BATCH_MAX: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 const requiredProductionVariables = [
@@ -30,6 +36,7 @@ const requiredProductionVariables = [
   "DB_PASSWORD",
   "DB_NAME",
   "JWT_SECRET",
+  "TWOFA_ENCRYPTION_KEY",
 ];
 if (process.env.NODE_ENV === "production") {
   const missing = requiredProductionVariables.filter((name) => !process.env[name]);

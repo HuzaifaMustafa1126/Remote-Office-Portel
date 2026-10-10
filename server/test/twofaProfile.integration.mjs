@@ -9,7 +9,12 @@ import {
   listProfiles,
   updateProfile,
 } from "../src/services/twofa.service.js";
-import { listProfilesSchema } from "../src/validators/twofa.validator.js";
+import {
+  grantProfileAccess,
+  revokeProfileAccess,
+} from "../src/services/twofaAccess.service.js";
+import { globalHistory, profileHistory } from "../src/services/twofaHistory.service.js";
+import { listProfilesSchema, twofaHistoryQuerySchema } from "../src/validators/twofa.validator.js";
 
 const databaseName = `twofa_profile_test_${Date.now()}_${process.pid}`;
 const admin = await mysql.createConnection({
@@ -78,12 +83,60 @@ try {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(role_id) REFERENCES roles(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    CREATE TABLE role_permissions (
+      role_id BIGINT UNSIGNED NOT NULL,
+      permission_id BIGINT UNSIGNED NOT NULL,
+      PRIMARY KEY(role_id,permission_id),
+      FOREIGN KEY(role_id) REFERENCES roles(id) ON DELETE CASCADE,
+      FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    CREATE TABLE user_permission_overrides (
+      user_id BIGINT UNSIGNED NOT NULL,
+      permission_id BIGINT UNSIGNED NOT NULL,
+      effect ENUM('ALLOW','DENY') NOT NULL,
+      created_by BIGINT UNSIGNED NOT NULL,
+      updated_by BIGINT UNSIGNED NOT NULL,
+      PRIMARY KEY(user_id,permission_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   const migration = await fs.readFile(
     new URL("../database/migrations/075_twofa_manager_foundation.sql", import.meta.url),
     "utf8",
   );
   await database.query(migration);
+  const accessMigration = await fs.readFile(
+    new URL("../database/migrations/077_twofa_employee_access_capabilities.sql", import.meta.url),
+    "utf8",
+  );
+  await database.query(accessMigration);
+  const historyMigration = await fs.readFile(
+    new URL("../database/migrations/078_twofa_activity_history_snapshots.sql", import.meta.url),
+    "utf8",
+  );
+  await database.query(historyMigration);
+  const [[schemaAudit]] = await database.execute(`
+    SELECT
+      (SELECT COUNT(*) FROM information_schema.columns
+       WHERE table_schema=DATABASE() AND table_name='twofa_activity_logs'
+         AND column_name IN('profile_name_snapshot','platform_name_snapshot','employee_name_snapshot')) snapshotColumns,
+      (SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics
+       WHERE table_schema=DATABASE() AND table_name='twofa_activity_logs'
+         AND index_name IN('idx_twofa_activity_status_created','idx_twofa_activity_profile_action_created','idx_twofa_activity_employee_action_created')) historyIndexes,
+      (SELECT COUNT(*) FROM information_schema.referential_constraints
+       WHERE constraint_schema=DATABASE() AND constraint_name='fk_twofa_access_employee'
+         AND delete_rule='CASCADE') accessEmployeeCascade,
+      (SELECT COUNT(*) FROM information_schema.referential_constraints
+       WHERE constraint_schema=DATABASE() AND constraint_name IN(
+         'fk_twofa_profile_creator','fk_twofa_profile_updater','fk_twofa_profile_deleter',
+         'fk_twofa_platform_creator','fk_twofa_platform_updater','fk_twofa_platform_deleter',
+         'fk_twofa_access_grantor'
+       ) AND delete_rule='SET NULL') preservedActorLinks`);
+  assert.equal(Number(schemaAudit.snapshotColumns), 3);
+  assert.equal(Number(schemaAudit.historyIndexes), 3);
+  assert.equal(Number(schemaAudit.accessEmployeeCascade), 1);
+  assert.equal(Number(schemaAudit.preservedActorLinks), 7);
 
   async function account(code, firstName, role = null) {
     const [employee] = await database.execute(
@@ -112,6 +165,17 @@ try {
   const colleague = await account("COLLEAGUE", "Colleague");
   const outsider = await account("OUTSIDER", "Outsider");
   const ceo = await account("CEO", "Chief", "CEO");
+  await database.execute("INSERT INTO roles(name) VALUES('2FA Managers')");
+  const [[managerRole]] = await database.execute("SELECT id FROM roles WHERE name='2FA Managers'");
+  await database.execute("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", [owner.id, managerRole.id]);
+  await database.execute(
+    `INSERT INTO role_permissions(role_id,permission_id)
+     SELECT ?,id FROM permissions WHERE name IN (
+       '2fa.access.manage','2fa.profile.view','2fa.profile.edit',
+       '2fa.information.reveal','2fa.key.reveal'
+     )`,
+    [managerRole.id],
+  );
 
   const created = await createProfile(
     { profileName: "Client Zebra" },
@@ -149,19 +213,11 @@ try {
   assert.equal(ownerList.rows[0].profileName, "Alpha Client");
 
   const outsiderList = await listProfiles(listQuery(), outsider, database);
-  assert.equal(outsiderList.meta.total, 0);
+  assert.equal(outsiderList.meta.total, 2);
   const ceoList = await listProfiles(listQuery(), ceo, database);
   assert.equal(ceoList.meta.total, 2);
 
-  await assert.rejects(
-    getProfile(created.id, outsider, requestContext, database),
-    (error) => error.statusCode === 404,
-  );
-  const [[deniedEvent]] = await database.execute(
-    "SELECT event_status eventStatus FROM twofa_activity_logs WHERE profile_id=? AND action='ACCESS_DENIED' AND employee_id=?",
-    [created.id, outsider.employee_id],
-  );
-  assert.equal(deniedEvent.eventStatus, "FAILURE");
+  assert.equal((await getProfile(created.id, outsider, requestContext, database)).id, created.id);
   await assert.rejects(
     updateProfile(
       created.id,
@@ -181,14 +237,27 @@ try {
     "Client Zebra",
   );
 
-  await database.execute(
-    "INSERT INTO twofa_profile_access(profile_id,employee_id,access_type,granted_by) VALUES(?,?,'GRANTED',?)",
-    [created.id, colleague.employee_id, owner.id],
+  await grantProfileAccess(
+    created.id,
+    { employeeId: colleague.employee_id },
+    owner,
+    requestContext,
+    database,
   );
   assert.equal(
     (await getProfile(created.id, colleague, requestContext, database)).id,
     created.id,
   );
+  await grantProfileAccess(
+    created.id,
+    { employeeId: outsider.employee_id },
+    owner,
+    requestContext,
+    database,
+  );
+  assert.equal((await getProfile(created.id, outsider, requestContext, database)).id, created.id);
+  await revokeProfileAccess(created.id, outsider.employee_id, owner, requestContext, database);
+  assert.equal((await getProfile(created.id, outsider, requestContext, database)).id, created.id);
 
   const [[beforeUnchanged]] = await database.execute(
     "SELECT COUNT(*) count FROM twofa_activity_logs WHERE profile_id=? AND action='PROFILE_UPDATED'",
@@ -260,6 +329,32 @@ try {
     getProfile(created.id, owner, requestContext, database),
     (error) => error.statusCode === 404,
   );
+  const historyQuery = twofaHistoryQuerySchema.parse({ page: 1, limit: 100 });
+  const history = await profileHistory(created.id, historyQuery, owner, database);
+  assert.ok(history.rows.some((event) => event.action === "PROFILE_CREATED"));
+  assert.ok(history.rows.some((event) => event.action === "PROFILE_UPDATED"));
+  assert.ok(history.rows.some((event) => event.action === "PROFILE_DELETED"));
+  assert.ok(history.rows.some((event) => event.action === "ACCESS_GRANTED"));
+  assert.ok(history.rows.some((event) => event.action === "ACCESS_REVOKED"));
+  assert.ok(history.rows.some((event) => event.action === "ACCESS_DENIED"));
+  assert.equal(history.rows[0].profileName, "Client Zebra Updated");
+  assert.match(history.rows[0].createdAt, /Z$/);
+  assert.equal(history.rows.find((event) => event.action === "PROFILE_CREATED").profileName, "Client Zebra");
+  await database.execute("UPDATE employees SET first_name='Renamed' WHERE id=?", [owner.employee_id]);
+  const renamedHistory = await profileHistory(created.id, historyQuery, owner, database);
+  assert.equal(renamedHistory.rows.find((event) => event.action === "PROFILE_CREATED").employeeName, "Owner Tester");
+  const filtered = await profileHistory(
+    created.id,
+    twofaHistoryQuerySchema.parse({ action: "PROFILE_UPDATED", search: "Zebra", page: 1, limit: 1 }),
+    owner,
+    database,
+  );
+  assert.equal(filtered.meta.total, 1);
+  assert.equal(filtered.rows.length, 1);
+  const outsiderGlobal = await globalHistory(historyQuery, outsider, database);
+  assert.equal(outsiderGlobal.rows.some((event) => event.profileId === created.id), true);
+  const ceoGlobal = await globalHistory(historyQuery, ceo, database);
+  assert.ok(ceoGlobal.rows.some((event) => event.profileId === created.id));
   const [[historyAfterDelete]] = await database.execute(
     "SELECT COUNT(*) count FROM twofa_activity_logs WHERE profile_id=?",
     [created.id],

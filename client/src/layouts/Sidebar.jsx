@@ -59,6 +59,7 @@ const groups = [
         P.DAY_END_REPORT_VIEW_ALL,
       ],
       ["Notes", "/notes", NotebookPen, P.NOTES_VIEW_OWN],
+      ["2FA Manager", "/2fa-manager", KeyRound, P.TWOFA_PROFILE_VIEW],
     ],
   },
   {
@@ -79,7 +80,12 @@ const groups = [
     label: "MANAGEMENT",
     items: [
       ["Company Calendar", "/company-calendar", CalendarDays, P.CALENDAR_VIEW],
-      ["Company Policies", "/company-policies", ScrollText, P.COMPANY_POLICY_VIEW],
+      [
+        "Company Policies",
+        "/company-policies",
+        ScrollText,
+        P.COMPANY_POLICY_VIEW,
+      ],
       ["Shift Templates", "/shifts", Clock4, P.SHIFT_VIEW],
       ["Roles", "/roles", Shield, P.ROLES_VIEW],
       ["Permissions", "/permissions", KeyRound, P.PERMISSIONS_VIEW],

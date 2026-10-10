@@ -39,6 +39,8 @@ import ScheduledWorkPage from "../pages/ScheduledWorkPage";
 import DayEndReportSettingsPage from "../pages/DayEndReportSettingsPage";
 import DayEndReportAnalyticsPage from "../pages/DayEndReportAnalyticsPage";
 import CompanyPoliciesPage from "../pages/CompanyPoliciesPage";
+import TwofaManagerPage from "../pages/TwofaManagerPage";
+import TwofaProfilePage from "../pages/TwofaProfilePage";
 import { PERMISSIONS as P } from "../utils/permissions";
 const Gate = ({ permission, children }) => (
   <PermissionGuard
@@ -151,6 +153,22 @@ export default function AppRoutes() {
           }
         />
         <Route path="scheduled-work" element={<ScheduledWorkPage />} />
+        <Route
+          path="2fa-manager"
+          element={
+            <Gate permission={P.TWOFA_PROFILE_VIEW}>
+              <TwofaManagerPage />
+            </Gate>
+          }
+        />
+        <Route
+          path="2fa-manager/:profileId"
+          element={
+            <Gate permission={P.TWOFA_PROFILE_VIEW}>
+              <TwofaProfilePage />
+            </Gate>
+          }
+        />
         <Route
           path="company-policies"
           element={

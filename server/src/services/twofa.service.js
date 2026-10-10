@@ -1,19 +1,18 @@
 import pool from "../config/database.js";
-import { isCeoUser } from "../middleware/ceo.middleware.js";
 import ApiError from "../utils/ApiError.js";
 import { recordTwofaActivity } from "./twofaActivity.service.js";
+import {
+  assertActiveTwofaEmployee,
+  getTwofaProfileAuthorization,
+  recordTwofaAccessDenied as recordDeniedDirect,
+  requireTwofaEmployee,
+  TWOFA_PROFILE_ACTION,
+} from "./twofaAuthorization.service.js";
 
 const inaccessible = () =>
   new ApiError(404, "2FA profile not found", "TWOFA_PROFILE_NOT_FOUND");
 
-function requireEmployee(actor) {
-  if (!actor?.employee_id)
-    throw new ApiError(
-      403,
-      "An employee account is required to use 2FA Manager",
-      "TWOFA_EMPLOYEE_REQUIRED",
-    );
-}
+const requireEmployee = requireTwofaEmployee;
 
 const profileSelect = `
   SELECT p.id,p.profile_name profileName,
@@ -25,23 +24,23 @@ const profileSelect = `
     (SELECT COUNT(*) FROM twofa_platforms tp
       WHERE tp.profile_id=p.id AND tp.deleted_at IS NULL) platformCount
   FROM twofa_profiles p
-  JOIN users cu ON cu.id=p.created_by
+  LEFT JOIN users cu ON cu.id=p.created_by
   LEFT JOIN employees ce ON ce.id=cu.employee_id
-  JOIN users uu ON uu.id=p.updated_by
+  LEFT JOIN users uu ON uu.id=p.updated_by
   LEFT JOIN employees ue ON ue.id=uu.employee_id`;
 
 const present = (row) => ({
   id: Number(row.id),
   profileName: row.profileName,
   createdBy: {
-    userId: Number(row.createdByUserId),
+    userId: row.createdByUserId ? Number(row.createdByUserId) : null,
     employeeId: row.createdByEmployeeId
       ? Number(row.createdByEmployeeId)
       : null,
     name: row.createdByName,
   },
   updatedBy: {
-    userId: Number(row.updatedByUserId),
+    userId: row.updatedByUserId ? Number(row.updatedByUserId) : null,
     employeeId: row.updatedByEmployeeId
       ? Number(row.updatedByEmployeeId)
       : null,
@@ -52,27 +51,15 @@ const present = (row) => ({
   updatedAt: row.updatedAt,
 });
 
-async function hasProfileAccess(executor, profile, actor) {
-  if (Number(profile.created_by) === Number(actor.id)) return true;
-  if (await isCeoUser(actor.id, executor)) return true;
-  const [[access]] = await executor.execute(
-    `SELECT 1 allowed FROM twofa_profile_access
-     WHERE profile_id=? AND employee_id=? LIMIT 1`,
-    [profile.id, actor.employee_id],
-  );
-  return Boolean(access);
+async function hasProfileAccess(executor, profile, actor, action = TWOFA_PROFILE_ACTION.VIEW) {
+  return (await getTwofaProfileAuthorization(executor, profile.id, actor, action)).allowed;
 }
 
-async function recordDenied(profileId, actor, operation, context, executor = pool) {
-  await recordTwofaActivity(executor, {
-    profileId,
-    actor,
-    action: "ACCESS_DENIED",
-    context,
-    eventStatus: "FAILURE",
-    metadata: { operation },
-  });
-}
+export const hasTwofaProfileAccess = hasProfileAccess;
+
+const recordDenied = recordDeniedDirect;
+
+export const recordTwofaAccessDenied = recordDenied;
 
 async function activeProfile(executor, id, lock = false) {
   const [[profile]] = await executor.execute(
@@ -82,6 +69,8 @@ async function activeProfile(executor, id, lock = false) {
   );
   return profile || null;
 }
+
+export const getActiveTwofaProfile = activeProfile;
 
 async function getPresentation(executor, id) {
   const [[row]] = await executor.execute(
@@ -96,6 +85,7 @@ export async function createProfile(data, actor, context, database = pool) {
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
+    await assertActiveTwofaEmployee(connection, actor);
     const [created] = await connection.execute(
       `INSERT INTO twofa_profiles(profile_name,created_by,updated_by)
        VALUES(?,?,?)`,
@@ -103,8 +93,9 @@ export async function createProfile(data, actor, context, database = pool) {
     );
     await connection.execute(
       `INSERT INTO twofa_profile_access(
-         profile_id,employee_id,access_type,granted_by
-       ) VALUES(?,?,'OWNER',?)`,
+         profile_id,employee_id,access_type,can_view,can_edit,
+         can_reveal_twofa,can_reveal_auth_key,granted_by
+       ) VALUES(?,?,'OWNER',TRUE,TRUE,TRUE,TRUE,?)`,
       [created.insertId, actor.employee_id, actor.id],
     );
     await recordTwofaActivity(connection, {
@@ -127,18 +118,9 @@ export async function createProfile(data, actor, context, database = pool) {
 
 export async function listProfiles(query, actor, database = pool) {
   requireEmployee(actor);
-  const canViewAll = await isCeoUser(actor.id, database);
+  await assertActiveTwofaEmployee(database, actor);
   const where = ["p.deleted_at IS NULL"];
   const params = [];
-  if (!canViewAll) {
-    where.push(`(
-      p.created_by=? OR EXISTS(
-        SELECT 1 FROM twofa_profile_access pa
-        WHERE pa.profile_id=p.id AND pa.employee_id=?
-      )
-    )`);
-    params.push(actor.id, actor.employee_id);
-  }
   if (query.search) {
     where.push("p.profile_name LIKE ?");
     params.push(`%${query.search}%`);
@@ -176,15 +158,28 @@ export async function listProfiles(query, actor, database = pool) {
 
 export async function getProfile(id, actor, context, database = pool) {
   requireEmployee(actor);
-  const profile = await activeProfile(database, id);
-  if (!profile) throw inaccessible();
-  if (!(await hasProfileAccess(database, profile, actor))) {
-    await recordDenied(profile.id, actor, "VIEW_PROFILE", context, database);
+  const authorization = await getTwofaProfileAuthorization(
+    database, id, actor, TWOFA_PROFILE_ACTION.VIEW,
+  );
+  if (!authorization.profile) throw inaccessible();
+  if (!authorization.allowed) {
+    await recordDenied(authorization.profile.id, actor, "VIEW_PROFILE", context, database);
     throw inaccessible();
   }
   const result = await getPresentation(database, id);
   if (!result) throw inaccessible();
-  return result;
+  const all = authorization.isCeo;
+  const granted = Boolean(authorization.access);
+  return {
+    ...result,
+    capabilities: {
+      canView: true,
+      canEdit: all || granted,
+      canRevealTwofa: all || granted,
+      canRevealAuthKey: all || granted,
+      canManageAccess: all || granted,
+    },
+  };
 }
 
 export async function updateProfile(id, data, actor, context, database = pool) {
@@ -199,7 +194,7 @@ export async function updateProfile(id, data, actor, context, database = pool) {
       [id],
     );
     if (!profile) throw inaccessible();
-    if (!(await hasProfileAccess(connection, profile, actor))) {
+    if (!(await hasProfileAccess(connection, profile, actor, TWOFA_PROFILE_ACTION.EDIT))) {
       deniedProfileId = profile.id;
       await connection.rollback();
     } else if (profile.profile_name === data.profileName) {
@@ -219,6 +214,10 @@ export async function updateProfile(id, data, actor, context, database = pool) {
         action: "PROFILE_UPDATED",
         changedFields: ["profile_name"],
         context,
+        metadata: {
+          previousProfileName: profile.profile_name,
+          newProfileName: data.profileName,
+        },
       });
       const updated = await getPresentation(connection, id);
       await connection.commit();
@@ -246,7 +245,7 @@ export async function deleteProfile(id, actor, context, database = pool) {
       [id],
     );
     if (!profile) throw inaccessible();
-    if (!(await hasProfileAccess(connection, profile, actor))) {
+    if (!(await hasProfileAccess(connection, profile, actor, TWOFA_PROFILE_ACTION.EDIT))) {
       deniedProfileId = profile.id;
       await connection.rollback();
     } else {

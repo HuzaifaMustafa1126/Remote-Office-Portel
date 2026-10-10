@@ -1,11 +1,5 @@
-import { randomUUID } from "node:crypto";
 import * as service from "../services/twofa.service.js";
-import { requestSecurityMeta } from "../utils/requestSecurity.js";
-
-const context = (req) => ({
-  ...requestSecurityMeta(req),
-  requestId: randomUUID(),
-});
+import { twofaRequestContext as context } from "../utils/twofaRequest.js";
 
 export async function create(req, res) {
   res.status(201).json({
