@@ -27,6 +27,7 @@
     "ongoing-work:cleanup": "node src/scripts/cleanupCompletedOngoingWork.js",
     "test:history-cleanup": "node test/historyCleanup.test.mjs",
     "test:migration-safety": "node --test test/migrationSafety.test.js",
+    "test:twofa-profile": "node --test test/twofaProfile.test.js && node test/twofaProfile.integration.mjs",
     "seed:admin": "node src/scripts/seedAdmin.js",
     "migrate": "node src/scripts/migrate.js",
     "migrations:audit": "node src/scripts/auditMigrationHistory.js",
