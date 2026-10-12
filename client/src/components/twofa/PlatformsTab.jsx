@@ -547,7 +547,7 @@ export default function PlatformsTab({
                       {label}
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3">
-                      <code className="min-w-0 flex-1 break-all text-sm">
+                      <code className="min-w-0 flex-1 whitespace-pre-wrap break-all text-sm">
                         {value || (stored ? "••••••••••••" : "Not stored")}
                       </code>
                       {stored && allowed && (

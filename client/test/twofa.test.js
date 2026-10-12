@@ -33,6 +33,8 @@ test("credential entry is plain text while saved values remain masked and epheme
   assert.match(platforms, /••••••••••••/);
   assert.match(platforms, /Confirm Your Password/);
   assert.match(platforms, /setTimeout\(\(\) => setRevealed\(\{\}\), 60000\)/);
+  assert.match(platforms, /navigator\.clipboard\.writeText\(result\.value\)/);
+  assert.match(platforms, /whitespace-pre-wrap/);
   assert.match(fields, /<textarea[\s\S]*value=\{value\.authKey\}/);
   assert.doesNotMatch(fields, /showKey|type="password"/);
   assert.doesNotMatch(`${platforms}\n${fields}`, /localStorage|sessionStorage/);

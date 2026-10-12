@@ -3,7 +3,6 @@ import ApiError from "../utils/ApiError.js";
 import { getEffectivePermission } from "./effectivePermission.service.js";
 import { recordTwofaActivity } from "./twofaActivity.service.js";
 import {
-  assertActiveTwofaEmployee,
   getTwofaProfileAuthorization,
   recordTwofaAccessDenied,
   requireTwofaEmployee,

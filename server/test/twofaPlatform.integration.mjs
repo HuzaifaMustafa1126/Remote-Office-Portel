@@ -117,7 +117,7 @@ try {
     database,
   );
 
-  const twofaSecret = "dummy manually entered 2FA information";
+  const twofaSecret = "  Client supplied 2FA text: 004 991\nRecovery: A1-B2_C3!  ";
   const [instagram] = await addPlatforms(
     profile.id,
     [
@@ -136,7 +136,7 @@ try {
   assert.equal(Object.hasOwn(instagram, "twofaInformation"), false);
   assert.equal(Object.hasOwn(instagram, "authKey"), false);
 
-  const authSecret = "dummy auth key preserving spaces";
+  const authSecret = "  recovery key / arbitrary text\nZX 91-!@#$%^&*()  ";
   const bulk = await addPlatforms(
     profile.id,
     [
@@ -223,8 +223,8 @@ try {
   );
   assert.deepEqual(afterMetadataUpdate.ciphertext, beforeMetadataUpdate);
 
-  const replacementTwofa = "replacement dummy 2FA information";
-  const replacementKey = "replacement dummy authentication key";
+  const replacementTwofa = "  replacement 2FA\nline two: 000-999  ";
+  const replacementKey = "  replacement recovery key\nkeep spaces exactly  ";
   await updatePlatform(
     instagram.id,
     { twofaInformation: replacementTwofa, authKey: replacementKey },
