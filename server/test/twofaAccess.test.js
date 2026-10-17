@@ -17,13 +17,14 @@ test("all access-management routes require the dedicated module permission", () 
     assert.match(source, new RegExp(`router\\.${verb}\\(`));
 });
 
-test("authorization shares viewing and scopes sensitive actions to an access row", () => {
+test("authorization shares read actions and scopes changes to creators or admins", () => {
   const source = fs.readFileSync(new URL("../src/services/twofaAuthorization.service.js", import.meta.url), "utf8");
   for (const column of ["can_view", "can_edit", "can_reveal_twofa", "can_reveal_auth_key"])
     assert.match(source, new RegExp(column));
   assert.match(source, /status='ACTIVE'/);
-  assert.match(source, /action === TWOFA_PROFILE_ACTION\.VIEW/);
-  assert.match(source, /isCeo \|\| Boolean\(access\)/);
+  for (const action of ["VIEW", "ADD", "REVEAL_TWOFA", "REVEAL_AUTH_KEY"])
+    assert.match(source, new RegExp(`TWOFA_PROFILE_ACTION\\.${action}`));
+  assert.match(source, /isCeo \|\| isCreator/);
 });
 
 test("profile and platform operations use centralized action authorization", () => {

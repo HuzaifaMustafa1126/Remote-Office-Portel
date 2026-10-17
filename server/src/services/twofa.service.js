@@ -17,9 +17,9 @@ const requireEmployee = requireTwofaEmployee;
 const profileSelect = `
   SELECT p.id,p.profile_name profileName,
     p.created_by createdByUserId,cu.employee_id createdByEmployeeId,
-    COALESCE(CONCAT(ce.first_name,' ',ce.last_name),cu.email) createdByName,
+    COALESCE(CASE WHEN cu.status='INACTIVE' AND ce.status='INACTIVE' THEN CONCAT('Former Employee — ',ce.first_name,' ',ce.last_name) ELSE CONCAT(ce.first_name,' ',ce.last_name) END,cu.email) createdByName,
     p.updated_by updatedByUserId,uu.employee_id updatedByEmployeeId,
-    COALESCE(CONCAT(ue.first_name,' ',ue.last_name),uu.email) updatedByName,
+    COALESCE(CASE WHEN uu.status='INACTIVE' AND ue.status='INACTIVE' THEN CONCAT('Former Employee — ',ue.first_name,' ',ue.last_name) ELSE CONCAT(ue.first_name,' ',ue.last_name) END,uu.email) updatedByName,
     p.created_at createdAt,p.updated_at updatedAt,
     (SELECT COUNT(*) FROM twofa_platforms tp
       WHERE tp.profile_id=p.id AND tp.deleted_at IS NULL) platformCount
@@ -168,16 +168,16 @@ export async function getProfile(id, actor, context, database = pool) {
   }
   const result = await getPresentation(database, id);
   if (!result) throw inaccessible();
-  const all = authorization.isCeo;
-  const granted = Boolean(authorization.access);
+  const canChange = authorization.isCeo ||
+    Number(authorization.profile.created_by) === Number(actor.id);
   return {
     ...result,
     capabilities: {
       canView: true,
-      canEdit: all || granted,
-      canRevealTwofa: all || granted,
-      canRevealAuthKey: all || granted,
-      canManageAccess: all || granted,
+      canEdit: canChange,
+      canRevealTwofa: true,
+      canRevealAuthKey: true,
+      canManageAccess: canChange,
     },
   };
 }

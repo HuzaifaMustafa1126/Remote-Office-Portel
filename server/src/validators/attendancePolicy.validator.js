@@ -35,6 +35,16 @@ export const policySchema = z
       "CALENDAR_MONTH",
       "NEVER",
     ]),
+    sandwich_leave_enabled: z.boolean(),
+    sandwich_apply_unapproved: z.boolean(),
+    sandwich_apply_unpaid: z.boolean(),
+    sandwich_apply_paid: z.boolean(),
+    sandwich_include_weekly_off: z.boolean(),
+    sandwich_include_company_holidays: z.boolean(),
+    sandwich_include_public_holidays: z.boolean(),
+    sandwich_include_adjacent: z.boolean(),
+    sandwich_include_between: z.boolean(),
+    sandwich_show_in_payroll: z.boolean(),
     effective_from: date,
   })
   .strict()

@@ -26,7 +26,7 @@ export async function save(data, actor) {
       [data.effective_from, data.effective_from, data.effective_from],
     );
     const [r] = await c.execute(
-      `INSERT INTO attendance_policies(name,late_rule_enabled,grace_minutes,late_accumulation_enabled,late_instances_required,late_penalty_type,late_penalty_quantity,half_day_rule_enabled,half_day_after_minutes,half_day_salary_deduction_percent,count_half_day_as_late,late_counter_period,effective_from,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO attendance_policies(name,late_rule_enabled,grace_minutes,late_accumulation_enabled,late_instances_required,late_penalty_type,late_penalty_quantity,half_day_rule_enabled,half_day_after_minutes,half_day_salary_deduction_percent,count_half_day_as_late,late_counter_period,sandwich_leave_enabled,sandwich_apply_unapproved,sandwich_apply_unpaid,sandwich_apply_paid,sandwich_include_weekly_off,sandwich_include_company_holidays,sandwich_include_public_holidays,sandwich_include_adjacent,sandwich_include_between,sandwich_show_in_payroll,effective_from,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         data.name,
         ...[
@@ -41,6 +41,16 @@ export async function save(data, actor) {
           "half_day_salary_deduction_percent",
           "count_half_day_as_late",
           "late_counter_period",
+          "sandwich_leave_enabled",
+          "sandwich_apply_unapproved",
+          "sandwich_apply_unpaid",
+          "sandwich_apply_paid",
+          "sandwich_include_weekly_off",
+          "sandwich_include_company_holidays",
+          "sandwich_include_public_holidays",
+          "sandwich_include_adjacent",
+          "sandwich_include_between",
+          "sandwich_show_in_payroll",
           "effective_from",
         ].map((k) => data[k]),
         actor.id,

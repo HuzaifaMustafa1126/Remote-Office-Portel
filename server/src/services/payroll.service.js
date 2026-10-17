@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getPayrollSettings, periodForDate } from "../utils/payrollPeriod.js";
+import { current as currentAttendancePolicy } from "./attendancePolicy.service.js";
 const money = (n) => Number(Number(n || 0).toFixed(2));
 async function audit(
   c,
@@ -83,12 +84,51 @@ async function adj(c, runId, employeeId) {
   );
   return Object.fromEntries(Object.entries(a).map(([k, v]) => [k, money(v)]));
 }
-function calc(base, leave, absence, a) {
+function calc(base, leave, absence, sandwich, a) {
   const gross = money(base + a.allowances + a.positiveAdjustments),
     deductions = money(
-      leave + absence + a.manualDeductions + a.negativeAdjustments,
+      leave + absence + sandwich + a.manualDeductions + a.negativeAdjustments,
     );
   return { gross, deductions, net: money(gross - deductions) };
+}
+
+const qualifyingClassification = (classification, policy) =>
+  (classification === "UNAUTHORIZED_ABSENCE" && Boolean(policy.sandwich_apply_unapproved)) ||
+  (classification === "DEDUCTIBLE_APPROVED_LEAVE" && Boolean(policy.sandwich_apply_unpaid)) ||
+  (classification === "FREE_APPROVED_LEAVE" && Boolean(policy.sandwich_apply_paid));
+
+const includedOffDay = (classification, policy) => {
+  if (classification === "WEEKLY_OFF") return Boolean(policy.sandwich_include_weekly_off);
+  if (classification === "PUBLIC_HOLIDAY") return Boolean(policy.sandwich_include_public_holidays);
+  if (["COMPANY_HOLIDAY", "SPECIAL_OFF_DAY"].includes(classification))
+    return Boolean(policy.sandwich_include_company_holidays);
+  return false;
+};
+
+export function applySandwichPolicy(rows, policy, perDay) {
+  if (!policy?.sandwich_leave_enabled) return rows;
+  for (let index = 0; index < rows.length;) {
+    if (!includedOffDay(rows[index].classification, policy)) {
+      index++;
+      continue;
+    }
+    const start = index;
+    while (index < rows.length && includedOffDay(rows[index].classification, policy)) index++;
+    const before = start > 0 && qualifyingClassification(rows[start - 1].classification, policy);
+    const after = index < rows.length && qualifyingClassification(rows[index].classification, policy);
+    const applies = before && after
+      ? Boolean(policy.sandwich_include_between)
+      : (before || after) && Boolean(policy.sandwich_include_adjacent);
+    if (applies)
+      for (let day = start; day < index; day++)
+        rows[day] = {
+          ...rows[day],
+          classification: `SANDWICH_${rows[day].classification}`,
+          deduction: perDay,
+          sandwich: true,
+        };
+  }
+  return rows;
 }
 async function classify(c, employeeId, date, perDay) {
   const [[cal]] = await c.execute(
@@ -172,7 +212,8 @@ export async function generate(label, actor, recalculate = false) {
         run.id,
       ]);
     const [employees] = await c.execute(
-        "SELECT id,CONCAT(first_name,' ',last_name) name FROM employees WHERE status='ACTIVE' AND track_attendance=TRUE",
+        "SELECT id,CONCAT(first_name,' ',last_name) name,joining_date joiningDate,DATE(deleted_at) deletedDate FROM employees WHERE track_attendance=TRUE AND joining_date<=? AND (deleted_at IS NULL OR DATE(deleted_at)>=?)",
+        [period.endInclusive, period.start],
       ),
       missing = [];
     for (const e of employees) {
@@ -192,32 +233,45 @@ export async function generate(label, actor, recalculate = false) {
         divisor = Number(salary.salary_divisor),
         perDay = money(base / divisor),
         rows = [];
+      const sandwichPolicy = await currentAttendancePolicy(period.endInclusive, c);
       let working = 0,
         present = 0,
         free = 0,
         deductible = 0,
         absent = 0;
+      const scanStart = new Date(`${period.start}T00:00:00Z`),
+        scanEnd = new Date(`${period.endInclusive}T00:00:00Z`);
+      scanStart.setUTCDate(scanStart.getUTCDate() - 31);
+      scanEnd.setUTCDate(scanEnd.getUTCDate() + 31);
       for (
-        let d = new Date(`${period.start}T00:00:00Z`),
-          end = new Date(`${period.endInclusive}T00:00:00Z`);
-        d <= end;
+        let d = scanStart;
+        d <= scanEnd;
         d.setUTCDate(d.getUTCDate() + 1)
       ) {
         const date = d.toISOString().slice(0, 10),
-          day = await classify(c, e.id, date, perDay);
+          inPeriod = date >= period.start && date <= period.endInclusive,
+          employed = date >= String(e.joiningDate).slice(0, 10) && (!e.deletedDate || date <= String(e.deletedDate).slice(0, 10)),
+          day = employed
+            ? await classify(c, e.id, date, perDay)
+            : { classification: "OUTSIDE_EMPLOYMENT", deduction: perDay, working: true };
         rows.push({ date, ...day });
+        if (!inPeriod) continue;
         if (day.working) working++;
         if (day.classification === "PRESENT") present++;
         if (day.classification === "FREE_APPROVED_LEAVE") free++;
         if (day.classification === "DEDUCTIBLE_APPROVED_LEAVE") deductible++;
-        if (day.classification === "UNAUTHORIZED_ABSENCE") absent++;
+        if (["UNAUTHORIZED_ABSENCE", "OUTSIDE_EMPLOYMENT"].includes(day.classification)) absent++;
       }
+      applySandwichPolicy(rows, sandwichPolicy, perDay);
+      const payrollRows = rows.filter((day) => day.date >= period.start && day.date <= period.endInclusive),
+        sandwichDays = payrollRows.filter((day) => day.sandwich).length;
       const leave = money(deductible * perDay),
         absence = money(absent * perDay),
+        sandwich = money(sandwichDays * perDay),
         a = await adj(c, run.id, e.id),
-        t = calc(base, leave, absence, a);
+        t = calc(base, leave, absence, sandwich, a);
       const [item] = await c.execute(
-        `INSERT INTO payroll_items(payroll_run_id,employee_id,salary_profile_id,base_salary,salary_divisor,per_day_salary,working_days,present_days,free_leave_days,deductible_leave_days,absence_days,leave_deduction,absence_deduction,allowances,manual_deductions,positive_adjustments,negative_adjustments,adjustments,gross_salary,total_deductions,net_salary)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO payroll_items(payroll_run_id,employee_id,salary_profile_id,base_salary,salary_divisor,per_day_salary,working_days,present_days,free_leave_days,deductible_leave_days,absence_days,sandwich_days,leave_deduction,absence_deduction,sandwich_deduction,show_sandwich_breakdown,allowances,manual_deductions,positive_adjustments,negative_adjustments,adjustments,gross_salary,total_deductions,net_salary)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           run.id,
           e.id,
@@ -230,8 +284,11 @@ export async function generate(label, actor, recalculate = false) {
           free,
           deductible,
           absent,
+          sandwichDays,
           leave,
           absence,
+          sandwich,
+          Boolean(sandwichPolicy.sandwich_show_in_payroll),
           a.allowances,
           a.manualDeductions,
           a.positiveAdjustments,
@@ -247,7 +304,7 @@ export async function generate(label, actor, recalculate = false) {
           t.net,
         ],
       );
-      for (const day of rows)
+      for (const day of payrollRows)
         await c.execute(
           "INSERT INTO payroll_day_details(payroll_item_id,work_date,classification,attendance_id,leave_day_id,calendar_day_id,deduction_amount)VALUES(?,?,?,?,?,?,?)",
           [
@@ -293,6 +350,7 @@ async function recompute(c, runId, employeeId) {
       Number(i.base_salary),
       Number(i.leave_deduction),
       Number(i.absence_deduction),
+      Number(i.sandwich_deduction),
       a,
     );
   await c.execute(
@@ -456,6 +514,7 @@ export async function verifyPayrollCalculation(id) {
         Number(i.positive_adjustments) -
         Number(i.leave_deduction) -
         Number(i.absence_deduction) -
+        Number(i.sandwich_deduction) -
         Number(i.manual_deductions) -
         Number(i.negative_adjustments),
     );

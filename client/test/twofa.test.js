@@ -18,20 +18,20 @@ test("Grant Access loads active employees from the existing employee API", () =>
   assert.doesNotMatch(access, /PermissionChecks|canRevealTwofa|canRevealAuthKey/);
 });
 
-test("navigation and routes are protected by the profile-view permission", () => {
+test("navigation and routes are available to every authenticated employee", () => {
   const routes = read("../src/routes/AppRoutes.jsx");
   const sidebar = read("../src/layouts/Sidebar.jsx");
   assert.match(routes, /path="2fa-manager"/);
   assert.match(routes, /path="2fa-manager\/:profileId"/);
-  assert.equal((routes.match(/P\.TWOFA_PROFILE_VIEW/g) || []).length, 2);
-  assert.match(sidebar, /\["2FA Manager", "\/2fa-manager", KeyRound, P\.TWOFA_PROFILE_VIEW\]/);
+  assert.equal((routes.match(/P\.TWOFA_PROFILE_VIEW/g) || []).length, 0);
+  assert.match(sidebar, /\["2FA Manager", "\/2fa-manager", KeyRound, null\]/);
 });
 
 test("credential entry is plain text while saved values remain masked and ephemeral", () => {
   const platforms = read("../src/components/twofa/PlatformsTab.jsx");
   const fields = read("../src/components/twofa/PlatformFields.jsx");
   assert.match(platforms, /••••••••••••/);
-  assert.match(platforms, /Confirm Your Password/);
+  assert.doesNotMatch(platforms, /Confirm Your Password|Current Password|type="password"/);
   assert.match(platforms, /setTimeout\(\(\) => setRevealed\(\{\}\), 60000\)/);
   assert.match(platforms, /navigator\.clipboard\.writeText\(result\.value\)/);
   assert.match(platforms, /whitespace-pre-wrap/);
@@ -47,10 +47,10 @@ test("partial profile creation preserves form state and retries only platform cr
   assert.match(source, /Your entries are preserved/);
 });
 
-test("profile detail exposes permission-aware platform, history, and access tabs", () => {
+test("profile detail shares platform and history controls while retaining creator capabilities", () => {
   const source = read("../src/pages/TwofaProfilePage.jsx");
-  for (const permission of ["TWOFA_PLATFORM_ADD", "TWOFA_PLATFORM_EDIT", "TWOFA_PLATFORM_DELETE", "TWOFA_INFORMATION_REVEAL", "TWOFA_KEY_REVEAL", "TWOFA_HISTORY_VIEW", "TWOFA_ACCESS_MANAGE"])
-    assert.match(source, new RegExp(permission));
+  assert.match(source, /canAdd: true/);
+  assert.match(source, /profile\.capabilities\.canEdit/);
   for (const label of ["Platforms", "Activity History", "Employee Access"])
     assert.ok(source.includes(label));
 });

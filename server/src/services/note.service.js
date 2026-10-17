@@ -18,7 +18,7 @@ import {
 } from "docx";
 
 const selectSql = (viewerId) =>
-  `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.is_archived isArchived,n.author_user_id authorUserId,n.related_task_id relatedTaskId,n.category_id categoryId,nc.name categoryName,nc.color categoryColor,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CONCAT(e.first_name,' ',e.last_name) authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount,(SELECT COUNT(*) FROM note_replies nr WHERE nr.note_id=n.id AND nr.deleted_at IS NULL) replyCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id LEFT JOIN note_categories nc ON nc.id=n.category_id`;
+  `SELECT n.id,n.title,n.summary,n.content,n.visibility,n.is_important isImportant,n.is_archived isArchived,n.author_user_id authorUserId,n.related_task_id relatedTaskId,n.category_id categoryId,nc.name categoryName,nc.color categoryColor,COALESCE(n.related_task_title,t.title) relatedTaskTitle,n.created_at createdAt,n.updated_at updatedAt,CASE WHEN u.status='INACTIVE' AND e.status='INACTIVE' THEN CONCAT('Former Employee — ',e.first_name,' ',e.last_name) ELSE CONCAT(e.first_name,' ',e.last_name) END authorName,EXISTS(SELECT 1 FROM note_pins np WHERE np.note_id=n.id AND np.user_id=${Number(viewerId)}) isPinned,EXISTS(SELECT 1 FROM notifications nn WHERE nn.user_id=${Number(viewerId)} AND nn.reference_type='NOTE' AND nn.reference_id=n.id AND nn.is_read=0 AND nn.in_app_allowed=1) isNew,(SELECT id FROM note_images WHERE note_id=n.id ORDER BY uploaded_at,id LIMIT 1) previewImageId,(SELECT COUNT(*) FROM note_images WHERE note_id=n.id) imageCount,(SELECT COUNT(*) FROM note_replies nr WHERE nr.note_id=n.id AND nr.deleted_at IS NULL) replyCount FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id LEFT JOIN tasks t ON t.id=n.related_task_id LEFT JOIN note_categories nc ON nc.id=n.category_id`;
 const map = (row) => ({
   ...row,
   isImportant: Boolean(row.isImportant),
@@ -55,7 +55,7 @@ export async function requireAccessibleNote(
     predicate = await access(user, params, executor);
   const archiveOwner = includeArchived ? " AND n.author_user_id=?" : "";
   const [[note]] = await executor.execute(
-    `SELECT n.id,n.title,n.visibility,n.status,n.is_archived isArchived,n.author_user_id authorUserId,CONCAT(e.first_name,' ',e.last_name) authorName
+    `SELECT n.id,n.title,n.visibility,n.status,n.is_archived isArchived,n.author_user_id authorUserId,CASE WHEN u.status='INACTIVE' AND e.status='INACTIVE' THEN CONCAT('Former Employee — ',e.first_name,' ',e.last_name) ELSE CONCAT(e.first_name,' ',e.last_name) END authorName
      FROM work_notes n JOIN users u ON u.id=n.author_user_id LEFT JOIN employees e ON e.id=u.employee_id
      WHERE n.id=? AND n.status='${includeArchived ? "ARCHIVED" : "PUBLISHED"}' AND n.is_archived=${includeArchived ? 1 : 0} AND ${predicate}${archiveOwner}${forUpdate ? " FOR UPDATE" : ""}`,
     [id, ...params, ...(includeArchived ? [user.id] : [])],

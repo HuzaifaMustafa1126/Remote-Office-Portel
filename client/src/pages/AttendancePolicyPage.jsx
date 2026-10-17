@@ -13,6 +13,16 @@ const initial = {
   half_day_salary_deduction_percent: 50,
   count_half_day_as_late: false,
   late_counter_period: "PAYROLL_CYCLE",
+  sandwich_leave_enabled: true,
+  sandwich_apply_unapproved: true,
+  sandwich_apply_unpaid: true,
+  sandwich_apply_paid: false,
+  sandwich_include_weekly_off: true,
+  sandwich_include_company_holidays: true,
+  sandwich_include_public_holidays: true,
+  sandwich_include_adjacent: true,
+  sandwich_include_between: true,
+  sandwich_show_in_payroll: true,
   effective_from: new Date().toISOString().slice(0, 10),
 };
 export default function AttendancePolicyPage() {
@@ -55,6 +65,29 @@ export default function AttendancePolicyPage() {
         <label className="flex justify-between">
           Grace minutes {num("grace_minutes")}
         </label>
+        <section className="space-y-3 border-t pt-4">
+          <div>
+            <h2 className="font-bold">Sandwich Leave Policy</h2>
+            <p className="text-xs text-muted-foreground">Use configured weekly offs and company calendar holidays in salary deductions.</p>
+          </div>
+          {[
+            ["sandwich_leave_enabled", "Enable sandwich leave policy"],
+            ["sandwich_apply_unapproved", "Apply to unapproved leave / absence"],
+            ["sandwich_apply_unpaid", "Apply to approved unpaid leave"],
+            ["sandwich_apply_paid", "Apply to approved paid leave"],
+            ["sandwich_include_weekly_off", "Include weekly offs"],
+            ["sandwich_include_company_holidays", "Include company and special holidays"],
+            ["sandwich_include_public_holidays", "Include public holidays"],
+            ["sandwich_include_adjacent", "Include adjacent holidays (one-sided)"],
+            ["sandwich_include_between", "Include holidays between leave days"],
+            ["sandwich_show_in_payroll", "Show sandwich deductions in payroll"],
+          ].map(([key, label]) => (
+            <label className="flex justify-between gap-4 text-sm" key={key}>
+              {label}
+              <input type="checkbox" checked={p[key]} onChange={(e) => f(key, e.target.checked)} />
+            </label>
+          ))}
+        </section>
         <label className="flex justify-between">
           Late instances required {num("late_instances_required")}
         </label>

@@ -117,7 +117,9 @@ test("platform validation supports defaults, Other, duplicates, partial update, 
     }).success,
     false,
   );
-  assert.equal(revealKeySchema.safeParse({ currentPassword: "dummy" }).success, true);
+  assert.deepEqual(revealKeySchema.parse({}), { operation: "REVEAL" });
+  assert.deepEqual(revealKeySchema.parse({ operation: "COPY" }), { operation: "COPY" });
+  assert.equal(revealKeySchema.safeParse({ currentPassword: "dummy" }).success, false);
 });
 
 test("credential reveal limiter rejects attempts beyond the configured window quota", () => {
@@ -142,20 +144,12 @@ test("credential reveal limiter rejects attempts beyond the configured window qu
   assert.ok(Number(headers["Retry-After"]) >= 1);
 });
 
-test("platform routes use separate permissions and reveal controllers set no-store headers", () => {
+test("shared platform routes retain validation, rate limiting, and no-store headers", () => {
   const routes = fs.readFileSync(
     new URL("../src/routes/twofa.routes.js", import.meta.url),
     "utf8",
   );
-  for (const permission of [
-    "2fa.profile.view",
-    "2fa.platform.add",
-    "2fa.platform.edit",
-    "2fa.platform.delete",
-    "2fa.information.reveal",
-    "2fa.key.reveal",
-  ])
-    assert.match(routes, new RegExp(permission.replaceAll(".", "\\.")));
+  assert.doesNotMatch(routes, /permit\("2fa\.(profile\.view|platform\.|information\.reveal|key\.reveal)/);
   const controller = fs.readFileSync(
     new URL("../src/controllers/twofaPlatform.controller.js", import.meta.url),
     "utf8",

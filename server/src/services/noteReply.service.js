@@ -4,7 +4,7 @@ import { requireAccessibleNote } from "./note.service.js";
 import { notifyByPolicy } from "./notification.service.js";
 
 const replySelect = `SELECT nr.id,nr.note_id noteId,nr.content,nr.created_by createdBy,nr.created_at createdAt,nr.updated_at updatedAt,
-  CONCAT(e.first_name,' ',e.last_name) authorName
+  CASE WHEN u.status='INACTIVE' AND e.status='INACTIVE' THEN CONCAT('Former Employee — ',e.first_name,' ',e.last_name) ELSE CONCAT(e.first_name,' ',e.last_name) END authorName
   FROM note_replies nr JOIN users u ON u.id=nr.created_by LEFT JOIN employees e ON e.id=u.employee_id`;
 const mapReply = (row, mentions = []) => ({
   ...row,

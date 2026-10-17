@@ -902,7 +902,7 @@ export async function reconcileOpenShift(id, data, actor) {
       description: `Open shift #${id} was manually closed at ${clockOut}. Reason: ${data.comment}`,
     });
     await conn.execute(
-      "UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",
+      "UPDATE payroll_runs SET review_required=TRUE WHERE ?>=period_start AND ?<=period_end",
       [record.work_date, record.work_date],
     );
     const [[updated]] = await conn.execute(

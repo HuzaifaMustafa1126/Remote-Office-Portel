@@ -59,7 +59,7 @@ const groups = [
         P.DAY_END_REPORT_VIEW_ALL,
       ],
       ["Notes", "/notes", NotebookPen, P.NOTES_VIEW_OWN],
-      ["2FA Manager", "/2fa-manager", KeyRound, P.TWOFA_PROFILE_VIEW],
+      ["2FA Manager", "/2fa-manager", KeyRound, null],
     ],
   },
   {

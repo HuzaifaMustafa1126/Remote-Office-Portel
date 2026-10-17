@@ -48,7 +48,7 @@ export async function overview(f) {
     [d.from, d.to],
   );
   const [[p]] = await pool.execute(
-    "SELECT COALESCE(SUM(pi.net_salary),0) totalPayroll,COALESCE(SUM(pi.leave_deduction+pi.absence_deduction),0) totalDeductions FROM payroll_items pi JOIN payroll_runs pr ON pr.id=pi.payroll_run_id WHERE pr.period_start<=? AND pr.period_end>=?",
+    "SELECT COALESCE(SUM(pi.net_salary),0) totalPayroll,COALESCE(SUM(pi.leave_deduction+pi.absence_deduction+pi.sandwich_deduction),0) totalDeductions FROM payroll_items pi JOIN payroll_runs pr ON pr.id=pi.payroll_run_id WHERE pr.period_start<=? AND pr.period_end>=?",
     [d.to, d.from],
   );
   return { period: d, ...a, ...l, ...p };
@@ -155,7 +155,7 @@ export async function payroll(f) {
     p,
   );
   const [rows] = await pool.execute(
-    `SELECT pi.id,CONCAT(e.first_name,' ',e.last_name) employee,pi.base_salary baseSalary,CONCAT(pr.period_start,' → ',pr.period_end) period,pi.working_days workingDays,pi.present_days presentDays,pi.free_leave_days freeLeave,pi.deductible_leave_days deductibleLeave,pi.absence_days unauthorizedAbsence,pi.leave_deduction leaveDeduction,pi.absence_deduction absenceDeduction,pi.adjustments,pi.net_salary netSalary,pr.status FROM payroll_items pi JOIN payroll_runs pr ON pr.id=pi.payroll_run_id JOIN employees e ON e.id=pi.employee_id WHERE ${w} ORDER BY pr.period_start DESC,e.first_name LIMIT ? OFFSET ?`,
+    `SELECT pi.id,CONCAT(e.first_name,' ',e.last_name) employee,pi.base_salary baseSalary,CONCAT(pr.period_start,' → ',pr.period_end) period,pi.working_days workingDays,pi.present_days presentDays,pi.free_leave_days freeLeave,pi.deductible_leave_days deductibleLeave,pi.absence_days unauthorizedAbsence,IF(pi.show_sandwich_breakdown,pi.sandwich_days,NULL) sandwichDays,pi.leave_deduction leaveDeduction,pi.absence_deduction absenceDeduction,IF(pi.show_sandwich_breakdown,pi.sandwich_deduction,NULL) sandwichDeduction,pi.adjustments,pi.net_salary netSalary,pr.status FROM payroll_items pi JOIN payroll_runs pr ON pr.id=pi.payroll_run_id JOIN employees e ON e.id=pi.employee_id WHERE ${w} ORDER BY pr.period_start DESC,e.first_name LIMIT ? OFFSET ?`,
     [...p, ...pg(f)],
   );
   return result(rows, c.total, f, null);

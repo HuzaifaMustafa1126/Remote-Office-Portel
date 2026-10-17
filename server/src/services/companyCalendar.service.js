@@ -28,7 +28,7 @@ async function reconcile(c, dates) {
     await recalculatePayrollPeriodsForDates(c, employeeId, dates);
   for (const date of dates)
     await c.execute(
-      "UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",
+      "UPDATE payroll_runs SET review_required=TRUE WHERE ?>=period_start AND ?<=period_end",
       [date, date],
     );
   const [requests] = await c.execute(

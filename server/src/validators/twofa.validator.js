@@ -158,11 +158,11 @@ export const updatePlatformSchema = z
       });
   });
 
-export const revealSchema = z.object({}).strict();
-
-export const revealKeySchema = z
-  .object({ currentPassword: z.string().min(1).max(72) })
+export const revealSchema = z
+  .object({ operation: z.enum(["REVEAL", "COPY"]).default("REVEAL") })
   .strict();
+
+export const revealKeySchema = revealSchema;
 
 const employeeId = z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const accessPermissionsSchema = z

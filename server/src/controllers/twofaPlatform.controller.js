@@ -64,6 +64,7 @@ export async function remove(req, res) {
       req.params.platformId,
       req.user,
       twofaRequestContext(req),
+      { operation: req.body.operation },
     ),
   });
 }
@@ -86,6 +87,7 @@ export async function revealTwofa(req, res) {
       "twofa_information",
       req.user,
       twofaRequestContext(req),
+      { operation: req.body.operation },
     ),
   });
 }
@@ -99,7 +101,7 @@ export async function revealKey(req, res) {
       "auth_key",
       req.user,
       twofaRequestContext(req),
-      { currentPassword: req.body.currentPassword },
+      { operation: req.body.operation },
     ),
   });
 }

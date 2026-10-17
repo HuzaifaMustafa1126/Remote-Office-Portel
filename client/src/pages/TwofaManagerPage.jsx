@@ -6,10 +6,8 @@ import EmptyState from "../components/common/EmptyState";
 import PageHeader from "../components/common/PageHeader";
 import ResponsiveTable from "../components/common/ResponsiveTable";
 import ProfileCreateModal from "../components/twofa/ProfileCreateModal";
-import usePermission from "../hooks/usePermission";
 import * as twofa from "../services/twofa.service";
 import { errorMessage } from "../utils/helpers";
-import { PERMISSIONS as P } from "../utils/permissions";
 
 const when = (value) =>
   value
@@ -21,7 +19,6 @@ const when = (value) =>
 
 export default function TwofaManagerPage() {
   const navigate = useNavigate();
-  const canCreate = usePermission(P.TWOFA_PROFILE_CREATE);
   const [query, setQuery] = useState({
     search: "",
     page: 1,
@@ -56,13 +53,13 @@ export default function TwofaManagerPage() {
         title="2FA Manager"
         description="Manage authentication profiles and securely stored platform credentials."
         action={
-          canCreate ? (
+          (
             <Button onClick={() => setCreateOpen(true)}>
               <span className="flex items-center gap-2">
                 <Plus size={17} /> Add Profile
               </span>
             </Button>
-          ) : null
+          )
         }
       />
       {error && (

@@ -1,15 +1,26 @@
 import pool from "../config/database.js";
-import { isCeoUser } from "../middleware/ceo.middleware.js";
 import ApiError from "../utils/ApiError.js";
 import { recordTwofaActivity } from "./twofaActivity.service.js";
 
 export const TWOFA_PROFILE_ACTION = Object.freeze({
   VIEW: "VIEW",
+  ADD: "ADD",
   EDIT: "EDIT",
   REVEAL_TWOFA: "REVEAL_TWOFA",
   REVEAL_AUTH_KEY: "REVEAL_AUTH_KEY",
   MANAGE_ACCESS: "MANAGE_ACCESS",
 });
+
+export async function isTwofaAdmin(actor, executor = pool) {
+  const [[row]] = await executor.execute(
+    `SELECT EXISTS(
+       SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id
+       WHERE ur.user_id=? AND UPPER(r.name) IN('CEO','ADMIN','SUPER_ADMIN')
+     ) allowed`,
+    [actor.id],
+  );
+  return Boolean(row?.allowed);
+}
 
 export const twofaProfileNotFound = () =>
   new ApiError(404, "2FA profile not found", "TWOFA_PROFILE_NOT_FOUND");
@@ -48,18 +59,20 @@ export async function getTwofaProfileAuthorization(
     [actor.employee_id],
   );
   if (!employee) return { profile, access: null, allowed: false, isCeo: false };
-  const isCeo = await isCeoUser(actor.id, executor);
+  const isCeo = await isTwofaAdmin(actor, executor);
   const [[access]] = await executor.execute(
     `SELECT access_type,can_view,can_edit,can_reveal_twofa,can_reveal_auth_key
      FROM twofa_profile_access WHERE profile_id=? AND employee_id=? LIMIT 1`,
     [profile.id, actor.employee_id],
   );
-  // Profile discovery is shared: every active employee with the route-level
-  // view permission can see profiles. An OWNER/GRANTED row scopes sensitive
-  // changes and reveals; module permissions remain the final action gate.
-  const allowed = action === TWOFA_PROFILE_ACTION.VIEW
-    ? true
-    : isCeo || Boolean(access);
+  const sharedAction = [
+    TWOFA_PROFILE_ACTION.VIEW,
+    TWOFA_PROFILE_ACTION.ADD,
+    TWOFA_PROFILE_ACTION.REVEAL_TWOFA,
+    TWOFA_PROFILE_ACTION.REVEAL_AUTH_KEY,
+  ].includes(action);
+  const isCreator = Number(profile.created_by) === Number(actor.id);
+  const allowed = sharedAction ? true : isCeo || isCreator;
   return { profile, access: access || null, allowed, isCeo };
 }
 

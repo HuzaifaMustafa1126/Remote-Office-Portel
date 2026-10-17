@@ -52,19 +52,12 @@ test("profile ID, pagination, search, and sort inputs are strictly bounded", () 
   assert.equal(listProfilesSchema.safeParse({ limit: 101 }).success, false);
 });
 
-test("profile routes apply the requested granular permission middleware", () => {
+test("shared profile routes rely on authenticated active-employee checks", () => {
   const source = fs.readFileSync(
     new URL("../src/routes/twofa.routes.js", import.meta.url),
     "utf8",
   );
-  for (const permission of [
-    "2fa.profile.create",
-    "2fa.profile.view",
-    "2fa.profile.edit",
-    "2fa.profile.delete",
-  ]) {
-    assert.match(source, new RegExp(permission.replaceAll(".", "\\.")));
-  }
+  assert.doesNotMatch(source, /permit\("2fa\.profile\.(create|view|edit|delete)"\)/);
   assert.match(source, /validate\(validation\.profileIdSchema, "params"\)/);
   assert.match(source, /validate\(validation\.listProfilesSchema, "query"\)/);
 });

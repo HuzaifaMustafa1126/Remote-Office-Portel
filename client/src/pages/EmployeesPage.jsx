@@ -258,22 +258,22 @@ export default function EmployeesPage() {
       </Modal>
       <Modal
         open={Boolean(deleting)}
-        title="Permanently Delete Employee?"
+        title="Delete Employee?"
         onClose={() => !busy && setDeleting(null)}
       >
         {deleting && (
           <div>
             <p className="text-foreground">
-              You are about to permanently delete{" "}
+              You are about to delete access for{" "}
               <b>
                 {deleting.firstName} {deleting.lastName}
               </b>
               .
             </p>
-            <p className="mt-3 text-sm font-medium text-danger">
-              Their account and all attendance, salary, leave, shift, payroll,
-              and related records will be permanently removed. This cannot be
-              undone.
+            <p className="mt-3 text-sm text-muted-foreground">
+              This employee will lose access to the system. Their shared Notes,
+              2FA profiles, Authentication Keys, and historical records will be
+              preserved.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <Button
@@ -284,7 +284,7 @@ export default function EmployeesPage() {
                 Cancel
               </Button>
               <Button variant="danger" disabled={busy} onClick={removeEmployee}>
-                {busy ? "Deleting…" : "Delete Permanently"}
+                {busy ? "Deleting…" : "Delete Employee"}
               </Button>
             </div>
           </div>

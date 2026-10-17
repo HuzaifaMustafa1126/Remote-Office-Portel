@@ -53,7 +53,8 @@ try {
       first_name VARCHAR(80) NOT NULL,
       last_name VARCHAR(80) NOT NULL,
       email VARCHAR(190) NOT NULL UNIQUE,
-      status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE'
+      status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+      deleted_at DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     CREATE TABLE users (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -86,6 +87,7 @@ try {
     "076_twofa_platform_credentials.sql",
     "077_twofa_employee_access_capabilities.sql",
     "078_twofa_activity_history_snapshots.sql",
+    "079_twofa_shared_employee_credentials.sql",
   ]) {
     const migration = await fs.readFile(
       new URL(`../database/migrations/${migrationName}`, import.meta.url),
@@ -94,7 +96,7 @@ try {
     await database.query(migration);
   }
 
-  async function account(code, firstName, password) {
+  async function account(code, firstName, password, role = null) {
     const [employee] = await database.execute(
       "INSERT INTO employees(employee_code,first_name,last_name,email) VALUES(?,?,'Tester',?)",
       [code, firstName, `${code.toLowerCase()}@example.invalid`],
@@ -104,12 +106,18 @@ try {
       "INSERT INTO users(employee_id,email,password_hash) VALUES(?,?,?)",
       [employee.insertId, `${code.toLowerCase()}@example.invalid`, hash],
     );
+    if (role) {
+      await database.execute("INSERT IGNORE INTO roles(name) VALUES(?)", [role]);
+      const [[savedRole]] = await database.execute("SELECT id FROM roles WHERE name=?", [role]);
+      await database.execute("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", [user.insertId, savedRole.id]);
+    }
     return { id: Number(user.insertId), employee_id: Number(employee.insertId) };
   }
 
   const ownerPassword = "Dummy owner password";
   const owner = await account("OWNER", "Owner", ownerPassword);
   const outsider = await account("OUTSIDER", "Outsider", "Dummy outsider password");
+  const adminUser = await account("ADMIN", "Admin", "Dummy admin password", "ADMIN");
   const profile = await createProfile(
     { profileName: "Dummy Platform Profile" },
     owner,
@@ -185,27 +193,39 @@ try {
   ])
     assert.equal(serializedList.includes(forbidden), false);
 
-  await assert.rejects(
-    addPlatforms(
+  const [outsiderPlatform] = await addPlatforms(
       profile.id,
-      [{ platformName: "FACEBOOK", authKey: "denied dummy key" }],
+      [{ platformName: "FACEBOOK", authKey: "shared dummy key" }],
       outsider,
       context,
       database,
-    ),
-    (error) => error.statusCode === 404,
   );
-  await assert.rejects(
-    revealCredential(
+  assert.equal((await revealCredential(
       instagram.id,
       "twofa_information",
       outsider,
       context,
       {},
       database,
-    ),
+    )).value, twofaSecret);
+  await assert.rejects(
+    updatePlatform(instagram.id, { accountLabel: "Denied" }, outsider, context, database),
     (error) => error.statusCode === 404,
   );
+  assert.equal((await updatePlatform(
+    instagram.id,
+    { accountLabel: "Admin Updated" },
+    adminUser,
+    context,
+    database,
+  )).accountLabel, "Admin Updated");
+  assert.equal((await updatePlatform(
+    outsiderPlatform.id,
+    { accountLabel: "Creator Updated" },
+    outsider,
+    context,
+    database,
+  )).accountLabel, "Creator Updated");
 
   const beforeMetadataUpdate = Buffer.from(storedInstagram.ciphertext);
   const renamed = await updatePlatform(
@@ -245,31 +265,26 @@ try {
     ).value,
     replacementTwofa,
   );
-  await assert.rejects(
-    revealCredential(
+  assert.equal(
+    (await revealCredential(
       instagram.id,
       "auth_key",
       owner,
       context,
-      { currentPassword: "wrong dummy password" },
+      {},
       database,
-    ),
-    (error) =>
-      error.statusCode === 401 && error.code === "TWOFA_REAUTHENTICATION_FAILED",
-  );
-  assert.equal(
-    (
-      await revealCredential(
-        instagram.id,
-        "auth_key",
-        owner,
-        context,
-        { currentPassword: ownerPassword },
-        database,
-      )
-    ).value,
+    )).value,
     replacementKey,
   );
+  assert.equal((await revealCredential(
+    instagram.id, "auth_key", outsider, context, { operation: "COPY" }, database,
+  )).value, replacementKey);
+  await database.execute("UPDATE employees SET status='INACTIVE' WHERE id=?", [outsider.employee_id]);
+  await assert.rejects(
+    revealCredential(instagram.id, "auth_key", outsider, context, {}, database),
+    (error) => error.statusCode === 404,
+  );
+  await database.execute("UPDATE employees SET status='ACTIVE' WHERE id=?", [outsider.employee_id]);
 
   const cleared = await updatePlatform(
     instagram.id,
@@ -291,7 +306,7 @@ try {
     (error) => error.statusCode === 400,
   );
 
-  const beforeRollback = listed.length;
+  const beforeRollback = listed.length + 1;
   await database.query(`
     CREATE TRIGGER fail_platform_activity
     BEFORE INSERT ON twofa_activity_logs
@@ -333,7 +348,7 @@ try {
     END
   `);
   await assert.rejects(
-    revealCredential(instagram.id, "auth_key", owner, context, { currentPassword: ownerPassword }, database),
+    revealCredential(instagram.id, "auth_key", owner, context, {}, database),
     /forced reveal activity failure/,
   );
   await database.query("DROP TRIGGER fail_reveal_activity");
@@ -345,13 +360,13 @@ try {
       "auth_key",
       owner,
       context,
-      { currentPassword: ownerPassword },
+      {},
       database,
     ),
     (error) => error.statusCode === 404,
   );
   const remaining = await listPlatforms(profile.id, owner, context, database);
-  assert.equal(remaining.length, 2);
+  assert.equal(remaining.length, 3);
   assert.equal(remaining.every((item) => item.id !== instagram.id), true);
 
   const [activity] = await database.execute(
@@ -377,13 +392,13 @@ try {
     "AUTH_KEY_UPDATED",
     "TWOFA_REVEALED",
     "AUTH_KEY_REVEALED",
+    "AUTH_KEY_COPIED",
     "PLATFORM_REMOVED",
-    "ACCESS_DENIED",
   ])
     assert.equal(activity.some((row) => row.action === action), true, action);
 
   console.log(
-    "2FA platform encryption, CRUD, bulk rollback, reveal, reauthentication, authorization, deletion, and audit tests passed.",
+    "2FA platform encryption, shared reveal/copy, creator/admin authorization, deletion, and audit tests passed.",
   );
 } finally {
   if (database) await database.end();

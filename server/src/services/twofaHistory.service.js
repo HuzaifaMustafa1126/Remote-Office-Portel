@@ -8,6 +8,7 @@ const descriptions = {
   PLATFORM_UPDATED: "Updated platform", PLATFORM_REMOVED: "Removed platform",
   TWOFA_UPDATED: "Updated 2FA information", AUTH_KEY_UPDATED: "Updated authentication key",
   TWOFA_REVEALED: "Revealed 2FA information", AUTH_KEY_REVEALED: "Revealed authentication key",
+  TWOFA_COPIED: "Copied 2FA information", AUTH_KEY_COPIED: "Copied authentication key",
   ACCESS_GRANTED: "Granted employee access", ACCESS_UPDATED: "Updated employee access",
   ACCESS_REVOKED: "Revoked employee access", ACCESS_DENIED: "Unauthorized access attempt",
 };

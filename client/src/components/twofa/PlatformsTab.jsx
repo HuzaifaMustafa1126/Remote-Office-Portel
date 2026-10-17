@@ -313,61 +313,6 @@ function EditModal({ platform, onClose, onSaved }) {
   );
 }
 
-function ReauthModal({ platform, onClose, onReveal }) {
-  const [password, setPassword] = useState(""),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const submit = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await onReveal(password);
-      setPassword("");
-      onClose();
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      open={Boolean(platform)}
-      title="Confirm Your Password"
-      onClose={() => !busy && onClose()}
-    >
-      <form onSubmit={submit} className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Reauthentication is required every time an authentication key is
-          revealed or copied.
-        </p>
-        <Input
-          autoFocus
-          label="Current Password"
-          type="password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {error && (
-          <p
-            role="alert"
-            className="rounded-xl bg-danger-soft p-3 text-sm text-danger"
-          >
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button disabled={busy}>{busy ? "Verifying…" : "Reveal Key"}</Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 export default function PlatformsTab({
   profile,
   permissions,
@@ -379,7 +324,6 @@ export default function PlatformsTab({
     [error, setError] = useState(""),
     [addOpen, setAddOpen] = useState(false),
     [editing, setEditing] = useState(null),
-    [reauth, setReauth] = useState(null),
     [revealed, setRevealed] = useState({});
   const revealedRef = useRef(revealed);
   revealedRef.current = revealed;
@@ -403,28 +347,24 @@ export default function PlatformsTab({
     const timer = setTimeout(() => setRevealed({}), 60000);
     return () => clearTimeout(timer);
   }, [revealed]);
-  const disclose = async (platform, field, password, copy = false) => {
+  const disclose = async (platform, field, copy = false) => {
     const result =
       field === "key"
-        ? await twofa.revealAuthKey(platform.id, password)
-        : await twofa.revealTwofa(platform.id);
-    setRevealed((current) => ({
-      ...current,
-      [`${platform.id}:${field}`]: result.value,
-    }));
+        ? await twofa.revealAuthKey(platform.id, copy ? "COPY" : "REVEAL")
+        : await twofa.revealTwofa(platform.id, copy ? "COPY" : "REVEAL");
     if (copy) {
       await navigator.clipboard.writeText(result.value);
-      setNotice(
-        "Credential copied. Clipboard contents are controlled by your device.",
-      );
-    }
+      setNotice("Copied");
+    } else
+      setRevealed((current) => ({
+        ...current,
+        [`${platform.id}:${field}`]: result.value,
+      }));
   };
   const action = (platform, field, copy = false) => {
-    if (field === "key") setReauth({ platform, copy });
-    else
-      disclose(platform, field, null, copy).catch((requestError) =>
-        setError(errorMessage(requestError)),
-      );
+    disclose(platform, field, copy).catch((requestError) =>
+      setError(errorMessage(requestError)),
+    );
   };
   const remove = async (platform) => {
     if (
@@ -451,7 +391,7 @@ export default function PlatformsTab({
             Credentials stay masked until you explicitly reveal them.
           </p>
         </div>
-        {permissions.canAdd && profile.capabilities.canEdit && (
+        {permissions.canAdd && (
           <Button onClick={() => setAddOpen(true)}>
             <span className="flex items-center gap-2">
               <Plus size={16} /> Add Platform
@@ -496,7 +436,7 @@ export default function PlatformsTab({
                   </div>
                 </div>
                 <div className="flex">
-                  {permissions.canEdit && profile.capabilities.canEdit && (
+                  {permissions.canEdit && platform.capabilities.canEdit && (
                     <button
                       aria-label={`Edit ${platform.platformName}`}
                       onClick={() => setEditing(platform)}
@@ -505,7 +445,7 @@ export default function PlatformsTab({
                       <Pencil size={17} />
                     </button>
                   )}
-                  {permissions.canDelete && profile.capabilities.canEdit && (
+                  {permissions.canDelete && platform.capabilities.canEdit && (
                     <button
                       aria-label={`Remove ${platform.platformName}`}
                       onClick={() => remove(platform)}
@@ -569,22 +509,7 @@ export default function PlatformsTab({
                           </button>
                           <button
                             aria-label={`Copy ${label}`}
-                            onClick={() =>
-                              value
-                                ? navigator.clipboard
-                                    .writeText(value)
-                                    .then(() =>
-                                      setNotice(
-                                        "Credential copied. Clipboard contents are controlled by your device.",
-                                      ),
-                                    )
-                                    .catch(() =>
-                                      setError(
-                                        "Unable to copy the credential. Check browser clipboard permission.",
-                                      ),
-                                    )
-                                : action(platform, field, true)
-                            }
+                            onClick={() => action(platform, field, true)}
                             className="rounded-lg p-2 hover:bg-hover"
                           >
                             <Clipboard size={16} />
@@ -627,13 +552,6 @@ export default function PlatformsTab({
           setRevealed({});
           load();
         }}
-      />
-      <ReauthModal
-        platform={reauth?.platform}
-        onClose={() => setReauth(null)}
-        onReveal={(password) =>
-          disclose(reauth.platform, "key", password, reauth.copy)
-        }
       />
     </div>
   );

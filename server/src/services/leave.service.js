@@ -323,7 +323,7 @@ export async function reviewLeave(id, status, comment, reviewer) {
     });
     for (const d of days)
       await c.execute(
-        "UPDATE payroll_runs SET review_required=TRUE WHERE status IN ('APPROVED','PAID') AND ?>=period_start AND ?<=period_end",
+        "UPDATE payroll_runs SET review_required=TRUE WHERE ?>=period_start AND ?<=period_end",
         [d.leave_date, d.leave_date],
       );
     const [[owner]] = await c.execute(

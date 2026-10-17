@@ -56,7 +56,8 @@ try {
       first_name VARCHAR(80) NOT NULL,
       last_name VARCHAR(80) NOT NULL,
       email VARCHAR(190) NOT NULL UNIQUE,
-      status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE'
+      status ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+      deleted_at DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     CREATE TABLE users (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -116,6 +117,11 @@ try {
     "utf8",
   );
   await database.query(historyMigration);
+  const sharedAccessMigration = await fs.readFile(
+    new URL("../database/migrations/079_twofa_shared_employee_credentials.sql", import.meta.url),
+    "utf8",
+  );
+  await database.query(sharedAccessMigration);
   const [[schemaAudit]] = await database.execute(`
     SELECT
       (SELECT COUNT(*) FROM information_schema.columns
@@ -266,7 +272,7 @@ try {
   const unchanged = await updateProfile(
     created.id,
     { profileName: "Client Zebra" },
-    colleague,
+    owner,
     requestContext,
     database,
   );
@@ -280,12 +286,20 @@ try {
   const updated = await updateProfile(
     created.id,
     { profileName: "Client Zebra Updated" },
-    colleague,
+    owner,
     requestContext,
     database,
   );
   assert.equal(updated.changed, true);
-  assert.equal(updated.updatedBy.employeeId, colleague.employee_id);
+  assert.equal(updated.updatedBy.employeeId, owner.employee_id);
+  const adminUpdated = await updateProfile(
+    created.id,
+    { profileName: "Client Zebra Admin Updated" },
+    ceo,
+    requestContext,
+    database,
+  );
+  assert.equal(adminUpdated.updatedBy.employeeId, ceo.employee_id);
   const [[updateEvent]] = await database.execute(
     "SELECT changed_fields changedFields FROM twofa_activity_logs WHERE profile_id=? AND action='PROFILE_UPDATED' ORDER BY id DESC LIMIT 1",
     [created.id],
@@ -313,13 +327,13 @@ try {
       owner.id,
     ],
   );
-  await deleteProfile(created.id, colleague, requestContext, database);
+  await deleteProfile(created.id, ceo, requestContext, database);
   const [[deleted]] = await database.execute(
     "SELECT deleted_at deletedAt,deleted_by deletedBy FROM twofa_profiles WHERE id=?",
     [created.id],
   );
   assert.ok(deleted.deletedAt);
-  assert.equal(Number(deleted.deletedBy), colleague.id);
+  assert.equal(Number(deleted.deletedBy), ceo.id);
   const [[deletedPlatform]] = await database.execute(
     "SELECT deleted_at deletedAt FROM twofa_platforms WHERE id=?",
     [platform.insertId],
@@ -337,7 +351,7 @@ try {
   assert.ok(history.rows.some((event) => event.action === "ACCESS_GRANTED"));
   assert.ok(history.rows.some((event) => event.action === "ACCESS_REVOKED"));
   assert.ok(history.rows.some((event) => event.action === "ACCESS_DENIED"));
-  assert.equal(history.rows[0].profileName, "Client Zebra Updated");
+  assert.equal(history.rows[0].profileName, "Client Zebra Admin Updated");
   assert.match(history.rows[0].createdAt, /Z$/);
   assert.equal(history.rows.find((event) => event.action === "PROFILE_CREATED").profileName, "Client Zebra");
   await database.execute("UPDATE employees SET first_name='Renamed' WHERE id=?", [owner.employee_id]);
@@ -349,7 +363,7 @@ try {
     owner,
     database,
   );
-  assert.equal(filtered.meta.total, 1);
+  assert.equal(filtered.meta.total, 2);
   assert.equal(filtered.rows.length, 1);
   const outsiderGlobal = await globalHistory(historyQuery, outsider, database);
   assert.equal(outsiderGlobal.rows.some((event) => event.profileId === created.id), true);

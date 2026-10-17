@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import bcrypt from "bcrypt";
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import {
@@ -8,7 +7,9 @@ import {
 } from "../utils/twofaEncryption.js";
 import { recordTwofaActivity } from "./twofaActivity.service.js";
 import {
+  assertActiveTwofaEmployee,
   getTwofaProfileAuthorization,
+  isTwofaAdmin,
   recordTwofaAccessDenied,
   requireTwofaEmployee,
   TWOFA_PROFILE_ACTION,
@@ -38,9 +39,9 @@ const safeSelect = `
     (tp.twofa_information_ciphertext IS NOT NULL) hasTwofaInformation,
     (tp.auth_key_ciphertext IS NOT NULL) hasAuthKey,
     tp.created_by createdByUserId,cu.employee_id createdByEmployeeId,
-    COALESCE(CONCAT(ce.first_name,' ',ce.last_name),cu.email) createdByName,
+    COALESCE(CASE WHEN cu.status='INACTIVE' AND ce.status='INACTIVE' THEN CONCAT('Former Employee — ',ce.first_name,' ',ce.last_name) ELSE CONCAT(ce.first_name,' ',ce.last_name) END,cu.email) createdByName,
     tp.updated_by updatedByUserId,uu.employee_id updatedByEmployeeId,
-    COALESCE(CONCAT(ue.first_name,' ',ue.last_name),uu.email) updatedByName,
+    COALESCE(CASE WHEN uu.status='INACTIVE' AND ue.status='INACTIVE' THEN CONCAT('Former Employee — ',ue.first_name,' ',ue.last_name) ELSE CONCAT(ue.first_name,' ',ue.last_name) END,uu.email) updatedByName,
     tp.created_at createdAt,tp.updated_at updatedAt
   FROM twofa_platforms tp
   LEFT JOIN users cu ON cu.id=tp.created_by
@@ -177,7 +178,7 @@ export async function addPlatforms(
   try {
     await connection.beginTransaction();
     const authorization = await getTwofaProfileAuthorization(
-      connection, profileId, actor, TWOFA_PROFILE_ACTION.EDIT, { lock: true },
+      connection, profileId, actor, TWOFA_PROFILE_ACTION.ADD, { lock: true },
     );
     if (!authorization.profile) throw profileNotFound();
     if (!authorization.allowed) {
@@ -235,7 +236,16 @@ export async function listPlatforms(
      ORDER BY tp.created_at,tp.id`,
     [profileId],
   );
-  return rows.map(present);
+  const admin = await isTwofaAdmin(actor, database);
+  return rows.map((row) => {
+    const platform = present(row);
+    return {
+      ...platform,
+      capabilities: {
+        canEdit: admin || Number(row.createdByUserId) === Number(actor.id),
+      },
+    };
+  });
 }
 
 async function lockedPlatform(connection, platformId) {
@@ -261,16 +271,16 @@ export async function updatePlatform(
   let denied = null;
   try {
     await connection.beginTransaction();
+    await assertActiveTwofaEmployee(connection, actor);
     const platform = await lockedPlatform(connection, platformId);
     if (!platform) throw platformNotFound();
     const profile = {
       id: platform.profile_id,
       created_by: platform.profile_created_by,
     };
-    const authorization = await getTwofaProfileAuthorization(
-      connection, profile.id, actor, TWOFA_PROFILE_ACTION.EDIT,
-    );
-    if (!authorization.allowed) {
+    const allowed = Number(platform.created_by) === Number(actor.id) ||
+      await isTwofaAdmin(actor, connection);
+    if (!allowed) {
       denied = platform;
       await connection.rollback();
     } else {
@@ -434,16 +444,16 @@ export async function removePlatform(
   let denied = null;
   try {
     await connection.beginTransaction();
+    await assertActiveTwofaEmployee(connection, actor);
     const platform = await lockedPlatform(connection, platformId);
     if (!platform) throw platformNotFound();
     const profile = {
       id: platform.profile_id,
       created_by: platform.profile_created_by,
     };
-    const authorization = await getTwofaProfileAuthorization(
-      connection, profile.id, actor, TWOFA_PROFILE_ACTION.EDIT,
-    );
-    if (!authorization.allowed) {
+    const allowed = Number(platform.created_by) === Number(actor.id) ||
+      await isTwofaAdmin(actor, connection);
+    if (!allowed) {
       denied = platform;
       await connection.rollback();
     } else {
@@ -489,7 +499,6 @@ export async function revealCredential(
   requireTwofaEmployee(actor);
   const connection = await database.getConnection();
   let denied = null;
-  let rejection = null;
   try {
     await connection.beginTransaction();
     const platform = await lockedPlatform(connection, platformId);
@@ -509,32 +518,7 @@ export async function revealCredential(
       await connection.rollback();
     } else {
       const isKey = field === "auth_key";
-      if (isKey) {
-        const [[user]] = await connection.execute(
-          "SELECT password_hash FROM users WHERE id=? AND status='ACTIVE'",
-          [actor.id],
-        );
-        if (
-          !user ||
-          !(await bcrypt.compare(options.currentPassword || "", user.password_hash))
-        ) {
-          await deniedPlatform(
-            connection,
-            platform,
-            actor,
-            "REVEAL_AUTH_KEY_REAUTHENTICATION",
-            context,
-          );
-          await connection.commit();
-          rejection = new ApiError(
-            401,
-            "Current password verification failed",
-            "TWOFA_REAUTHENTICATION_FAILED",
-          );
-        }
-      }
-      if (!rejection) {
-        const prefix = isKey ? "auth_key" : "twofa_information";
+      const prefix = isKey ? "auth_key" : "twofa_information";
         const ciphertext = platform[`${prefix}_ciphertext`];
         if (!ciphertext)
           throw new ApiError(
@@ -558,20 +542,20 @@ export async function revealCredential(
           profileId: profile.id,
           platformId,
           actor,
-          action: isKey ? "AUTH_KEY_REVEALED" : "TWOFA_REVEALED",
+          action: options.operation === "COPY"
+            ? (isKey ? "AUTH_KEY_COPIED" : "TWOFA_COPIED")
+            : (isKey ? "AUTH_KEY_REVEALED" : "TWOFA_REVEALED"),
           context,
         });
         await connection.commit();
         return { value };
-      }
     }
   } catch (error) {
-    if (!denied && !rejection) await connection.rollback();
+    if (!denied) await connection.rollback();
     throw error;
   } finally {
     connection.release();
   }
-  if (rejection) throw rejection;
   await deniedPlatform(
     database,
     denied,

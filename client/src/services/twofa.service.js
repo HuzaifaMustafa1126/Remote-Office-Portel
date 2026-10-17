@@ -18,10 +18,10 @@ export const addPlatforms = (profileId, platforms) =>
 export const updatePlatform = (id, payload) =>
   data(api.patch(`/2fa/platforms/${id}`, payload));
 export const deletePlatform = (id) => data(api.delete(`/2fa/platforms/${id}`));
-export const revealTwofa = (id) =>
-  data(api.post(`/2fa/platforms/${id}/reveal-2fa`, {}));
-export const revealAuthKey = (id, currentPassword) =>
-  data(api.post(`/2fa/platforms/${id}/reveal-key`, { currentPassword }));
+export const revealTwofa = (id, operation = "REVEAL") =>
+  data(api.post(`/2fa/platforms/${id}/reveal-2fa`, { operation }));
+export const revealAuthKey = (id, operation = "REVEAL") =>
+  data(api.post(`/2fa/platforms/${id}/reveal-key`, { operation }));
 export const listAccess = (profileId) =>
   data(api.get(`/2fa/profiles/${profileId}/access`));
 export const grantAccess = (profileId, payload) =>

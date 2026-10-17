@@ -15,6 +15,7 @@ const select = `
     e.department,
     e.joining_date AS joiningDate,
     e.status,
+    e.deleted_at AS deletedAt,
     e.created_at AS createdAt,
     e.updated_at AS updatedAt
   FROM employees e
@@ -125,7 +126,7 @@ export async function listEmployees({ search = "" }, actor) {
     [rows] = await pool.execute(
       `
         ${employeeSelect}
-        WHERE (
+        WHERE e.deleted_at IS NULL AND (
           e.first_name LIKE ?
           OR e.last_name LIKE ?
           OR e.email LIKE ?
@@ -139,6 +140,7 @@ export async function listEmployees({ search = "" }, actor) {
     [rows] = await pool.execute(
       `
         ${employeeSelect}
+        WHERE e.deleted_at IS NULL
         ORDER BY e.created_at DESC
       `,
     );
@@ -286,6 +288,7 @@ export async function createEmployee(data, actor) {
 
 export async function updateEmployee(id, data, actor) {
   const existing = await getEmployee(id);
+  if (existing.deletedAt) throw new ApiError(409, "Deleted employees cannot be modified");
   const conn = await pool.getConnection();
 
   try {
@@ -388,6 +391,7 @@ export async function updateEmployee(id, data, actor) {
 
 export async function setEmployeeStatus(id, status, actor) {
   const employee = await getEmployee(id);
+  if (employee.deletedAt) throw new ApiError(409, "Deleted employees cannot be reactivated");
   if (status === "INACTIVE") {
     const [[tasks]] = await pool.execute(
       "SELECT COUNT(*) total FROM tasks WHERE assignee_employee_id=? AND status IN('TO_DO','IN_PROGRESS','SUBMITTED_FOR_REVIEW','CHANGES_REQUIRED')",
@@ -489,32 +493,12 @@ export async function deleteEmployee(id, actor) {
         "UPDATE auth_sessions SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP,ended_reason='REVOKED' WHERE user_id=? AND status='ACTIVE'",
         [user.id],
       );
-    await conn.execute("DELETE FROM payroll_adjustments WHERE employee_id=?", [
-      id,
-    ]);
-    await conn.execute("DELETE FROM payroll_items WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM leave_requests WHERE employee_id=?", [id]);
-    await conn.execute("DELETE FROM attendance_records WHERE employee_id=?", [
-      id,
-    ]);
+    if (user)
+      await conn.execute("UPDATE users SET status='INACTIVE' WHERE id=?", [user.id]);
     await conn.execute(
-      "DELETE FROM employee_shift_assignments WHERE employee_id=?",
-      [id],
+      "UPDATE employees SET status='INACTIVE',deleted_at=CURRENT_TIMESTAMP,deleted_by=? WHERE id=? AND deleted_at IS NULL",
+      [actor.id, id],
     );
-    await conn.execute(
-      "DELETE FROM employee_work_settings WHERE employee_id=?",
-      [id],
-    );
-    await conn.execute(
-      "DELETE FROM employee_salary_profiles WHERE employee_id=?",
-      [id],
-    );
-    await conn.execute(
-      "DELETE FROM audit_logs WHERE employee_id=? OR (entity_type='EMPLOYEE' AND entity_id=?)",
-      [id, id],
-    );
-    if (user) await conn.execute("DELETE FROM users WHERE id=?", [user.id]);
-    await conn.execute("DELETE FROM employees WHERE id=?", [id]);
     await conn.commit();
   } catch (error) {
     await conn.rollback();
@@ -528,7 +512,7 @@ export async function deleteEmployee(id, actor) {
     action: "EMPLOYEE_DELETED",
     entityType: "EMPLOYEE",
     entityId: id,
-    description: `Employee ${employee.firstName} ${employee.lastName} and all associated records were permanently deleted.`,
+    description: `Employee ${employee.firstName} ${employee.lastName} was deactivated and retained records were preserved.`,
   });
 }
 

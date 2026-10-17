@@ -10,6 +10,8 @@ test("history filters are bounded and reject invalid date ranges and actions", (
   assert.equal(twofaHistoryQuerySchema.safeParse({ action: "SECRET_VIEWED" }).success, false);
   assert.equal(twofaHistoryQuerySchema.safeParse({ dateFrom: "2026-10-11", dateTo: "2026-10-10" }).success, false);
   assert.ok(TWOFA_ACTIVITY_ACTION_VALUES.includes("ACCESS_UPDATED"));
+  assert.ok(TWOFA_ACTIVITY_ACTION_VALUES.includes("TWOFA_COPIED"));
+  assert.ok(TWOFA_ACTIVITY_ACTION_VALUES.includes("AUTH_KEY_COPIED"));
 });
 
 test("activity metadata uses an allowlist and strips credential-shaped fields", () => {
@@ -22,9 +24,9 @@ test("activity metadata uses an allowlist and strips credential-shaped fields", 
   }), { operation: "REVEAL_AUTH_KEY", permissions: { canView: true } });
 });
 
-test("profile and global history routes require the history permission", () => {
+test("profile and global history routes are available behind global authentication", () => {
   const source = fs.readFileSync(new URL("../src/routes/twofa.routes.js", import.meta.url), "utf8");
-  assert.equal((source.match(/permit\("2fa\.history\.view"\)/g) || []).length, 2);
+  assert.equal((source.match(/permit\("2fa\.history\.view"\)/g) || []).length, 0);
   assert.match(source, /"\/profiles\/:profileId\/history"/);
   assert.match(source, /"\/history"/);
 });

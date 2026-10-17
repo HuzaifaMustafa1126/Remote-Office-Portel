@@ -155,19 +155,11 @@ export default function AppRoutes() {
         <Route path="scheduled-work" element={<ScheduledWorkPage />} />
         <Route
           path="2fa-manager"
-          element={
-            <Gate permission={P.TWOFA_PROFILE_VIEW}>
-              <TwofaManagerPage />
-            </Gate>
-          }
+          element={<TwofaManagerPage />}
         />
         <Route
           path="2fa-manager/:profileId"
-          element={
-            <Gate permission={P.TWOFA_PROFILE_VIEW}>
-              <TwofaProfilePage />
-            </Gate>
-          }
+          element={<TwofaProfilePage />}
         />
         <Route
           path="company-policies"
